@@ -511,8 +511,9 @@
   .spin { animation: spin 0.7s linear infinite; }
   @keyframes spin { 100% { transform: translateX(-50%) rotate(360deg); } }
 
-  /* Індикатор для свайпу вниз */
-  #ptr-indicator {
+  /* Індикатори для свайпів (Вниз - Історія, Вверх - Майбутнє) */
+  #ptr-indicator,
+  #ptr-indicator-bottom {
     text-align: center; 
     color: var(--blue); 
     font-size: 13px; 
@@ -524,7 +525,8 @@
     align-items: center; 
     justify-content: center;
   }
-  
+
+
 </style>
 </head>
 <body>

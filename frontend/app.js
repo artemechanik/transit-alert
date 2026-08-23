@@ -4,6 +4,11 @@ const THUNDERFOREST_API_KEY = '4eaf1638dc4f415da1e41e6e364de9b5';
 const LUBLIN_CENTER = [51.2465, 22.5684];
 const REPORT_TTL_MS = 45 * 60 * 1000; // синхронно з REPORT_TTL_MINUTES на бекенді
 
+let currentDeparturesData = [];
+let topTimeOffset = 0;      // Зсув у минуле
+let bottomTimeOffset = 0;   // Зсув у майбутнє
+let isFetchingMore = false; // Блокатор від випадкового спаму скролом
+
 // ==================== Toast-повідомлення ====================
 let toastTimeout;
 function showToast(msg) {
@@ -37,7 +42,7 @@ function initMap() {
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
   const tileUrl = THUNDERFOREST_API_KEY
-    ? `https://{s}.tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=${THUNDERFOREST_API_KEY}`
+    ? `https://{s}.tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png?apikey=${THUNDERFOREST_API_KEY}`
     : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
   L.tileLayer(tileUrl, {
@@ -651,11 +656,18 @@ const stopNameDisplay = document.getElementById('stop-name-display');
 const departuresList = document.getElementById('departures-list');
 const stopScreenContainer = document.getElementById('screen-stop');
 
-// Створюємо кнопку оновлення та індикатор свайпу програмно
+// Створюємо індикатор свайпу ВНИЗ (Історія)
 const ptrIndicator = document.createElement('div');
 ptrIndicator.id = 'ptr-indicator';
 ptrIndicator.innerHTML = '↻ Odświeżanie...';
 departuresList.parentNode.insertBefore(ptrIndicator, departuresList);
+
+// ДОДАЄМО: Створюємо індикатор свайпу ВВЕРХ (Майбутнє)
+const ptrBottomIndicator = document.createElement('div');
+ptrBottomIndicator.id = 'ptr-indicator-bottom';
+ptrBottomIndicator.innerHTML = '↻ Ładowanie...';
+// ВАЖЛИВО: вставляємо його ПІСЛЯ списку
+departuresList.parentNode.insertBefore(ptrBottomIndicator, departuresList.nextSibling);
 
 const refreshFab = document.createElement('div');
 refreshFab.id = 'refresh-fab';
@@ -720,6 +732,8 @@ stopSearchInput.addEventListener('input', async (e) => {
         stopNameDisplay.textContent = `${stop.name} ${stop.code}`;
         
         currentStopIdForDepartures = stop.stopId;
+        topTimeOffset = 0;
+		bottomTimeOffset = 0; 
         loadDepartures(currentStopIdForDepartures);
         refreshFab.style.display = 'flex'; // Показуємо кнопку оновлення
       });
@@ -747,56 +761,150 @@ function addMinutesToTime(timeStr, mins) {
 }
 
 // Крок 3: Завантаження та малювання розкладу
-async function loadDepartures(stopId, isBackgroundRefresh = false) {
-  if (!isBackgroundRefresh) {
+async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset = 0) {
+  if (!isBackgroundRefresh && fetchOffset === 0) {
     departuresList.innerHTML = '<div style="text-align: center; margin-top: 40px; color: var(--text-muted);">Завантаження... ⏳</div>';
   }
   
   try {
-    const res = await fetch(`${API_BASE_URL}/stops/${stopId}/departures`);
+    const res = await fetch(`${API_BASE_URL}/stops/${stopId}/departures?offset=${fetchOffset}`);
     if (!res.ok) throw new Error('Не вдалося завантажити розклад');
     
-    const departures = await res.json();
+    const fetchedDepartures = await res.json();
     
-    if (departures.length === 0) {
+    // 1. РОЗУМНИЙ МЕНЕДЖМЕНТ СПИСКУ
+    if (fetchOffset === 0 && !isBackgroundRefresh) {
+      currentDeparturesData = fetchedDepartures;
+    } 
+        else if (fetchOffset < 0) {
+      // Свайп вниз (Історія) -> Додаємо 3 старі рейси
+      const currentOldest = currentDeparturesData.length > 0 ? currentDeparturesData[0].minutesLeft : 0;
+      const existingKeys = new Set(currentDeparturesData.map(d => `${d.route}-${d.scheduledTime}`));
+      
+      const freshHistory = fetchedDepartures
+        .filter(d => !existingKeys.has(`${d.route}-${d.scheduledTime}`))
+        .filter(d => d.minutesLeft < currentOldest)
+        .sort((a, b) => b.minutesLeft - a.minutesLeft); 
+      
+      const itemsToAdd = freshHistory.slice(0, 3).reverse(); 
+      currentDeparturesData = [...itemsToAdd, ...currentDeparturesData];
+      
+      // КОВЗНЕ ВІКНО: Видаляємо стільки ж знизу (якщо список не надто малий)
+      if (currentDeparturesData.length > 10) {
+        currentDeparturesData.splice(-itemsToAdd.length);
+      }
+    } 
+    else if (fetchOffset > 0) {
+      // Свайп вверх (Майбутнє) -> Додаємо 3 нові рейси
+      const currentNewest = currentDeparturesData.length > 0 ? currentDeparturesData[currentDeparturesData.length - 1].minutesLeft : 0;
+      const existingKeys = new Set(currentDeparturesData.map(d => `${d.route}-${d.scheduledTime}`));
+      
+      const freshFuture = fetchedDepartures
+        .filter(d => !existingKeys.has(`${d.route}-${d.scheduledTime}`))
+        .filter(d => d.minutesLeft > currentNewest)
+        .sort((a, b) => a.minutesLeft - b.minutesLeft); 
+      
+      const itemsToAdd = freshFuture.slice(0, 3); 
+      currentDeparturesData = [...currentDeparturesData, ...itemsToAdd];
+      
+      // КОВЗНЕ ВІКНО: Видаляємо стільки ж зверху
+      if (currentDeparturesData.length > 10) {
+        currentDeparturesData.splice(0, itemsToAdd.length);
+      }
+    } 
+    else if (isBackgroundRefresh) {
+      // Якщо ми не дивимося історію/майбутнє — просто чисто оновлюємо список
+      if (topTimeOffset === 0 && bottomTimeOffset === 0) {
+        currentDeparturesData = fetchedDepartures;
+      } else {
+        fetchedDepartures.forEach(fetchedDep => {
+          const key = `${fetchedDep.route}-${fetchedDep.scheduledTime}`;
+          const existingIndex = currentDeparturesData.findIndex(d => `${d.route}-${d.scheduledTime}` === key);
+          if (existingIndex !== -1) {
+            currentDeparturesData[existingIndex] = fetchedDep; 
+          }
+        });
+      }
+    }
+
+    // 2. РЕНДЕРИНГ ЗІ ЗБЕРЕЖЕННЯМ ПОЗИЦІЇ СКРОЛУ
+    if (currentDeparturesData.length === 0) {
       departuresList.innerHTML = '<div style="text-align: center; margin-top: 40px; color: var(--text-muted);">Brak odjazdów 🚏</div>';
     } else {
+      // ЗАПАМ'ЯТОВУЄМО СКРОЛ ПЕРЕД ОЧИЩЕННЯМ!
+      const oldScrollTop = departuresList.scrollTop;
+      const oldScrollHeight = departuresList.scrollHeight;
+
       departuresList.innerHTML = '';
       
-      departures.forEach(dep => {
-        // Визначаємо привида (час настав, а GPS немає)
+      currentDeparturesData.forEach(dep => {
+        const isHistory = dep.minutesLeft < 0;
         const isGhost = !dep.isRealTime && dep.minutesLeft === 0;
-
-        const minClass = dep.isRealTime ? 'dep-min live' : 'dep-min';
+        const isPast = isHistory || isGhost;
+        const minClass = (dep.isRealTime && !isPast) ? 'dep-min live' : 'dep-min';
         
-        // Для привида замість часу ставимо прочерк або '0 min'
-        const timeText = isGhost ? '—' : (dep.minutesLeft === 0 ? '< 1 min' : `${dep.minutesLeft} min`);
+                     // ФОРМАТУВАННЯ ЧАСУ
+        let timeText;
+        let schedHtml = dep.scheduledTime; 
+        let hideSchedBottom = false; // Щоб не дублювати час зверху і знизу
+        const absMins = Math.abs(dep.minutesLeft);
         
-        let schedHtml = dep.scheduledTime;
+        if (isHistory) {
+          if (absMins >= 60) {
+            timeText = dep.scheduledTime; // Просто показуємо час рейсу
+            hideSchedBottom = true; 
+          } else {
+            timeText = `${dep.minutesLeft} min`;
+          }
+        } else if (isGhost) {
+          timeText = '0 min'; 
+        } else {
+          if (dep.minutesLeft >= 60) {
+            timeText = dep.scheduledTime; // Далеке майбутнє -> точний час
+            hideSchedBottom = true;
+          } else {
+            timeText = dep.minutesLeft === 0 ? '< 1 min' : `${dep.minutesLeft} min`;
+          }
+        }
+        
         let statusHtml = '';
 
         if (dep.isRealTime) {
           if (dep.delayMinutes > 0) {
             const realTime = addMinutesToTime(dep.scheduledTime, dep.delayMinutes);
-            schedHtml = `<s>${dep.scheduledTime}</s> <span class="time-mod time-delay">${realTime}</span>`;
+            if (hideSchedBottom) {
+               timeText = realTime; // Якщо далекий рейс із запізненням - пишемо реальний час великим
+               schedHtml = `<s>${dep.scheduledTime}</s>`;
+            } else {
+               schedHtml = `<s>${dep.scheduledTime}</s> <span class="time-mod time-delay">${realTime}</span>`;
+            }
             statusHtml = `<div class="dep-status status-delay">Opóźnienie: ${dep.delayMinutes} min</div>`;
           } else if (dep.delayMinutes < 0) {
             const earlyMins = Math.abs(dep.delayMinutes);
             const realTime = addMinutesToTime(dep.scheduledTime, dep.delayMinutes);
-            schedHtml = `<s>${dep.scheduledTime}</s> <span class="time-mod time-early">${realTime}</span>`;
+            if (hideSchedBottom) {
+               timeText = realTime;
+               schedHtml = `<s>${dep.scheduledTime}</s>`;
+            } else {
+               schedHtml = `<s>${dep.scheduledTime}</s> <span class="time-mod time-early">${realTime}</span>`;
+            }
             statusHtml = `<div class="dep-status status-early">Przed czasem: ${earlyMins} min</div>`;
           } else {
+            if (hideSchedBottom) schedHtml = '';
             statusHtml = `<div class="dep-status status-ontime">Punktualnie</div>`;
           }
         } else {
-          // Якщо це привид — пишемо "Odjechał", інакше стандартно "Rozkład jazdy"
-          statusHtml = isGhost 
-            ? `<div class="dep-status status-sched">Odjechał</div>` 
-            : `<div class="dep-status status-sched">Rozkład jazdy</div>`;
+           if (hideSchedBottom) schedHtml = '';
         }
         
-        const ghostClass = isGhost ? ' ghost' : '';
-
+        // Перекриваємо статус для історії
+        if (isPast) {
+          statusHtml = `<div class="dep-status status-sched">Odjechał</div>`;
+        } else if (!dep.isRealTime) {
+          statusHtml = `<div class="dep-status status-sched">Rozkład jazdy</div>`;
+        }
+        
+        const ghostClass = isPast ? ' ghost' : '';
         const card = document.createElement('div');
         card.className = `dep-card${ghostClass}`;
         card.innerHTML = `
@@ -812,16 +920,23 @@ async function loadDepartures(stopId, isBackgroundRefresh = false) {
         `;
         departuresList.appendChild(card);
       });
+
+      // М'ЯКО ВІДНОВЛЮЄМО СКРОЛ!
+      if (fetchOffset < 0) {
+        // Якщо додали картки зверху, зсуваємо скрол вниз на їхню висоту
+        departuresList.scrollTop = oldScrollTop + (departuresList.scrollHeight - oldScrollHeight);
+      } else {
+        // Інакше залишаємо екран рівно там, де він був
+        departuresList.scrollTop = oldScrollTop;
+      }
     }
 
-    // Запускаємо автоматичне оновлення, якщо воно ще не працює
     if (!departuresRefreshInterval) {
       departuresRefreshInterval = setInterval(() => {
-        // Оновлюємо, тільки якщо екран розкладу зараз відкритий
         if (currentStopIdForDepartures && stopScreenContainer.style.display !== 'none') {
-          loadDepartures(currentStopIdForDepartures, true);
+          loadDepartures(currentStopIdForDepartures, true, 0); 
         }
-      }, 15000); // кожні 15 секунд
+      }, 15000); 
     }
     
   } catch (error) {
@@ -832,30 +947,30 @@ async function loadDepartures(stopId, isBackgroundRefresh = false) {
   }
 }
 
-// --- Ручне оновлення (Кнопка) ---
-refreshFab.addEventListener('click', async () => {
-  if (currentStopIdForDepartures) {
-    refreshFab.classList.add('spin');
-    await loadDepartures(currentStopIdForDepartures, true);
-    setTimeout(() => refreshFab.classList.remove('spin'), 500); // Даємо анімації докрутитися
-  }
-});
-
-// --- Ручне оновлення (Swipe down / Pull-to-refresh) ---
+// --- Ручне оновлення (Симетричні свайпи) ---
 let startY = 0;
 let isRefreshing = false;
+let startScrollTop = 0;
+let isAtBottom = false;
 
 departuresList.addEventListener('touchstart', (e) => {
-  if (departuresList.scrollTop === 0) startY = e.touches[0].clientY;
-  else startY = 0;
+  startY = e.touches[0].clientY;
+  startScrollTop = departuresList.scrollTop;
+  // Перевіряємо, чи ми зараз на самому дні списку
+  isAtBottom = Math.ceil(startScrollTop + departuresList.clientHeight) >= departuresList.scrollHeight - 2;
 }, { passive: true });
 
 departuresList.addEventListener('touchmove', (e) => {
   if (!startY || isRefreshing) return;
   const dy = e.touches[0].clientY - startY;
-  // Якщо ми на самому верху списку і тягнемо вниз
-  if (dy > 0 && departuresList.scrollTop === 0) {
+  
+  // 1. Тягнемо ВНИЗ (за історією)
+  if (dy > 0 && startScrollTop === 0) {
     ptrIndicator.style.height = Math.min(dy, 50) + 'px';
+  }
+  // 2. Тягнемо ВВЕРХ (за майбутнім), будучи на дні
+  else if (dy < 0 && isAtBottom) {
+    ptrBottomIndicator.style.height = Math.min(-dy, 50) + 'px';
   }
 }, { passive: true });
 
@@ -863,14 +978,50 @@ departuresList.addEventListener('touchend', async (e) => {
   if (!startY || isRefreshing) return;
   const dy = e.changedTouches[0].clientY - startY;
   
-  if (dy > 60 && departuresList.scrollTop === 0 && currentStopIdForDepartures) {
+  // 1. Відпустили ІСТОРІЮ
+  if (dy > 60 && startScrollTop === 0 && currentStopIdForDepartures) {
     isRefreshing = true;
-    ptrIndicator.style.height = '40px'; // Фіксуємо індикатор
-    await loadDepartures(currentStopIdForDepartures, true);
-    ptrIndicator.style.height = '0';    // Ховаємо
+    ptrIndicator.style.height = '40px'; 
+    ptrIndicator.innerHTML = '↻ Ładowanie historii...';
+    
+    // РОЗУМНИЙ СТРИБОК У МИНУЛЕ: беремо час найстарішого автобуса на екрані і віднімаємо 30 хв
+    if (currentDeparturesData.length > 0) {
+      topTimeOffset = currentDeparturesData[0].minutesLeft - 30;
+    } else {
+      topTimeOffset -= 60; // Запасний варіант, якщо екран порожній
+    }
+    
+    await loadDepartures(currentStopIdForDepartures, false, topTimeOffset);
+    
+    ptrIndicator.style.height = '0';    
+    setTimeout(() => { ptrIndicator.innerHTML = '↻ Odświeżanie...'; }, 200);
     isRefreshing = false;
-  } else {
-    ptrIndicator.style.height = '0';    // Якщо потягнули недостатньо сильно — ховаємо
+  } 
+  // 2. Відпустили МАЙБУТНЄ
+  else if (dy < -60 && isAtBottom && currentStopIdForDepartures) {
+    isRefreshing = true;
+    ptrBottomIndicator.style.height = '40px'; 
+    ptrBottomIndicator.innerHTML = '↻ Ładowanie przyszłości...';
+    
+    // РОЗУМНИЙ СТРИБОК У МАЙБУТНЄ: беремо час найдальшого автобуса і просимо наступні!
+    if (currentDeparturesData.length > 0) {
+      const lastBus = currentDeparturesData[currentDeparturesData.length - 1];
+      bottomTimeOffset = lastBus.minutesLeft + 15;
+    } else {
+      bottomTimeOffset += 60; // Запасний варіант, якщо екран порожній
+    }
+    
+    await loadDepartures(currentStopIdForDepartures, false, bottomTimeOffset);
+    
+    ptrBottomIndicator.style.height = '0';    
+    setTimeout(() => { ptrBottomIndicator.innerHTML = '↻ Ładowanie...'; }, 200);
+    isRefreshing = false;
+  } 
+  // 3. Не дотягнули
+  else {
+    ptrIndicator.style.height = '0';    
+    ptrBottomIndicator.style.height = '0';
   }
   startY = 0;
 });
+

@@ -71,7 +71,8 @@ fun Application.liveVehiclesRoutes() {
                 call.respond(HttpStatusCode.BadRequest, "Missing stopId")
                 return@get
             }
-
+            val timeOffset = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
+            
             val now = Instant.now()
             val nowSecondOfMinute = now.atZone(LUBLIN_ZONE).second
 
@@ -85,7 +86,9 @@ fun Application.liveVehiclesRoutes() {
                     val serviceIds = activeServiceIds(date)
                     if (serviceIds.isEmpty()) continue
 
-                    val limitMinutes = minuteBase + 120 // рейси на 2 години вперед
+                                        // Зміщуємо вікно пошуку на timeOffset хвилин
+                    val windowStart = minuteBase + timeOffset - 60 
+                    val windowEnd = minuteBase + timeOffset + 1440
                     val nowRefSeconds = minuteBase * 60 + nowSecondOfMinute
 
                     StopDepartures.join(TripHeadsigns, JoinType.INNER, onColumn = StopDepartures.tripId, otherColumn = TripHeadsigns.tripId)
@@ -95,14 +98,13 @@ fun Application.liveVehiclesRoutes() {
                             StopDepartures.departureMinutes,
                             StopDepartures.tripId
                         )
-                       .where {
+                        .where {
                             (StopDepartures.stopId eq stopId) and
                                 (StopDepartures.serviceId inList serviceIds) and
-                                // БЕРЕМО РЕЙСИ З ЗАПАСОМ У 60 ХВИЛИН НАЗАД
-                                // щоб покрити будь-які запізнення та "привидів"
-                                (StopDepartures.departureMinutes greaterEq (minuteBase - 60)) and
-                                (StopDepartures.departureMinutes lessEq limitMinutes)
+                                (StopDepartures.departureMinutes greaterEq windowStart) and
+                                (StopDepartures.departureMinutes lessEq windowEnd)
                         }
+
                         .orderBy(StopDepartures.departureMinutes to SortOrder.ASC)
                         .limit(30)
                         .forEach { row ->
@@ -120,12 +122,14 @@ fun Application.liveVehiclesRoutes() {
                             // РОЗУМНИЙ БУФЕР ОЧІКУВАННЯ (Grace Period)
                             // Якщо є GPS: ховаємо через 2 хв після проїзду зупинки
                             // Якщо немає GPS: тримаємо рейс у списку ще 10 хвилин на випадок запізнення
+                                                        // РОЗУМНИЙ БУФЕР ОЧІКУВАННЯ (Grace Period)
                             val hideThresholdSeconds = if (isRealTime) -120 else -300
 
-                            if (secondsLeft < hideThresholdSeconds) return@forEach
+                            // ВАЖЛИВО: Ховаємо старі рейси ТІЛЬКИ якщо ми не просимо історію (timeOffset >= 0)
+                            if (timeOffset >= 0 && secondsLeft < hideThresholdSeconds) return@forEach
 
-                            // max(0, ...) гарантує, що поки автобус "висить" у буфері, він показуватиме 0 min
-                            val minutesLeft = max(0, secondsLeft / 60)
+
+                            val minutesLeft = secondsLeft / 60
 
                             val h = (scheduledMin / 60) % 24
                             val m = scheduledMin % 60
@@ -149,7 +153,7 @@ fun Application.liveVehiclesRoutes() {
             val sortedDepartures = departures
                 .distinctBy { it.route to it.direction to it.scheduledTime }
                 .sortedBy { it.minutesLeft }
-                .take(20)
+                .take(40)
 
             call.respond(sortedDepartures)
         }

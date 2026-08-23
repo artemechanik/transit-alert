@@ -1,0 +1,9 @@
+{
+  "name": "transit-alert",
+  "short_name": "transit-alert",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f0f2f5",
+  "theme_color": "#1976d2",
+  "orientation": "portrait"
+}

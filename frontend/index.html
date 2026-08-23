@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>transit-alert</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1976d2">
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root {
+    color-scheme: light dark;
+    --blue: #1976d2;
+    --blue-dark: #125499;
+    --danger: #e53935;
+    --danger-dark: #b71c1c;
+    --confirm: #43a047;
+    --bg: #f0f2f5;
+    --card: #ffffff;
+    --text: #1c2530;
+    --text-muted: #6b7684;
+    --border: #e1e4e8;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --blue: #4a9eff;
+      --blue-dark: #2f7fd6;
+      --danger: #ff5449;
+      --danger-dark: #d32f2f;
+      --confirm: #5cc363;
+      --bg: #14161a;
+      --card: #1e2126;
+      --text: #e8eaed;
+      --text-muted: #8b95a1;
+      --border: #2e3239;
+    }
+    .rc-vote-btn.confirm { background: #1b3a1e; }
+    .rc-vote-btn.deny { background: #3a1f1e; }
+    .rc-vote-btn.update { background: #1a2c3d; }
+    .leaflet-control-attribution {
+      background: rgba(20, 22, 26, .75) !important;
+      color: var(--text-muted) !important;
+    }
+    .leaflet-control-attribution a { color: var(--blue) !important; }
+    .leaflet-bar a {
+      background: var(--card) !important;
+      color: var(--text) !important;
+      border-color: var(--border) !important;
+    }
+  }
+
+  /* Нижня навігація перекриває стандартну позицію зум-контролу Leaflet — піднімаємо його вище */
+  .leaflet-bottom.leaflet-left {
+    bottom: calc(72px + var(--safe-bottom)) !important;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--text); background: var(--bg);
+  }
+  #map { position: absolute; inset: 0; z-index: 0; }
+
+  /* --- Верхня панель пошуку зупинки --- */
+  #search-bar {
+    position: absolute; top: calc(12px + var(--safe-top)); left: 12px; right: 12px;
+    z-index: 500; display: flex; flex-direction: column; gap: 6px;
+  }
+  #search-input-wrap {
+    background: var(--card); border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.15);
+    display: flex; align-items: center; padding: 4px 6px;
+  }
+  #search-input {
+    flex: 1; border: none; outline: none; font-size: 15px; padding: 10px 8px; background: transparent; color: var(--text);
+  }
+  #search-input::placeholder { color: var(--text-muted); }
+  #search-clear {
+    border: none; background: none; color: var(--text-muted); font-size: 18px; padding: 6px 10px; cursor: pointer; display: none;
+  }
+  #search-suggestions {
+    background: var(--card); border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.15);
+    max-height: 45vh; overflow-y: auto; display: none;
+  }
+  #search-suggestions div {
+    padding: 11px 14px; font-size: 14px; border-bottom: 1px solid var(--border); cursor: pointer;
+  }
+  #search-suggestions div:last-child { border-bottom: none; }
+  #search-suggestions div .code { color: var(--text-muted); font-size: 12px; margin-left: 6px; }
+  #search-suggestions div:active { background: #f2f5f9; }
+  #search-empty { padding: 14px; font-size: 13px; color: var(--text-muted); text-align: center; }
+
+/* --- Контейнер з результатами пошуку (Вкладка Przystanek) --- */
+  #stop-screen-suggestions {
+    /* Перебиваємо стандартні 220px з класу autocomplete-list */
+    max-height: calc(100vh - 150px) !important; 
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  }
+
+  /* --- Сама зупинка в списку (Ультра-стиснення) --- */
+  .stop-suggestion-item {
+    padding: 4px 4px; /* Зменшили відступи до мінімуму (було 6x16) */
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .stop-suggestion-item:last-child {
+    border-bottom: none;
+  }
+
+  /* Заголовок зупинки */
+  .stop-suggestion-title {
+    font-size: 16px; /* Зробили шрифт трохи меншим (було 15) */
+    font-weight: 700;
+    color: var(--text); 
+    line-height: 1.1; /* Вбили зайву висоту */
+  }
+  
+  .stop-suggestion-code {
+    color: var(--text-muted);
+    font-size: 11px; /* Код платформи теж зменшили */
+    font-weight: 400;
+    margin-left: 4px;
+  }
+
+  /* --- Карусель маршрутів --- */
+  .stop-routes-carousel {
+    display: flex;
+    overflow-x: auto;
+    gap: 4px;
+    margin-top: 0px; /* Притиснули карусель ВПРИТУЛ до назви */
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .stop-routes-carousel::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* --- Коробочки маршрутів --- */
+  .route-pill {
+    flex: 0 0 auto;
+    display: inline-flex; 
+    align-items: center;  
+    background: rgba(128, 128, 128, 0.1); 
+    border: 1px solid rgba(128, 128, 128, 0.3);
+    border-radius: 4px; 
+    padding: 0px 4px; /* Прибрали вертикальні відступи повністю */
+    height: 15px; /* Ще на 1px нижче */
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  
+  .route-pill-num, .route-pill-dir {
+    font-size: 9px; /* Екстремально дрібний шрифт для напрямків */
+    line-height: 1;
+  }
+  
+  .route-pill-num {
+    margin-right: 2px;
+    color: var(--blue);
+  }
+
+  /* --- Плаваюча кнопка "Zgłoś kanara" --- */
+  #fab-report {
+    position: absolute; right: 16px; bottom: calc(96px + var(--safe-bottom));
+    z-index: 500; background: var(--danger); color: #fff; border: none; border-radius: 28px;
+    padding: 14px 20px; font-size: 15px; font-weight: 600; box-shadow: 0 4px 14px rgba(229,57,53,.45);
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+  }
+  #fab-report:active { background: var(--danger-dark); }
+  #fab-report .icon { font-size: 18px; }
+
+  /* --- Нижня навігація --- */
+  #bottom-nav {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 500;
+    background: var(--card); border-top: 1px solid var(--border);
+    display: flex; padding-bottom: var(--safe-bottom);
+    box-shadow: 0 -2px 10px rgba(0,0,0,.06);
+  }
+  .nav-item {
+    flex: 1; border: none; background: none; padding: 10px 4px 8px; display: flex; flex-direction: column;
+    align-items: center; gap: 3px; color: var(--text-muted); font-size: 11px; cursor: pointer;
+  }
+  .nav-item .nav-icon { font-size: 20px; }
+  .nav-item.active { color: var(--blue); font-weight: 600; }
+
+ /* --- Drawer зі стрічкою --- */
+  #reports-drawer {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 600;
+    background: var(--card); border-radius: 18px 18px 0 0; box-shadow: 0 -4px 20px rgba(0,0,0,.2);
+    max-height: 75vh; display: flex; flex-direction: column;
+    transform: translateY(100%); transition: transform .25s ease-out;
+    padding-bottom: var(--safe-bottom);
+  }
+  #reports-drawer.open { transform: translateY(0); }
+  #drawer-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 10px auto 4px; }
+  
+  #drawer-header { display: flex; justify-content: space-between; align-items: center; padding: 4px 18px 10px; }
+  #drawer-header h2 { font-size: 16px; margin: 0; }
+  
+  .drawer-actions { display: flex; align-items: center; gap: 12px; }
+  #drawer-add { 
+    border: none; background: none; 
+    font-size: 28px; font-weight: 300; 
+    color: var(--blue); cursor: pointer; 
+    padding: 0 4px; line-height: 1; 
+  }
+  #drawer-close { border: none; background: none; font-size: 20px; color: var(--text-muted); cursor: pointer; padding: 4px 8px; }
+  
+  #drawer-list { overflow-y: auto; padding: 0 14px 14px; }
+  #drawer-empty { text-align: center; color: var(--text-muted); font-size: 13px; padding: 30px 10px; }
+
+  .report-card {
+    background: var(--bg); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
+  }
+  .report-card .rc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .report-card .rc-stop { font-weight: 600; font-size: 14px; }
+  .report-card .rc-time { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .report-card .rc-route { font-size: 12px; color: var(--blue); margin-top: 2px; }
+  .report-card .rc-comment { font-size: 13px; margin-top: 6px; color: var(--text); }
+  .report-card .rc-votes { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .rc-vote-btn {
+    border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .rc-vote-btn.confirm { background: #e8f5e9; color: var(--confirm); }
+  .rc-vote-btn.deny { background: #ffebee; color: var(--danger); }
+  .rc-vote-btn.update { background: #e3f0fd; color: var(--blue); }
+  .rc-vote-btn.active.confirm { background: var(--confirm); color: #fff; }
+  .rc-vote-btn.active.deny { background: var(--danger); color: #fff; }
+  .rc-update-badge { font-size: 11px; color: var(--blue); font-weight: 600; margin-bottom: 6px; }
+/* --- Стилі для блоку оновлення (Update Quote) --- */
+  .rc-update-block { 
+    margin-bottom: 10px; 
+    padding-bottom: 8px; 
+    border-bottom: 1px dashed var(--border); 
+  }
+  .rc-update-header { 
+    font-size: 11px; 
+    color: var(--text-muted); 
+  }
+  .rc-update-comment { 
+    font-size: 12px; 
+    color: var(--text-muted); 
+    margin-top: 4px; 
+    font-style: italic; 
+    line-height: 1.3; 
+  }
+  /* --- Overlay --- */
+  #overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,.4); z-index: 550; display: none;
+  }
+  #overlay.show { display: block; }
+
+  /* --- Модалка створення допису --- */
+  #report-modal {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 700;
+    background: var(--card); border-radius: 18px 18px 0 0; box-shadow: 0 -4px 24px rgba(0,0,0,.25);
+    max-height: 92vh; overflow-y: auto; display: none;
+    padding-bottom: calc(16px + var(--safe-bottom));
+  }
+  #report-modal.show { display: block; }
+  #modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px 6px; }
+  #modal-header h2 { font-size: 17px; margin: 0; }
+  #modal-close { border: none; background: none; font-size: 20px; color: var(--text-muted); cursor: pointer; padding: 4px 8px; }
+
+  .tabs { display: flex; gap: 8px; padding: 4px 18px 14px; }
+  .tab-btn {
+    flex: 1; border: 1px solid var(--border); background: var(--bg); border-radius: 10px;
+    padding: 10px; font-size: 14px; font-weight: 600; color: var(--text-muted); cursor: pointer;
+  }
+  .tab-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+  .form-body { padding: 0 18px; }
+  .form-tab { display: none; }
+  .form-tab.active { display: block; }
+  .field { margin-bottom: 14px; position: relative; }
+  .field label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; font-weight: 600; }
+  .field input, .field textarea {
+    width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px;
+    font-size: 15px; font-family: inherit; color: var(--text); background: var(--bg);
+  }
+  .field input:focus, .field textarea:focus { outline: none; border-color: var(--blue); background: var(--card); }
+  .field textarea { resize: none; height: 64px; }
+  .autocomplete-list {
+    position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 10px; max-height: 220px; overflow-y: auto;
+    z-index: 10; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.12);
+  }
+  .autocomplete-list div { padding: 10px 12px; font-size: 14px; cursor: pointer; }
+  .autocomplete-list div:active { background: #f2f5f9; }
+  #direction-select {
+    width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px;
+    font-size: 15px; font-family: inherit; color: var(--text); background: var(--bg);
+  }
+  #direction-select:disabled { color: var(--text-muted); }
+
+  #submit-btn {
+    width: 100%; background: var(--danger); color: #fff; border: none; border-radius: 12px;
+    padding: 14px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 4px;
+  }
+  #submit-btn:active { background: var(--danger-dark); }
+  #submit-btn:disabled { background: #c7c9cc; }
+  #form-hint { font-size: 12px; color: var(--text-muted); text-align: center; margin: 8px 0 2px; min-height: 16px; }
+
+  #toast {
+    position: absolute; left: 50%; bottom: calc(90px + var(--safe-bottom));
+    transform: translateX(-50%) translateY(10px); z-index: 900;
+    background: #1c2530; color: #fff; padding: 11px 20px; border-radius: 20px;
+    font-size: 14px; font-weight: 600; box-shadow: 0 4px 14px rgba(0,0,0,.3);
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  
+  /* --- Екрани вкладок --- */
+  .screen-container {
+    position: absolute; inset: 0; z-index: 100;
+    background: var(--bg); display: flex; flex-direction: column;
+    padding-bottom: calc(70px + var(--safe-bottom)); /* місце під нижню навігацію */
+  }
+
+  /* --- Вкладка Przystanek --- */
+  .stop-search-header {
+    background: var(--card); padding: calc(16px + var(--safe-top)) 16px 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.08); position: relative; z-index: 20;
+  }
+  #stop-screen-search {
+    width: 100%; border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 16px; font-size: 16px; background: var(--bg); color: var(--text);
+  }
+  #stop-title-container {
+    padding: 16px 16px 8px; border-bottom: 1px solid var(--border);
+  }
+  #stop-title-container h2 { margin: 0; font-size: 18px; color: var(--text); }
+  
+  #departures-list {
+    flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .dep-card {
+    background: var(--card); border-radius: 12px; padding: 14px 16px;
+    display: flex; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.05);
+  }
+  .dep-route { font-size: 26px; font-weight: 700; color: var(--blue); width: 60px; flex-shrink: 0; }
+  .dep-info { flex: 1; display: flex; flex-direction: column; }
+  .dep-dir { font-size: 16px; font-weight: 600; color: var(--text); }
+  .dep-times { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+  
+  .dep-min { font-size: 20px; font-weight: 700; color: var(--text); }
+  .dep-min.live { color: #10b981; } /* Зелений для Real-Time */
+  .dep-sched { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  
+  /* --- Статуси запізнень --- */
+  .dep-status { font-size: 13px; font-weight: 500; margin-top: 3px; }
+  .status-delay { color: var(--danger); }       /* Червоний для запізнень */
+  .status-early { color: var(--blue); }         /* Синій для випередження */
+  .status-ontime { color: #10b981; }            /* Зелений для вчасних */
+  .status-sched { color: var(--text-muted); font-size: 12px; } /* Сірий для розкладу */
+
+  .time-mod { margin-left: 4px; font-weight: 600; }
+  .time-delay { color: var(--danger); }
+  .time-early { color: var(--blue); }
+  
+  /* Трохи приглушуємо закреслений час */
+  .dep-sched s { color: var(--text-muted); text-decoration-color: var(--text-muted); opacity: 0.7; }
+  
+  /* --- Кнопка оновлення та Pull-to-refresh --- */
+  #refresh-fab {
+    position: absolute; 
+    bottom: calc(85px + var(--safe-bottom)); /* Піднімаємо кнопку над меню навігації */
+    left: 50%; 
+    transform: translateX(-50%);
+    
+    /* Ефект скла (Glassmorphism) */
+    background: rgba(255, 255, 255, 0.01); /* Світліший, але дуже прозорий фон */
+    backdrop-filter: blur(3px);           /* Сильне розмиття того, що під кнопкою */
+    -webkit-backdrop-filter: blur(3px);   /* Для підтримки на смартфонах */
+    
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2); 
+    border-radius: 50%;
+    width: 46px; 
+    height: 46px; 
+    font-size: 24px;
+    
+    /* Центрування норовливої іконки */
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+    line-height: 1;
+    padding-bottom: 3px; /* Компенсуємо просідання символу ↻ */
+    
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25); 
+    z-index: 200;
+    cursor: pointer; 
+    display: none; 
+  }
+  
+  #refresh-fab:active { 
+    background: rgba(255, 255, 255, 0.2); 
+    transform: translateX(-50%) scale(0.95); 
+  }
+  
+  /* Клас для крутіння іконки */
+  .spin { animation: spin 0.7s linear infinite; }
+  @keyframes spin { 100% { transform: translateX(-50%) rotate(360deg); } }
+
+  /* Індикатор для свайпу вниз */
+  #ptr-indicator {
+    text-align: center; 
+    color: var(--blue); 
+    font-size: 13px; 
+    font-weight: 600;
+    height: 0; 
+    overflow: hidden; 
+    transition: height 0.2s ease;
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+  }
+  
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="search-bar">
+  <div id="search-input-wrap">
+    <input id="search-input" type="text" placeholder="Szukaj przystanku..." autocomplete="off">
+    <button id="search-clear">✕</button>
+  </div>
+  <div id="search-suggestions"></div>
+</div>
+
+<button id="fab-report"><span class="icon">⚠️</span> Zgłoś kanara</button>
+
+<div id="overlay"></div>
+
+<div id="reports-drawer">
+  <div id="drawer-handle"></div>
+  <div id="drawer-header">
+    <h2>Zgłoszenia</h2>
+    <div class="drawer-actions">
+      <button id="drawer-add">+</button>
+      <button id="drawer-close">✕</button>
+    </div>
+  </div>
+  <div id="drawer-list"></div>
+</div>
+
+<div id="report-modal">
+  <div id="modal-header">
+    <h2>Zgłoś kanara</h2>
+    <button id="modal-close">✕</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-btn-linia" onclick="switchFormTab('linia', this)">Linia</button>
+    <button class="tab-btn" id="tab-btn-przystanek" onclick="switchFormTab('przystanek', this)">Przystanek</button>
+  </div>
+
+  <div class="form-body">
+    <div class="form-tab active" id="tab-linia">
+      <div class="field">
+        <label>Numer linii</label>
+        <input id="route-input" type="text" inputmode="numeric" placeholder="np. 14" autocomplete="off">
+        <div class="autocomplete-list" id="route-suggestions"></div>
+      </div>
+      <div class="field">
+        <label>Przystanek</label>
+        <input id="stop-name-input" type="text" placeholder="np. Plac Litewski" autocomplete="off">
+        <div class="autocomplete-list" id="stop-name-suggestions"></div>
+      </div>
+      <div class="field">
+        <label>Kierunek</label>
+        <select id="direction-select" disabled>
+          <option value="">— спершу оберіть лінію —</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-tab" id="tab-przystanek">
+      <div class="field">
+        <label>Przystanek (z platformą)</label>
+        <input id="stop-id-input" type="text" placeholder="np. Plac Litewski 01" autocomplete="off">
+        <div class="autocomplete-list" id="stop-id-suggestions"></div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Komentarz (opcjonalnie)</label>
+      <textarea id="comment-input" placeholder="np. 2 kontrolerów w cywilnym"></textarea>
+    </div>
+
+    <button id="submit-btn">Zgłoś</button>
+    <div id="form-hint"></div>
+  </div>
+</div>
+
+<!-- --- Екран "Przystanek" (Розклад) --- -->
+<div id="screen-stop" class="screen-container" style="display: none;">
+  <div class="stop-search-header">
+    <input type="text" id="stop-screen-search" placeholder="Szukaj przystanku (np. Lotnicza)..." autocomplete="off">
+    <div id="stop-screen-suggestions" class="autocomplete-list"></div>
+  </div>
+
+  <div id="stop-title-container" style="display: none;">
+    <h2 id="stop-name-display"></h2>
+  </div>
+
+  <div id="departures-list">
+    <!-- Сюди JS малюватиме картки рейсів -->
+    <div id="departures-empty" style="text-align: center; color: var(--text-muted); margin-top: 40px;">
+      Wybierz przystanek, aby zobaczyć odjazdy.
+    </div>
+  </div>
+</div>
+
+<div id="bottom-nav">
+  <button class="nav-item active" id="nav-map" onclick="switchScreen('map', this)">
+    <span class="nav-icon">🗺️</span> Mapa
+  </button>
+  <button class="nav-item" id="nav-stop" onclick="switchScreen('stop', this)">
+    <span class="nav-icon">🚏</span> Przystanek
+  </button>
+  <button class="nav-item" id="nav-route" onclick="switchScreen('route', this)">
+    <span class="nav-icon">🚌</span> Trasa
+  </button>
+  <button class="nav-item" id="nav-reports" onclick="switchScreen('reports', this)">
+    <span class="nav-icon">📋</span> Zgłoszenia
+  </button>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

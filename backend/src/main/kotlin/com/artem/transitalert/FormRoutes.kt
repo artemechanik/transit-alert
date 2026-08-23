@@ -1,0 +1,193 @@
+package com.artem.transitalert
+
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
+import org.jetbrains.exposed.sql.transactions.transaction
+import java.time.Instant
+import java.time.LocalDate
+
+// Вікно, в якому шукаємо "актуальні зараз" напрямки лінії. Ширше за risk-window (10хв)
+// і за вікно резолву при сабміті (45хв) — тут просто пропонуємо варіанти на вибір,
+// не намагаємось точно прив'язати конкретний рейс.
+private const val DIRECTIONS_WINDOW_MINUTES = 90
+
+fun String.normalizePL(): String {
+    return this.lowercase()
+        .replace("ą", "a").replace("ć", "c").replace("ę", "e")
+        .replace("ł", "l").replace("ń", "n").replace("ó", "o")
+        .replace("ś", "s").replace("ź", "z").replace("ż", "z")
+}
+
+// Оголошуємо кеш прямо всередині formRoutes, перед routing { ... }
+var cachedStops: List<StopSuggestion>? = null
+
+/** Скидає кеш зупинок — викликати з GtfsStaticSync одразу після успішного реімпорту,
+ *  інакше нові/змінені зупинки не з'являться в автокомпліті аж до перезапуску застосунку. */
+fun invalidateStopsCache() {
+    cachedStops = null
+}
+
+fun Application.formRoutes() {
+    routing {
+
+        // Віддаємо всі активні на сьогодні лінії для автокомпліту
+        get("/routes") {
+            val routes = ActiveRoutesCache.getTodayRoutes()
+            call.respond(routes)
+        }
+
+        // Пошук зупинок для автокомпліту (з підтримкою польських літер і розумним сортуванням)
+        get("/stops/search") {
+            val queryParam = call.parameters["q"]?.trim()?.lowercase() ?: return@get call.respond(emptyList<StopSuggestion>())
+            if (queryParam.length < 2) return@get call.respond(emptyList<StopSuggestion>())
+            
+            // Нормалізуємо те, що ввів користувач (mel -> mel)
+            val searchQ = queryParam.normalizePL()
+
+            val results = transaction {
+                // 1. Кешуємо всі зупинки при першому запиті
+                if (cachedStops == null) {
+                    cachedStops = Stops.selectAll().map {
+                        StopSuggestion(
+                            stopId = it[Stops.stopId],
+                            name = it[Stops.name],
+                            code = it[Stops.code],
+                            lat = it[Stops.lat],
+                            lon = it[Stops.lon]
+                        )
+                    }
+                }
+
+                // 2. Блискавичний пошук з розумним сортуванням
+                val baseStops = cachedStops!!.filter {
+                    it.name.normalizePL().contains(searchQ) || 
+                    it.code.normalizePL().contains(searchQ)
+                }.sortedBy { stop ->
+                    val normName = stop.name.normalizePL()
+                    val normCode = stop.code.normalizePL()
+                    
+                    when {
+                        // Найвищий пріоритет: назва прямо починається з цих літер ("Lotnicza")
+                        normName.startsWith(searchQ) -> 1
+                        
+                        // Другий пріоритет: якесь слово всередині назви починається з цього ("Park Bronowice")
+                        normName.contains(" $searchQ") || normName.contains("-$searchQ") -> 2
+                        
+                        // Третій пріоритет: пошук чітко по номеру платформи
+                        normCode.startsWith(searchQ) -> 3
+                        
+                        // Найнижчий пріоритет: просто збіг десь усередині слова ("Młodej")
+                        else -> 4
+                    }
+                }.take(10)
+
+                // ОСЬ ЦІ ТРИ РЯДКИ ЗАГУБИЛИСЯ МИНУЛОГО РАЗУ:
+                if (baseStops.isEmpty()) return@transaction emptyList<StopSuggestion>()
+                val stopIds = baseStops.map { it.stopId }
+                val activeServices = activeServiceIds(LocalDate.now(LUBLIN_ZONE))
+
+                // 3. Витягуємо маршрути для знайдених зупинок
+                val stopRoutesMap = mutableMapOf<String, MutableSet<StopRouteDto>>()
+
+                if (activeServices.isNotEmpty()) {
+                    StopDepartures.join(TripHeadsigns, JoinType.INNER, onColumn = StopDepartures.tripId, otherColumn = TripHeadsigns.tripId)
+                        .select(StopDepartures.stopId, StopDepartures.route, TripHeadsigns.headsign)
+                        .where {
+                            (StopDepartures.stopId inList stopIds) and
+                            (StopDepartures.serviceId inList activeServices)
+                        }
+                        .withDistinct(true)
+                        .forEach { row ->
+                            val sId = row[StopDepartures.stopId]
+                            val r = row[StopDepartures.route]
+                            val h = java.text.Normalizer.normalize(row[TripHeadsigns.headsign], java.text.Normalizer.Form.NFC).trim()
+                            
+                            stopRoutesMap.getOrPut(sId) { mutableSetOf() }.add(StopRouteDto(r, h))
+                        }
+                }
+
+                // 4. З'єднуємо все разом
+                baseStops.map { stop ->
+                    val routesList: List<StopRouteDto> = stopRoutesMap[stop.stopId]
+                        ?.toList()
+                        ?.sortedBy { it.route.toIntOrNull() ?: 9999 }
+                        ?: emptyList<StopRouteDto>()
+                        
+                    stop.copy(routes = routesList)
+                }
+            }
+            call.respond(results)
+        }
+        // Напрямки для конкретної лінії — тільки ті, якими вона реально їде
+        // біля поточного часу (±90 хв), відсортовані від найближчого рейсу.
+        get("/routes/{route}/directions") {
+            val routeNum = call.parameters["route"] ?: return@get call.respondText("Missing route", status = HttpStatusCode.BadRequest)
+            val now = Instant.now()
+
+            val directions = transaction {
+                // headsign -> найменша різниця в хвилинах серед знайдених у вікні рейсів
+                val bestPerDirection = mutableMapOf<String, Int>()
+
+                for ((date, minuteBase) in timeCandidates(now)) {
+                    val serviceIds = activeServiceIds(date)
+                    if (serviceIds.isEmpty()) continue
+
+                    val departures = StopDepartures.selectAll()
+                        .where {
+                            (StopDepartures.route eq routeNum) and
+                                (StopDepartures.serviceId inList serviceIds) and
+                                (StopDepartures.departureMinutes greaterEq (minuteBase - DIRECTIONS_WINDOW_MINUTES)) and
+                                (StopDepartures.departureMinutes lessEq (minuteBase + DIRECTIONS_WINDOW_MINUTES))
+                        }
+
+                    for (row in departures) {
+                        val headsign = headsignFor(row[StopDepartures.tripId])
+                            ?.let { java.text.Normalizer.normalize(it, java.text.Normalizer.Form.NFC).trim() }
+                            ?: continue
+                        if (headsign.isEmpty()) continue
+                        val diff = kotlin.math.abs(row[StopDepartures.departureMinutes] - minuteBase)
+                        val existing = bestPerDirection[headsign]
+                        if (existing == null || diff < existing) {
+                            bestPerDirection[headsign] = diff
+                        }
+                    }
+                }
+
+                bestPerDirection.entries.sortedBy { it.value }.map { it.key }
+            }
+
+            if (directions.isNotEmpty()) {
+                call.respond(directions)
+                return@get
+            }
+
+            // Фолбек: рідкісна лінія (напр. раз на 2 год нічний рейс) — у вікні ±90хв
+            // може нічого не бути, хоча лінія реально активна сьогодні. Тоді краще
+            // показати повний список напрямків за день, ніж пустий вибір.
+            val fallback = transaction {
+                val activeServices = activeServiceIds(LocalDate.now(LUBLIN_ZONE))
+                if (activeServices.isEmpty()) return@transaction emptyList()
+
+                val tripIds = StopDepartures.selectAll()
+                    .where { (StopDepartures.route eq routeNum) and (StopDepartures.serviceId inList activeServices) }
+                    .map { it[StopDepartures.tripId] }
+                    .distinct()
+
+                tripIds.mapNotNull { headsignFor(it) }
+                    .map { java.text.Normalizer.normalize(it, java.text.Normalizer.Form.NFC).trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinct()
+                    .sorted()
+            }
+
+            call.respond(fallback)
+        }
+    }
+}

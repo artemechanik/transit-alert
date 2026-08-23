@@ -1,0 +1,45 @@
+# Gradle / Kotlin
+.gradle/
+build/
+out/
+*.class
+*.jar
+!gradle-wrapper.jar
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+application-secrets.conf
+*credentials*.json
+
+# Logs
+*.log
+logs/
+
+# PWA / Node frontend
+node_modules/
+dist/
+.parcel-cache/
+*.tsbuildinfo
+
+# Database
+*.db
+*.sqlite
+pg_dump_*.sql
+*.dump
+
+# GTFS raw data (якщо качаєш локально і не хочеш комітити великі файли)
+gtfs-static/
+*.pb
+
+# OS
+Thumbs.db
+backend/seed_stop_departures.sql

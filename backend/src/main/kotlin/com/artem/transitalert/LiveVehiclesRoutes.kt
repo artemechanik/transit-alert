@@ -95,10 +95,12 @@ fun Application.liveVehiclesRoutes() {
                             StopDepartures.departureMinutes,
                             StopDepartures.tripId
                         )
-                        .where {
+                       .where {
                             (StopDepartures.stopId eq stopId) and
                                 (StopDepartures.serviceId inList serviceIds) and
-                                (StopDepartures.departureMinutes greaterEq minuteBase) and
+                                // БЕРЕМО РЕЙСИ З ЗАПАСОМ У 60 ХВИЛИН НАЗАД
+                                // щоб покрити будь-які запізнення та "привидів"
+                                (StopDepartures.departureMinutes greaterEq (minuteBase - 60)) and
                                 (StopDepartures.departureMinutes lessEq limitMinutes)
                         }
                         .orderBy(StopDepartures.departureMinutes to SortOrder.ASC)

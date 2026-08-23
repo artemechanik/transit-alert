@@ -180,7 +180,8 @@ function closeDrawer(resetNav = true) {
 document.getElementById('drawer-close').addEventListener('click', () => closeDrawer(true));
 document.getElementById('overlay').addEventListener('click', () => { 
   closeDrawer(true); 
-  if (typeof closeModal === 'function') closeModal(); 
+  if (typeof closeModal === 'function') closeModal();
+  if (typeof closeQuickModal === 'function') closeQuickModal(); // <-- Додано
 });
 // ==================== Стрічка (drawer + маркери на карті) ====================
 let reportsById = {};
@@ -364,12 +365,56 @@ function closeModal() {
   updateContext = null;
 }
 
-document.getElementById('fab-report').addEventListener('click', openModal);
+// БУЛО:
+// document.getElementById('fab-report').addEventListener('click', openModal);
+
+// СТАЛО:
+document.getElementById('fab-report').addEventListener('click', openQuickModal);
 document.getElementById('modal-close').addEventListener('click', closeModal);
 document.getElementById('drawer-add').addEventListener('click', () => {
   closeDrawer(); // Акуратно ховаємо стрічку
   openModal();   // Відкриваємо форму створення репорту
 });
+
+// --- Логіка швидкого репорту (Kanar obok) ---
+let currentQuickSelection = 'Linia 14'; // Значення за замовчуванням
+
+function openQuickModal() {
+  document.getElementById('quick-report-modal').classList.add('open');
+  document.getElementById('overlay').classList.add('show');
+}
+
+function closeQuickModal() {
+  document.getElementById('quick-report-modal').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+function openManualFromQuick() {
+  closeQuickModal();
+  setTimeout(() => { openModal(); }, 200); 
+}
+
+// Функція вибору зі списку (робить кнопку червоною)
+function selectQuickOption(btnEl, value) {
+  // Знімаємо клас 'selected' з усіх опцій
+  document.querySelectorAll('.quick-option').forEach(b => b.classList.remove('selected'));
+  // Додаємо його тій, на яку клікнули
+  btnEl.classList.add('selected');
+  
+  // Запам'ятовуємо вибір
+  currentQuickSelection = value;
+}
+
+// Функція відправки (після натискання "Potwierdzam")
+function sendQuickReport() {
+  if (!currentQuickSelection) return;
+  
+  closeQuickModal();
+  showToast('Zgłoszenie wysłane: ' + currentQuickSelection + ' ✓');
+  
+  // У майбутньому тут ми братимемо координати / ID і відправлятимемо POST-запит
+}
+
 function switchFormTab(tab, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -719,8 +764,13 @@ async function loadDepartures(stopId, isBackgroundRefresh = false) {
       departuresList.innerHTML = '';
       
       departures.forEach(dep => {
+        // Визначаємо привида (час настав, а GPS немає)
+        const isGhost = !dep.isRealTime && dep.minutesLeft === 0;
+
         const minClass = dep.isRealTime ? 'dep-min live' : 'dep-min';
-        const timeText = dep.minutesLeft === 0 ? '< 1 min' : `${dep.minutesLeft} min`;
+        
+        // Для привида замість часу ставимо прочерк або '0 min'
+        const timeText = isGhost ? '—' : (dep.minutesLeft === 0 ? '< 1 min' : `${dep.minutesLeft} min`);
         
         let schedHtml = dep.scheduledTime;
         let statusHtml = '';
@@ -739,11 +789,16 @@ async function loadDepartures(stopId, isBackgroundRefresh = false) {
             statusHtml = `<div class="dep-status status-ontime">Punktualnie</div>`;
           }
         } else {
-          statusHtml = `<div class="dep-status status-sched">Rozkład jazdy</div>`;
+          // Якщо це привид — пишемо "Odjechał", інакше стандартно "Rozkład jazdy"
+          statusHtml = isGhost 
+            ? `<div class="dep-status status-sched">Odjechał</div>` 
+            : `<div class="dep-status status-sched">Rozkład jazdy</div>`;
         }
         
+        const ghostClass = isGhost ? ' ghost' : '';
+
         const card = document.createElement('div');
-        card.className = 'dep-card';
+        card.className = `dep-card${ghostClass}`;
         card.innerHTML = `
           <div class="dep-route">${dep.route}</div>
           <div class="dep-info">

@@ -163,16 +163,108 @@
     color: var(--blue);
   }
 
-  /* --- Плаваюча кнопка "Zgłoś kanara" --- */
+  /* --- Кнопка "Kanar obok" (Жовта, напівпрозора, скляна) --- */
   #fab-report {
-    position: absolute; right: 16px; bottom: calc(96px + var(--safe-bottom));
-    z-index: 500; background: var(--danger); color: #fff; border: none; border-radius: 28px;
-    padding: 14px 20px; font-size: 15px; font-weight: 600; box-shadow: 0 4px 14px rgba(229,57,53,.45);
-    display: flex; align-items: center; gap: 8px; cursor: pointer;
+    position: absolute; 
+    left: 50%; 
+    right: auto; 
+    transform: translateX(-50%);
+    bottom: calc(85px + var(--safe-bottom)); 
+    width: max-content; 
+    z-index: 500; 
+    
+    /* Жовтий напівпрозорий фон */
+    background: rgba(255, 204, 0, 0.55); 
+    /* Ефект розмиття того, що під кнопкою (карта) */
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    
+    /* Темний текст для ідеального контрасту на жовтому */
+    color: #1c2530; 
+    border: none; 
+    border-radius: 24px; 
+    padding: 12px 24px; 
+    font-size: 15px; 
+    font-weight: 800; /* Зробив шрифт трохи жирнішим для читабельності */
+    box-shadow: 0 4px 14px rgba(255, 204, 0, 0.4); /* Жовтувата тінь */
+    display: flex; 
+    align-items: center; 
+    gap: 8px; 
+    cursor: pointer;
   }
-  #fab-report:active { background: var(--danger-dark); }
+  
+  #fab-report:active { 
+    /* При натисканні стає повністю яскравою і непрозорою */
+    background: rgba(255, 204, 0, 1); 
+    transform: translateX(-50%) scale(0.96); 
+  }
+  
   #fab-report .icon { font-size: 18px; }
+ /* --- Швидка модалка (Kanar obok) --- */
+  #quick-report-modal {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 750;
+    background: var(--card); border-radius: 20px 20px 0 0; box-shadow: 0 -4px 24px rgba(0,0,0,.25);
+    transform: translateY(100%); transition: transform .2s ease-out;
+    padding-bottom: calc(16px + var(--safe-bottom));
+    display: flex; flex-direction: column;
+  }
+  #quick-report-modal.open { transform: translateY(0); }
+  
+  .quick-header { text-align: center; padding: 20px 20px 14px; position: relative; }
+  .quick-header h2 { margin: 0 0 6px 0; font-size: 18px; color: var(--text); }
+  .quick-header p { margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.4; }
 
+  .quick-options { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+  
+  /* Жорстко стилізуємо кнопки вибору (вбиваємо системний дизайн) */
+  .quick-option {
+    background: var(--bg); 
+    border: 1px solid var(--border); 
+    border-radius: 12px;
+    padding: 14px 16px; 
+    font-size: 15px; 
+    color: var(--text); 
+    font-weight: 600;
+    display: flex; 
+    align-items: center; 
+    justify-content: flex-start; /* Текст строго зліва */
+    gap: 12px; 
+    cursor: pointer; 
+    width: 100%; /* Розтягуємо на всю ширину */
+    appearance: none; 
+    -webkit-appearance: none; /* Вимикаємо дизайн браузера */
+    outline: none;
+  }
+  
+  /* Обраний варіант */
+  .quick-option.selected {
+    background: rgba(229, 57, 53, 0.1); 
+    border-color: var(--danger); 
+    color: var(--danger);
+  }
+  
+  /* Кнопки Anuluj / Potwierdzam */
+  .quick-actions { display: flex; gap: 12px; padding: 0 16px; }
+  .quick-action-btn {
+    flex: 1; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; 
+    cursor: pointer; appearance: none; -webkit-appearance: none; border: none; outline: none;
+  }
+  .btn-cancel { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+  .btn-cancel:active { background: var(--border); }
+  
+  .btn-confirm { background: var(--danger); color: #fff; }
+  .btn-confirm:active { background: var(--danger-dark); }
+  
+  /* Посилання "Wpisz ręcznie" */
+  .manual-link-wrap { text-align: center; margin-top: 16px; }
+  .manual-link { 
+    color: var(--blue); 
+    font-size: 14px; 
+    font-weight: 600; 
+    text-decoration: none !important; /* Жорстко забираємо підкреслення */
+    padding: 10px; 
+    display: inline-block;
+  }
   /* --- Нижня навігація --- */
   #bottom-nav {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 500;
@@ -366,6 +458,18 @@
   /* Трохи приглушуємо закреслений час */
   .dep-sched s { color: var(--text-muted); text-decoration-color: var(--text-muted); opacity: 0.7; }
   
+  /* --- Візуал для "привидів" (рейси, що вже від'їхали) --- */
+  .dep-card.ghost {
+    opacity: 0.6;
+    background: var(--bg);
+  }
+  .dep-card.ghost .dep-route,
+  .dep-card.ghost .dep-dir,
+  .dep-card.ghost .dep-min,
+  .dep-card.ghost .dep-status {
+    color: var(--text-muted) !important; 
+  }
+
   /* --- Кнопка оновлення та Pull-to-refresh --- */
   #refresh-fab {
     position: absolute; 
@@ -435,10 +539,11 @@
   <div id="search-suggestions"></div>
 </div>
 
-<button id="fab-report"><span class="icon">⚠️</span> Zgłoś kanara</button>
+<button id="fab-report"><span class="icon">📢</span> Kanar obok!</button>
 
 <div id="overlay"></div>
 
+<!-- Стрічка дописів -->
 <div id="reports-drawer">
   <div id="drawer-handle"></div>
   <div id="drawer-header">
@@ -451,6 +556,7 @@
   <div id="drawer-list"></div>
 </div>
 
+<!-- СТАРА ВЕЛИКА ФОРМА (Вона необхідна для "Wpisz ręcznie") -->
 <div id="report-modal">
   <div id="modal-header">
     <h2>Zgłoś kanara</h2>
@@ -497,6 +603,37 @@
 
     <button id="submit-btn">Zgłoś</button>
     <div id="form-hint"></div>
+  </div>
+</div>
+
+<!-- НОВА ШВИДКА ПАНЕЛЬ -->
+<div id="quick-report-modal">
+  <div id="drawer-handle"></div>
+  <div class="quick-header">
+    <h2>Zgłoś kanarów</h2>
+    <p>Wybierz cel w pobliżu</p>
+  </div>
+  
+  <div class="quick-options" id="quick-options-list">
+    <!-- За замовчуванням обрано перший варіант -->
+    <button class="quick-option selected" onclick="selectQuickOption(this, 'Linia 14')">
+      <span class="icon">🚌</span> Linia 14 (w pobliżu)
+    </button>
+    <button class="quick-option" onclick="selectQuickOption(this, 'Lotnicza 01')">
+      <span class="icon">🚏</span> Lotnicza 01 (30m)
+    </button>
+    <button class="quick-option" onclick="selectQuickOption(this, 'Obecna lokalizacja')">
+      <span class="icon">📍</span> Obecna lokalizacja
+    </button>
+  </div>
+  
+  <div class="quick-actions">
+    <button class="quick-action-btn btn-cancel" onclick="closeQuickModal()">Anuluj</button>
+    <button class="quick-action-btn btn-confirm" id="quick-confirm-btn" onclick="sendQuickReport()">Potwierdzam</button>
+  </div>
+  
+  <div class="manual-link-wrap">
+    <a href="#" class="manual-link" onclick="openManualFromQuick(); return false;">Wpisz ręcznie (inna lokalizacja)</a>
   </div>
 </div>
 

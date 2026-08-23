@@ -115,9 +115,14 @@ fun Application.liveVehiclesRoutes() {
                             val expectedSeconds = scheduledSeconds + delaySec
                             val secondsLeft = expectedSeconds - nowRefSeconds
 
-                            // Ховаємо рейси, які поїхали більше хвилини тому
-                            if (secondsLeft < -60) return@forEach
+                            // РОЗУМНИЙ БУФЕР ОЧІКУВАННЯ (Grace Period)
+                            // Якщо є GPS: ховаємо через 2 хв після проїзду зупинки
+                            // Якщо немає GPS: тримаємо рейс у списку ще 10 хвилин на випадок запізнення
+                            val hideThresholdSeconds = if (isRealTime) -120 else -300
 
+                            if (secondsLeft < hideThresholdSeconds) return@forEach
+
+                            // max(0, ...) гарантує, що поки автобус "висить" у буфері, він показуватиме 0 min
                             val minutesLeft = max(0, secondsLeft / 60)
 
                             val h = (scheduledMin / 60) % 24

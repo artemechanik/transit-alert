@@ -12,11 +12,11 @@ live GPS позиції транспорту + crowdsourced звіти про к
 - **Дані:** GTFS static (авто-синк) + GTFS-Realtime (live позиції)
 
 ## Структура
-
+```
 transit-alert/
 ├── backend/ # Kotlin/Ktor API
 └── frontend/ # PWA клієнт
-
+```
 
 ## Запуск локально
 

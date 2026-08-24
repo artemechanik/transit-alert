@@ -35,7 +35,7 @@ function getFingerprint() {
 }
 
 // ==================== Карта ====================
-let map, reportMarkersLayer, searchMarker;
+let map, reportMarkersLayer, searchMarker, vehicleMarker;
 
 function initMap() {
   map = L.map('map', { zoomControl: false }).setView(LUBLIN_CENTER, 14);
@@ -112,6 +112,110 @@ function flyToStop(stop) {
   map.flyTo([stop.lat, stop.lon], 17);
 }
 
+// ==================== Розгортання картки табло: наступні зупинки + показ на мапі ====================
+async function toggleDepExpand(card, panel, dep) {
+  const isOpen = panel.classList.contains('open');
+  // Схлопуємо всі інші відкриті картки — одна розгорнута за раз, щоб список не роздувався
+  document.querySelectorAll('.dep-expand.open').forEach(p => { if (p !== panel) { p.classList.remove('open'); p.innerHTML = ''; } });
+  document.querySelectorAll('.dep-card.expandable.open').forEach(c => { if (c !== card) c.classList.remove('open'); });
+
+  if (isOpen) {
+    panel.classList.remove('open');
+    card.classList.remove('open');
+    panel.innerHTML = '';
+    return;
+  }
+
+  card.classList.add('open');
+  panel.classList.add('open');
+  panel.innerHTML = '<div class="dep-expand-loading">Ładowanie trasy...</div>';
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/trips/${dep.tripId}/upcoming-stops?fromStopId=${encodeURIComponent(currentStopIdForDepartures)}`);
+    if (!res.ok) throw new Error('not found');
+    const stops = await res.json();
+
+    const stopsHtml = stops.length
+      ? stops.slice(0, 8).map(s => `<div class="dep-expand-stop"><span>${s.name}</span><span class="dep-expand-eta">${s.eta}</span></div>`).join('')
+      : '<div class="dep-expand-loading">To ostatni przystanek na trasie</div>';
+
+    panel.innerHTML = `
+      <div class="dep-expand-stops">${stopsHtml}</div>
+      <button class="dep-expand-map-btn" onclick="showVehicleOnMap('${dep.tripId}')">📍 Pokaż autobus na mapie</button>
+    `;
+  } catch (e) {
+    panel.innerHTML = '<div class="dep-expand-loading">Nie udało się załadować trasy</div>';
+  }
+}
+
+let vehicleTrackInterval = null;
+let trackedTripId = null;
+
+async function showVehicleOnMap(tripId) {
+  try {
+    const vehicle = await fetchVehiclePosition(tripId);
+    if (!vehicle) {
+      showToast('Brak danych GPS dla tego kursu');
+      return;
+    }
+
+    switchScreen('map', document.getElementById('nav-map'));
+    drawVehicleMarker(vehicle);
+    map.flyTo([vehicle.lat, vehicle.lon], 16);
+
+    // Починаємо стежити за цим рейсом — оновлюємо позицію в тому ж темпі,
+    // в якому бекенд сам оновлює GTFS-RT (15с), частіше пінгувати сенсу нема.
+    trackedTripId = tripId;
+    if (vehicleTrackInterval) clearInterval(vehicleTrackInterval);
+    vehicleTrackInterval = setInterval(refreshTrackedVehicle, 15000);
+  } catch (e) {
+    showToast('Brak połączenia z serwerem');
+  }
+}
+
+async function fetchVehiclePosition(tripId) {
+  const res = await fetch(`${API_BASE_URL}/live-vehicles/${tripId}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+function drawVehicleMarker(vehicle) {
+  const icon = L.divIcon({
+    className: 'vehicle-marker-icon',
+    html: `<div class="vehicle-marker-dot">${vehicle.route}</div>`,
+    iconSize: [34, 34],
+  });
+  const popupHtml = `<b>Linia ${vehicle.route}</b><br>${vehicle.vehicleLabel || ''}`;
+
+  if (vehicleMarker) {
+    vehicleMarker.setLatLng([vehicle.lat, vehicle.lon]);
+    vehicleMarker.setPopupContent(popupHtml);
+  } else {
+    vehicleMarker = L.marker([vehicle.lat, vehicle.lon], { icon }).addTo(map)
+      .bindPopup(popupHtml)
+      .openPopup();
+  }
+}
+
+async function refreshTrackedVehicle() {
+  if (!trackedTripId) return;
+  const vehicle = await fetchVehiclePosition(trackedTripId);
+  if (!vehicle) {
+    // Рейс зник з GPS (доїхав до кінцевої або GTFS-RT перестав його бачити)
+    stopVehicleTracking();
+    showToast('Autobus zniknął z GPS (kurs zakończony?)');
+    return;
+  }
+  drawVehicleMarker(vehicle);
+}
+
+function stopVehicleTracking() {
+  if (vehicleTrackInterval) clearInterval(vehicleTrackInterval);
+  vehicleTrackInterval = null;
+  trackedTripId = null;
+  if (vehicleMarker) { map.removeLayer(vehicleMarker); vehicleMarker = null; }
+}
+
 // ==================== Нижня навігація ====================
 function switchScreen(screen, btn) {
   // 1. Оновлюємо активну кнопку
@@ -134,6 +238,7 @@ function switchScreen(screen, btn) {
     if (fabReport) fabReport.style.display = 'flex';
     
   } else if (screen === 'stop') {
+    stopVehicleTracking();
     closeDrawer(false); 
     // ХОВАЄМО пошук карти та кнопку, бо тут є свій пошук
     if (mapSearchBar) mapSearchBar.style.display = 'none';
@@ -141,11 +246,13 @@ function switchScreen(screen, btn) {
     if (stopScreen) stopScreen.style.display = 'flex'; 
     
   } else if (screen === 'reports') {
+    stopVehicleTracking();
     openDrawer('Zgłoszenia', renderReportsList);
     if (mapSearchBar) mapSearchBar.style.display = 'flex';
     if (fabReport) fabReport.style.display = 'flex';
     
   } else if (screen === 'route') {
+    stopVehicleTracking();
     openDrawer('Trasa', (container) => {
       container.innerHTML = '<div id="drawer-empty">Перегляд маршруту й прибуттів з\'явиться пізніше...</div>';
     });
@@ -928,9 +1035,13 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
                 // ... (твій код статусів залишається без змін) ...
         
         const ghostClass = isPast ? ' ghost' : '';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'dep-item';
+
         const card = document.createElement('div');
         card.className = `dep-card${ghostClass}`;
-        
+        card.dataset.tripId = dep.tripId || '';
+
         // Перевіряємо чи є бортовий номер (назву поля dep.vehicleId заміни на ту, яку віддає твій бекенд, якщо вона інакша)
         const vehicleIdHtml = dep.vehicleId ? dep.vehicleId : ''; 
 
@@ -949,7 +1060,18 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
             <div class="dep-sched">${schedHtml}</div>
           </div>
         `;
-        departuresList.appendChild(card);
+
+        const expandPanel = document.createElement('div');
+        expandPanel.className = 'dep-expand';
+
+        if (!isPast && dep.tripId) {
+          card.classList.add('expandable');
+          card.addEventListener('click', () => toggleDepExpand(card, expandPanel, dep));
+        }
+
+        wrapper.appendChild(card);
+        wrapper.appendChild(expandPanel);
+        departuresList.appendChild(wrapper);
       });        
 
       // М'ЯКО ВІДНОВЛЮЄМО СКРОЛ!

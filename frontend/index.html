@@ -441,6 +441,33 @@
     background: var(--card); border-radius: 12px; padding: 14px 16px;
     display: flex; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.05);
   }
+  .dep-card.expandable { cursor: pointer; }
+  .dep-card.expandable.open { border-radius: 12px 12px 0 0; }
+
+  .dep-expand {
+    max-height: 0; overflow: hidden; background: var(--bg); border-radius: 0 0 12px 12px;
+    transition: max-height .25s ease;
+  }
+  .dep-expand.open { max-height: 320px; overflow-y: auto; padding: 10px 16px; }
+  .dep-expand-loading { font-size: 13px; color: var(--text-muted); text-align: center; padding: 10px 0; }
+  .dep-expand-stops { display: flex; flex-direction: column; gap: 2px; }
+  .dep-expand-stop {
+    display: flex; justify-content: space-between; padding: 6px 4px; font-size: 13px;
+    color: var(--text); border-bottom: 1px solid var(--border);
+  }
+  .dep-expand-stop:last-child { border-bottom: none; }
+  .dep-expand-eta { color: var(--text-muted); font-weight: 600; }
+  .dep-expand-map-btn {
+    width: 100%; margin-top: 10px; border: none; border-radius: 10px; padding: 10px;
+    background: var(--blue); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+
+  .vehicle-marker-icon { background: transparent; border: none; }
+  .vehicle-marker-dot {
+    width: 34px; height: 34px; border-radius: 50%; background: var(--blue); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+    border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.4);
+  }
    /* --- Лівий блок з номером маршруту та ID --- */
   .dep-route-wrap {
     width: 60px;

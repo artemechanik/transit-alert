@@ -1064,13 +1064,15 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
         card.className = `dep-card${ghostClass}`;
         card.dataset.tripId = dep.tripId || '';
 
-        // Перевіряємо чи є бортовий номер (назву поля dep.vehicleId заміни на ту, яку віддає твій бекенд, якщо вона інакша)
+        // Перевіряємо чи є бортовий номер і тип
         const vehicleIdHtml = dep.vehicleId ? dep.vehicleId : ''; 
-
+        // Очищаємо номер від усього зайвого (залишаємо тільки цифри)
+        const routeNum = parseInt(dep.route, 10);
+        const trolleyClass = (routeNum >= 150) ? ' trolleybus' : '';
         // ОНОВЛЕНА РОЗМІТКА КАРТКИ
         card.innerHTML = `
           <div class="dep-route-wrap">
-            <div class="dep-route-box">${dep.route}</div>
+            <div class="dep-route-box${trolleyClass}">${dep.route}</div>
             <div class="dep-vehicle-id">${vehicleIdHtml}</div>
           </div>
           <div class="dep-info">

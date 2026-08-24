@@ -491,8 +491,32 @@
     justify-content: center;
     line-height: 1;
     background: transparent;
+    position: relative;
   }
+  
+/* Малюємо самі ріжки */
+.dep-route-box.trolleybus::before,
+.dep-route-box.trolleybus::after {
+    content: '';
+    position: absolute;
+    top: -10px; /* Виступають вгору за межі рамки */
+    width: 3px; /* Товщина ріжок (трохи товщі за рамку) */
+    height: 10px; /* Довжина */
+    background-color: currentColor; /* Той самий колір, що й рамка! */
+    border-radius: 2px;
+}
 
+/* Лівий ріжок */
+.dep-route-box.trolleybus::before {
+    left: 12px;
+    transform: rotate(30deg);
+}
+
+/* Правий ріжок */
+.dep-route-box.trolleybus::after {
+    right: 10px;
+    transform: rotate(30deg);
+}
   .dep-vehicle-id {
     font-size: 11px;
     color: var(--text-muted);

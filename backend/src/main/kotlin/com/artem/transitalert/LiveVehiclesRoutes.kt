@@ -134,14 +134,16 @@ fun Application.liveVehiclesRoutes() {
                             val h = (scheduledMin / 60) % 24
                             val m = scheduledMin % 60
 
-                            collected += StopDepartureDto(
+                                                        collected += StopDepartureDto(
                                 route = row[StopDepartures.route],
                                 direction = row[TripHeadsigns.headsign],
                                 scheduledTime = "%02d:%02d".format(h, m),
                                 minutesLeft = minutesLeft,
                                 isRealTime = isRealTime,
-                                delayMinutes = delaySec / 60
+                                delayMinutes = delaySec / 60,
+                                vehicleId = liveData?.vehicleLabel // <--- Додаємо сюди!
                             )
+
                         }
                 }
 
@@ -150,8 +152,12 @@ fun Application.liveVehiclesRoutes() {
 
             // Сортуємо фінальний список за реальним часом прибуття, дедуп на випадок
             // (теоретично малоймовірного) перетину двох timeCandidate-вікон.
-            val sortedDepartures = departures
-                .distinctBy { it.route to it.direction to it.scheduledTime }
+                        val sortedDepartures = departures
+                // Спочатку піднімаємо рейси з GPS наверх (щоб вони вижили при склеюванні)
+                .sortedByDescending { it.isRealTime } 
+                // Склеюємо ТІЛЬКИ якщо збігається маршрут, напрямок і час за розкладом
+                .distinctBy { "${it.route}|${it.direction.trim()}|${it.scheduledTime}" }
+                // Сортуємо фінальний список за часом, що залишився
                 .sortedBy { it.minutesLeft }
                 .take(40)
 

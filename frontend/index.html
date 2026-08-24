@@ -417,14 +417,20 @@
   /* --- Вкладка Przystanek --- */
   .stop-search-header {
     background: var(--card); padding: calc(16px + var(--safe-top)) 16px 16px;
-    box-shadow: 0 2px 10px rgba(0,0,0,.08); position: relative; z-index: 20;
+    box-shadow: 0 2px 10px rgba(0,0,0,.08); position: relative; z-index: 200;
   }
   #stop-screen-search {
     width: 100%; border: 1px solid var(--border); border-radius: 12px;
     padding: 12px 16px; font-size: 16px; background: var(--bg); color: var(--text);
   }
   #stop-title-container {
-    padding: 16px 16px 8px; border-bottom: 1px solid var(--border);
+    padding: 16px 16px 8px; 
+    border-bottom: 1px solid var(--border);
+    /* Додаємо липкість: */
+    position: sticky;
+    top: 0;
+    background: var(--bg); /* Беремо системний фон твого додатку */
+    z-index: 150; /* Щоб він був вище за список автобусів, але нижче за модалки */
   }
   #stop-title-container h2 { margin: 0; font-size: 18px; color: var(--text); }
   
@@ -435,7 +441,45 @@
     background: var(--card); border-radius: 12px; padding: 14px 16px;
     display: flex; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.05);
   }
-  .dep-route { font-size: 26px; font-weight: 700; color: var(--blue); width: 60px; flex-shrink: 0; }
+   /* --- Лівий блок з номером маршруту та ID --- */
+  .dep-route-wrap {
+    width: 60px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Центруємо номер і рамку */
+    margin-right: 12px;
+  }
+  
+  .dep-route-box {
+    font-size: 24px; /* Трохи менший шрифт, щоб гарно вліз у рамку */
+    font-weight: 700;
+    color: var(--blue);
+    border: 2px solid var(--blue); /* Рамка (2px виглядає акуратніше за товсту) */
+    border-radius: 6px; /* Легке заокруглення кутів виглядає сучасніше */
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    background: transparent;
+  }
+
+  .dep-vehicle-id {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-weight: 600;
+    letter-spacing: 0.5px; /* Трохи розширюємо цифри для читабельності */
+  }
+  
+  /* Щоб у "привидів" (минулих рейсів) рамка теж тьмяніла */
+  .dep-card.ghost .dep-route-box {
+    border-color: var(--text-muted);
+    color: var(--text-muted);
+  }
+
   .dep-info { flex: 1; display: flex; flex-direction: column; }
   .dep-dir { font-size: 16px; font-weight: 600; color: var(--text); }
   .dep-times { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
@@ -524,6 +568,19 @@
     display: flex; 
     align-items: center; 
     justify-content: center;
+  }
+  /* --- Live індикатор (Супутник) --- */
+  .live-icon {
+    display: inline-block;
+    margin-right: 6px;
+    font-size: 14px; /* Підганяємо під розмір тексту статусу */
+    animation: satellite-float 2s ease-in-out infinite;
+  }
+
+  @keyframes satellite-float {
+    0% { transform: translateY(0px) scale(0.95); opacity: 0.8; }
+    50% { transform: translateY(-1px) scale(1.15); opacity: 1; }
+    100% { transform: translateY(0px) scale(0.95); opacity: 0.8; }
   }
 
 

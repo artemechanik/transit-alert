@@ -843,15 +843,15 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
         const isPast = isHistory || isGhost;
         const minClass = (dep.isRealTime && !isPast) ? 'dep-min live' : 'dep-min';
         
-                     // ФОРМАТУВАННЯ ЧАСУ
+                            // ФОРМАТУВАННЯ ЧАСУ ТА САТЕЛІТ-ІКОНКА
         let timeText;
         let schedHtml = dep.scheduledTime; 
-        let hideSchedBottom = false; // Щоб не дублювати час зверху і знизу
+        let hideSchedBottom = false; // Прибираємо дублювання часу знизу для далеких рейсів
         const absMins = Math.abs(dep.minutesLeft);
         
         if (isHistory) {
           if (absMins >= 60) {
-            timeText = dep.scheduledTime; // Просто показуємо час рейсу
+            timeText = dep.scheduledTime; 
             hideSchedBottom = true; 
           } else {
             timeText = `${dep.minutesLeft} min`;
@@ -860,7 +860,7 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
           timeText = '0 min'; 
         } else {
           if (dep.minutesLeft >= 60) {
-            timeText = dep.scheduledTime; // Далеке майбутнє -> точний час
+            timeText = dep.scheduledTime; // Далекі рейси показуємо як точний час (будильник)
             hideSchedBottom = true;
           } else {
             timeText = dep.minutesLeft === 0 ? '< 1 min' : `${dep.minutesLeft} min`;
@@ -868,17 +868,18 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
         }
         
         let statusHtml = '';
+        const liveIcon = `<span class="live-icon">🛰️</span>`; // Наш супутник для GPS-даних
 
         if (dep.isRealTime) {
           if (dep.delayMinutes > 0) {
             const realTime = addMinutesToTime(dep.scheduledTime, dep.delayMinutes);
             if (hideSchedBottom) {
-               timeText = realTime; // Якщо далекий рейс із запізненням - пишемо реальний час великим
+               timeText = realTime; // Якщо далекий рейс затримується — зсуваємо великий час
                schedHtml = `<s>${dep.scheduledTime}</s>`;
             } else {
                schedHtml = `<s>${dep.scheduledTime}</s> <span class="time-mod time-delay">${realTime}</span>`;
             }
-            statusHtml = `<div class="dep-status status-delay">Opóźnienie: ${dep.delayMinutes} min</div>`;
+            statusHtml = `<div class="dep-status status-delay">${liveIcon}Opóźnienie: ${dep.delayMinutes} min</div>`;
           } else if (dep.delayMinutes < 0) {
             const earlyMins = Math.abs(dep.delayMinutes);
             const realTime = addMinutesToTime(dep.scheduledTime, dep.delayMinutes);
@@ -888,27 +889,37 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
             } else {
                schedHtml = `<s>${dep.scheduledTime}</s> <span class="time-mod time-early">${realTime}</span>`;
             }
-            statusHtml = `<div class="dep-status status-early">Przed czasem: ${earlyMins} min</div>`;
+            statusHtml = `<div class="dep-status status-early">${liveIcon}Przed czasem: ${earlyMins} min</div>`;
           } else {
             if (hideSchedBottom) schedHtml = '';
-            statusHtml = `<div class="dep-status status-ontime">Punktualnie</div>`;
+            statusHtml = `<div class="dep-status status-ontime">${liveIcon}Punktualnie</div>`;
           }
         } else {
            if (hideSchedBottom) schedHtml = '';
         }
         
-        // Перекриваємо статус для історії
+        // Статуси для історії та звичайного розкладу без GPS
         if (isPast) {
           statusHtml = `<div class="dep-status status-sched">Odjechał</div>`;
         } else if (!dep.isRealTime) {
           statusHtml = `<div class="dep-status status-sched">Rozkład jazdy</div>`;
         }
         
+                // ... (твій код статусів залишається без змін) ...
+        
         const ghostClass = isPast ? ' ghost' : '';
         const card = document.createElement('div');
         card.className = `dep-card${ghostClass}`;
+        
+        // Перевіряємо чи є бортовий номер (назву поля dep.vehicleId заміни на ту, яку віддає твій бекенд, якщо вона інакша)
+        const vehicleIdHtml = dep.vehicleId ? dep.vehicleId : ''; 
+
+        // ОНОВЛЕНА РОЗМІТКА КАРТКИ
         card.innerHTML = `
-          <div class="dep-route">${dep.route}</div>
+          <div class="dep-route-wrap">
+            <div class="dep-route-box">${dep.route}</div>
+            <div class="dep-vehicle-id">${vehicleIdHtml}</div>
+          </div>
           <div class="dep-info">
             <div class="dep-dir">${dep.direction}</div>
             ${statusHtml}
@@ -919,7 +930,7 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
           </div>
         `;
         departuresList.appendChild(card);
-      });
+      });        
 
       // М'ЯКО ВІДНОВЛЮЄМО СКРОЛ!
       if (fetchOffset < 0) {

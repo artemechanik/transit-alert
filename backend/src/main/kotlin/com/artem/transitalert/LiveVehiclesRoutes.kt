@@ -64,6 +64,43 @@ fun Application.liveVehiclesRoutes() {
             call.respond(result)
         }
 
+        // 1б. Жива позиція ОДНОГО конкретного рейсу — для "показати на мапі"
+        // з розгорнутої картки табло (без потреби тягнути й фільтрувати всіх автобусів).
+        get("/live-vehicles/{tripId}") {
+            val tripId = call.parameters["tripId"]
+            if (tripId == null) {
+                call.respond(HttpStatusCode.BadRequest)
+                return@get
+            }
+
+            val pos = LiveVehiclesCache.byTripId(tripId)
+            if (pos == null) {
+                call.respond(HttpStatusCode.NotFound, "Немає живих GPS-даних для цього рейсу")
+                return@get
+            }
+
+            val route = transaction {
+                StopDepartures.selectAll()
+                    .where { StopDepartures.tripId eq tripId }
+                    .limit(1)
+                    .firstOrNull()
+                    ?.get(StopDepartures.route)
+            } ?: ""
+
+            call.respond(
+                LiveVehicleResponse(
+                    vehicleLabel = pos.vehicleLabel,
+                    route = route,
+                    tripId = pos.tripId,
+                    lat = pos.lat,
+                    lon = pos.lon,
+                    bearing = pos.bearing,
+                    currentStopSequence = pos.currentStopSequence,
+                    delaySeconds = pos.delaySeconds,
+                )
+            )
+        }
+
         // 2. Розклад (відправлення) для конкретної платформи з урахуванням Real-Time
         get("/stops/{stopId}/departures") {
             val stopId = call.parameters["stopId"]
@@ -134,14 +171,15 @@ fun Application.liveVehiclesRoutes() {
                             val h = (scheduledMin / 60) % 24
                             val m = scheduledMin % 60
 
-                                                        collected += StopDepartureDto(
+                            collected += StopDepartureDto(
                                 route = row[StopDepartures.route],
                                 direction = row[TripHeadsigns.headsign],
                                 scheduledTime = "%02d:%02d".format(h, m),
                                 minutesLeft = minutesLeft,
                                 isRealTime = isRealTime,
                                 delayMinutes = delaySec / 60,
-                                vehicleId = liveData?.vehicleLabel // <--- Додаємо сюди!
+                                vehicleId = liveData?.vehicleLabel,
+                                tripId = tripId
                             )
 
                         }

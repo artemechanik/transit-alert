@@ -76,5 +76,39 @@ fun Application.upcomingStopsRoutes() {
                 else -> call.respond(HttpStatusCode.OK, mapOf("upcomingStops" to emptyList<UpcomingStop>()))
             }
         }
+
+        // Той самий принцип, що й вище, але без прив'язки до конкретного допису —
+        // потрібно для розгортання картки в табло Przystanek, де tripId+stopId
+        // вже відомі напряму з розкладу, без створення проміжного допису.
+        get("/trips/{tripId}/upcoming-stops") {
+            val tripId = call.parameters["tripId"]
+            val fromStopId = call.request.queryParameters["fromStopId"]
+            if (tripId == null || fromStopId == null) {
+                call.respond(HttpStatusCode.BadRequest, "Потрібні tripId і fromStopId")
+                return@get
+            }
+
+            val result = transaction {
+                val currentStopRow = TripStops.selectAll()
+                    .where { (TripStops.tripId eq tripId) and (TripStops.stopId eq fromStopId) }
+                    .limit(1)
+                    .firstOrNull() ?: return@transaction null
+
+                val currentSequence = currentStopRow[TripStops.stopSequence]
+
+                TripStops.selectAll()
+                    .where { (TripStops.tripId eq tripId) and (TripStops.stopSequence greater currentSequence) }
+                    .orderBy(TripStops.stopSequence, SortOrder.ASC)
+                    .map {
+                        val minutes = it[TripStops.departureMinutes] % (24 * 60)
+                        UpcomingStop(
+                            name = it[TripStops.stopName],
+                            eta = "%02d:%02d".format(minutes / 60, minutes % 60),
+                        )
+                    }
+            }
+
+            if (result == null) call.respond(HttpStatusCode.NotFound) else call.respond(result)
+        }
     }
 }

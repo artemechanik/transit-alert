@@ -60,6 +60,7 @@ data class StopDepartureDto(
     val minutesLeft: Int,      
     val isRealTime: Boolean,   
     val delayMinutes: Int,
-    val vehicleId: String? = null // <--- ОБОВ'ЯЗКОВО додай це поле сюди!
+    val vehicleId: String? = null,
+    val tripId: String
 )
 

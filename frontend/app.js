@@ -202,20 +202,37 @@ async function fetchVehiclePosition(tripId) {
 }
 
 function drawVehicleMarker(vehicle) {
-  const icon = L.divIcon({
-    className: 'vehicle-marker-icon',
-    html: `<div class="vehicle-marker-dot">${vehicle.route}</div>`,
-    iconSize: [34, 34],
-  });
+  // Якщо бекенд ще не передає bearing, за замовчуванням буде 0 (вгору)
+  const bearing = vehicle.bearing || 0; 
   const popupHtml = `<b>Linia ${vehicle.route}</b><br>${vehicle.vehicleLabel || ''}`;
 
   if (vehicleMarker) {
+    // 1. Оновлюємо позицію. Завдяки нашому CSS transition, він туди плавно "поїде"
     vehicleMarker.setLatLng([vehicle.lat, vehicle.lon]);
     vehicleMarker.setPopupContent(popupHtml);
+    
+    // 2. Знаходимо нашу стрілочку всередині іконки і повертаємо її на новий кут
+    const arrow = vehicleMarker.getElement().querySelector('.vehicle-arrow');
+    if (arrow) {
+      arrow.style.transform = `rotate(${bearing}deg)`;
+    }
   } else {
+    // Якщо маркера ще немає — створюємо його ВПЕРШЕ
+   const icon = L.divIcon({
+      className: 'vehicle-marker-icon',
+      html: `
+        <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
+         <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
+            <polygon points="50,10 90,90 10,90" style="fill: var(--blue); stroke: white; stroke-width: 11px; stroke-linejoin: round;" />
+          </svg>
+          <div class="vehicle-marker-dot">${vehicle.route}</div>
+        </div>
+      `,
+      iconSize: [34, 34],
+    });
+
     vehicleMarker = L.marker([vehicle.lat, vehicle.lon], { icon }).addTo(map)
-      .bindPopup(popupHtml)
-      .openPopup();
+      .bindPopup(popupHtml);
   }
 }
 

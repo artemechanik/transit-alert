@@ -1,6 +1,5 @@
 // ==================== Конфіг ====================
-const API_BASE_URL = 'http://100.95.178.22:8080'; // Chromebook через Tailscale mesh
-const THUNDERFOREST_API_KEY = '4eaf1638dc4f415da1e41e6e364de9b5';
+const API_BASE_URL = window.location.protocol + '//' + window.location.hostname + ':8080';
 const LUBLIN_CENTER = [51.2465, 22.5684];
 const REPORT_TTL_MS = 45 * 60 * 1000; // синхронно з REPORT_TTL_MINUTES на бекенді
 

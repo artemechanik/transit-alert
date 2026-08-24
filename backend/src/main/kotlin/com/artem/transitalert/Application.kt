@@ -35,7 +35,8 @@ fun Application.module() {
     riskRoutes()
     upcomingStopsRoutes()
     liveVehiclesRoutes()
-    formRoutes() // Наші нові роути
+    formRoutes()
+    stopRoutes()// Наші нові роути
 
     LiveVehiclesCache.startPolling(GlobalScope)
     GtfsStaticSync.startPolling(GlobalScope)

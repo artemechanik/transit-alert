@@ -64,3 +64,11 @@ data class StopDepartureDto(
     val tripId: String
 )
 
+@Serializable
+data class RoutePillDto(val route: String, val direction: String)
+
+@Serializable
+data class NearbyStopDto(val stopId: String, val name: String, val code: String, val routes: List<RoutePillDto>)
+
+@Serializable
+data class NearbyGroupDto(val name: String, val distance: Long, val stops: List<NearbyStopDto>)

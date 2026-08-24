@@ -517,43 +517,64 @@
   /* --- Кнопка оновлення та Pull-to-refresh --- */
   #refresh-fab {
     position: absolute; 
-    bottom: calc(85px + var(--safe-bottom)); /* Піднімаємо кнопку над меню навігації */
+    bottom: calc(85px + var(--safe-bottom)); 
     left: 50%; 
-    transform: translateX(-50%);
     
-    /* Ефект скла (Glassmorphism) */
-    background: rgba(255, 255, 255, 0.01); /* Світліший, але дуже прозорий фон */
-    backdrop-filter: blur(3px);           /* Сильне розмиття того, що під кнопкою */
-    -webkit-backdrop-filter: blur(3px);   /* Для підтримки на смартфонах */
+    /* ДОДАНО: Базовий стан трансформації (зсув + нульовий кут) */
+    transform: translateX(-50%) rotate(0deg); 
     
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.2); 
+    /* Ефект скла */
+    background: var(--bg-glass, rgba(255, 255, 255, 0.05)); 
+    backdrop-filter: blur(3px);           
+    -webkit-backdrop-filter: blur(3px);   
+    
+    /* ЗМІНЕНО: Використовуємо змінну тексту. Якщо її немає - за замовчуванням білий */
+    color: var(--text-color, #fff); 
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.2)); 
+    
     border-radius: 50%;
     width: 46px; 
     height: 46px; 
     font-size: 24px;
     
-    /* Центрування норовливої іконки */
     display: flex; 
     align-items: center; 
     justify-content: center;
     line-height: 1;
-    padding-bottom: 3px; /* Компенсуємо просідання символу ↻ */
+    padding-bottom: 4px; 
     
     box-shadow: 0 4px 16px rgba(0,0,0,0.25); 
     z-index: 200;
     cursor: pointer; 
-    display: none; 
+    /* display: none; */ /* Робимо видимою за потреби через JS */
   }
   
   #refresh-fab:active { 
-    background: rgba(255, 255, 255, 0.2); 
+    background: var(--bg-glass-active, rgba(255, 255, 255, 0.2)); 
+    /* При натисканні зберігаємо центрування */
     transform: translateX(-50%) scale(0.95); 
   }
   
-  /* Клас для крутіння іконки */
-  .spin { animation: spin 0.7s linear infinite; }
-  @keyframes spin { 100% { transform: translateX(-50%) rotate(360deg); } }
+  /* --- ВИПРАВЛЕНА АНІМАЦІЯ --- */
+  .spin { 
+    /* !important гарантує, що анімація перекриє базовий transform */
+    animation: spin 0.7s linear infinite !important; 
+  }
+  
+  @keyframes spin { 
+    /* ВАЖЛИВО: Обов'язково вказуємо 0% і завжди тримаємо translateX(-50%) */
+    0%   { transform: translateX(-50%) rotate(0deg); }
+    100% { transform: translateX(-50%) rotate(360deg); } 
+  }
+
+  /* --- АДАПТАЦІЯ ДЛЯ СВІТЛОЇ ТЕМИ --- */
+  /* Якщо в тебе тема перемикається класом на <body>, наприклад .light або [data-theme="light"] */
+  body.light-theme #refresh-fab,
+  [data-theme="light"] #refresh-fab {
+    color: #333; /* Темна іконка */
+    border: 1px solid rgba(0, 0, 0, 0.15); /* Темніший бордюр */
+    background: rgba(0, 0, 0, 0.03); /* Легкий сірий фон */
+  }
 
   /* Індикатори для свайпів (Вниз - Історія, Вверх - Майбутнє) */
   #ptr-indicator,

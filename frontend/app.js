@@ -672,7 +672,27 @@ departuresList.parentNode.insertBefore(ptrBottomIndicator, departuresList.nextSi
 const refreshFab = document.createElement('div');
 refreshFab.id = 'refresh-fab';
 refreshFab.innerHTML = '↻';
+refreshFab.style.display = 'none'; 
 stopScreenContainer.appendChild(refreshFab);
+
+// ДОДАЙ ОСЬ ЦЕЙ БЛОК:
+refreshFab.addEventListener('click', async () => {
+    if (!currentStopIdForDepartures) return; // Якщо зупинка не вибрана - нічого не робимо
+
+    // 1. Починаємо крутити стрілочку
+    refreshFab.classList.add('spin');
+    
+    try {
+        // 2. Викликаємо твою функцію завантаження розкладу (підстав свою назву функції, 
+        // скоріш за все це щось типу fetchDepartures або loadDepartures)
+        await loadDepartures(currentStopIdForDepartures); 
+    } catch (error) {
+        console.error("Помилка при оновленні:", error);
+    } finally {
+        // 3. Дані прийшли - зупиняємо анімацію
+        refreshFab.classList.remove('spin');
+    }
+});
 
 let currentStopIdForDepartures = null;
 let departuresRefreshInterval = null;

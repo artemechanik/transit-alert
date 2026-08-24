@@ -36,25 +36,48 @@ function getFingerprint() {
 
 // ==================== Карта ====================
 let map, reportMarkersLayer, searchMarker, vehicleMarker;
+let darkTileLayer, lightTileLayer;
+
+const MAPTILER_KEY = 'xsLUiIXuG5Vl9tmzUizH';
 
 function initMap() {
   map = L.map('map', { zoomControl: false }).setView(LUBLIN_CENTER, 14);
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-  const tileUrl = THUNDERFOREST_API_KEY
-    ? `https://{s}.tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png?apikey=${THUNDERFOREST_API_KEY}`
-    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  darkTileLayer = L.tileLayer(`https://api.maptiler.com/maps/streets-v4-dark/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`, {
+    maxZoom: 22,
+    attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+  });
 
-  L.tileLayer(tileUrl, {
-    maxZoom: 19,
-    attribution: THUNDERFOREST_API_KEY
-      ? '&copy; OpenStreetMap contributors, tiles &copy; Thunderforest'
-      : '&copy; OpenStreetMap contributors',
-  }).addTo(map);
+  lightTileLayer = L.tileLayer(`https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`, {
+    maxZoom: 22,
+    attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+  });
+
+  // 1. Ставимо правильну тему при завантаженні сторінки
+  updateMapTheme();
+
+  // 2. Слухаємо зміни теми в системі/телефоні в реальному часі!
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateMapTheme);
 
   reportMarkersLayer = L.layerGroup().addTo(map);
 }
 
+// Функція, яка перевіряє системну тему і змінює карту
+function updateMapTheme() {
+  if (!map) return;
+  
+  // Запитуємо безпосередньо систему телефону: темна тема увімкнена?
+  const isDarkOS = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+  if (isDarkOS) {
+    if (map.hasLayer(lightTileLayer)) map.removeLayer(lightTileLayer);
+    darkTileLayer.addTo(map);
+  } else {
+    if (map.hasLayer(darkTileLayer)) map.removeLayer(darkTileLayer);
+    lightTileLayer.addTo(map);
+  }
+}
 // ==================== Пошук зупинки (верхня панель) ====================
 let searchDebounce;
 

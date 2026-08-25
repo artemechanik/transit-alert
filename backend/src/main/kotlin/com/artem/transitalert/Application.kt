@@ -10,6 +10,7 @@ import io.ktor.server.plugins.callloging.*
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.serialization.json.Json
+import io.ktor.http.*
 
 fun main() {
     embeddedServer(Netty, port = 8080, host = "0.0.0.0", module = Application::module)
@@ -18,19 +19,26 @@ fun main() {
 
 @OptIn(DelicateCoroutinesApi::class)
 fun Application.module() {
+    // 1. База даних
     DatabaseFactory.init()
 
+    // 2. Встановлюємо наш новий потужний CORS (один раз!)
+    install(CORS) {
+        anyHost()
+        allowHeader(HttpHeaders.ContentType)
+        allowHeader(HttpHeaders.AccessControlAllowOrigin)
+        allowMethod(HttpMethod.Options)
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Post)
+    }
+
+    // 3. Інші плагіни
     install(ContentNegotiation) {
         json(Json { ignoreUnknownKeys = true; prettyPrint = true })
     }
-
     install(CallLogging)
 
-    install(CORS) {
-        anyHost() // MVP-режим; звузити до конкретного домену PWA перед продом
-        allowHeader(io.ktor.http.HttpHeaders.ContentType)
-    }
-
+    // 4. Роути
     reportRoutes()
     riskRoutes()
     upcomingStopsRoutes()
@@ -38,6 +46,7 @@ fun Application.module() {
     formRoutes()
     stopRoutes()// Наші нові роути
 
+    // 5. Фонові задачі
     LiveVehiclesCache.startPolling(GlobalScope)
     GtfsStaticSync.startPolling(GlobalScope)
 }

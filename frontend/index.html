@@ -59,6 +59,77 @@
     }
   }
 
+/* --- ПОВНОЕКРАННА КАРТА ДЛЯ АВТОБУСА --- */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; 
+    /* Відступаємо знизу місце для панелі навігації (як у звичайних екранів) */
+    bottom: 0; 
+    background: var(--bg);
+    z-index: 450;
+}
+
+.modal-content {
+    background: var(--bg);
+    padding: 0; /* Жодних рамок і відступів */
+    border-radius: 0; /* Жодних заокруглень */
+    width: 100%;
+    height: 100%; /* Розтягуємо на всю висоту */
+    max-width: none;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+#modal-map {
+    width: 100%;
+    height: 100%; /* Карта займає 100% вікна */
+    flex: 1; /* Гарантує, що вона заповнить увесь доступний простір */
+    z-index: 1;
+}
+
+/* Красива плашка з номером маршруту поверх карти */
+#modal-route-title {
+    position: absolute;
+    top: calc(15px + var(--safe-top));
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+    z-index: 1000; /* Поверх карти */
+    background: var(--card);
+    color: var(--text);
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-size: 16px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+}
+
+/* Кнопка закриття (в правому верхньому куті) */
+.close-btn {
+    position: absolute;
+    top: calc(15px + var(--safe-top));
+    right: 15px;
+    z-index: 1000; /* Поверх карти */
+    background: var(--card);
+    color: var(--text);
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* Щоб хрестик гарно виглядав при натисканні */
+.close-btn:active {
+    background: var(--border);
+}
+
   /* Нижня навігація перекриває стандартну позицію зум-контролу Leaflet — піднімаємо його вище */
   .leaflet-bottom.leaflet-left {
     bottom: calc(72px + var(--safe-bottom)) !important;
@@ -74,7 +145,7 @@
   /* --- Верхня панель пошуку зупинки --- */
   #search-bar {
     position: absolute; top: calc(12px + var(--safe-top)); left: 12px; right: 12px;
-    z-index: 500; display: flex; flex-direction: column; gap: 6px;
+    z-index: 400; display: flex; flex-direction: column; gap: 6px;
   }
   #search-input-wrap {
     background: var(--card); border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.15);
@@ -177,7 +248,7 @@
     transform: translateX(-50%);
     bottom: calc(85px + var(--safe-bottom)); 
     width: max-content; 
-    z-index: 500; 
+    z-index: 400; 
     
     /* Жовтий напівпрозорий фон */
     background: rgba(255, 204, 0, 0.55); 
@@ -272,19 +343,39 @@
     display: inline-block;
   }
   /* --- Нижня навігація --- */
-  #bottom-nav {
+ #bottom-nav {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 500;
     background: var(--card); border-top: 1px solid var(--border);
     display: flex; padding-bottom: var(--safe-bottom);
     box-shadow: 0 -2px 10px rgba(0,0,0,.06);
   }
+  
   .nav-item {
-    flex: 1; border: none; background: none; padding: 10px 4px 8px; display: flex; flex-direction: column;
-    align-items: center; gap: 3px; color: var(--text-muted); font-size: 11px; cursor: pointer;
+    flex: 1; border: none; background: none; 
+    padding: 12px 4px 10px; /* Збільшені відступи зверху і знизу, щоб панель стала вищою */
+    display: flex; flex-direction: column;
+    align-items: center; 
+    gap: 5px; /* Більша відстань між іконкою та текстом (було 3px) */
+    color: var(--text-muted); 
+    font-size: 13px; /* Збільшений шрифт (було 11px) */
+    cursor: pointer;
   }
-  .nav-item .nav-icon { font-size: 20px; }
+  
+  .nav-item .nav-icon { 
+    width: 28px;  /* Збільшена іконка (було 24px) */
+    height: 28px; /* Збільшена іконка (було 24px) */
+    background-color: var(--text-muted); 
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    transition: background-color 0.2s ease;
+  }
+  
   .nav-item.active { color: var(--blue); font-weight: 600; }
-
+  .nav-item.active .nav-icon { background-color: var(--blue); }
  /* --- Drawer зі стрічкою --- */
   #reports-drawer {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 600;
@@ -591,68 +682,6 @@
     color: var(--text-muted) !important; 
   }
 
-  /* --- Кнопка оновлення та Pull-to-refresh --- */
-  #refresh-fab {
-    position: absolute; 
-    bottom: calc(85px + var(--safe-bottom)); 
-    left: 50%; 
-    
-    /* ДОДАНО: Базовий стан трансформації (зсув + нульовий кут) */
-    transform: translateX(-50%) rotate(0deg); 
-    
-    /* Ефект скла */
-    background: var(--bg-glass, rgba(255, 255, 255, 0.05)); 
-    backdrop-filter: blur(3px);           
-    -webkit-backdrop-filter: blur(3px);   
-    
-    /* ЗМІНЕНО: Використовуємо змінну тексту. Якщо її немає - за замовчуванням білий */
-    color: var(--text-color, #fff); 
-    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.2)); 
-    
-    border-radius: 50%;
-    width: 46px; 
-    height: 46px; 
-    font-size: 24px;
-    
-    display: flex; 
-    align-items: center; 
-    justify-content: center;
-    line-height: 1;
-    padding-bottom: 4px; 
-    
-    box-shadow: 0 4px 16px rgba(0,0,0,0.25); 
-    z-index: 200;
-    cursor: pointer; 
-    /* display: none; */ /* Робимо видимою за потреби через JS */
-  }
-  
-  #refresh-fab:active { 
-    background: var(--bg-glass-active, rgba(255, 255, 255, 0.2)); 
-    /* При натисканні зберігаємо центрування */
-    transform: translateX(-50%) scale(0.95); 
-  }
-  
-  /* --- ВИПРАВЛЕНА АНІМАЦІЯ --- */
-  .spin { 
-    /* !important гарантує, що анімація перекриє базовий transform */
-    animation: spin 0.7s linear infinite !important; 
-  }
-  
-  @keyframes spin { 
-    /* ВАЖЛИВО: Обов'язково вказуємо 0% і завжди тримаємо translateX(-50%) */
-    0%   { transform: translateX(-50%) rotate(0deg); }
-    100% { transform: translateX(-50%) rotate(360deg); } 
-  }
-
-  /* --- АДАПТАЦІЯ ДЛЯ СВІТЛОЇ ТЕМИ --- */
-  /* Якщо в тебе тема перемикається класом на <body>, наприклад .light або [data-theme="light"] */
-  body.light-theme #refresh-fab,
-  [data-theme="light"] #refresh-fab {
-    color: #333; /* Темна іконка */
-    border: 1px solid rgba(0, 0, 0, 0.15); /* Темніший бордюр */
-    background: rgba(0, 0, 0, 0.03); /* Легкий сірий фон */
-  }
-
   /* Індикатори для свайпів (Вниз - Історія, Вверх - Майбутнє) */
   #ptr-indicator,
   #ptr-indicator-bottom {
@@ -681,6 +710,24 @@
     100% { transform: translateY(0px) scale(0.95); opacity: 0.8; }
   }
 
+/* --- КНОПКА ЛОКАЛІЗАЦІЇ (GPS) --- */
+.gps-locate-btn {
+  background: var(--card);
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: 8px; /* Зробимо її квадратною з круглими кутами, як кнопки зуму */
+  width: 34px;
+  height: 34px;
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gps-locate-btn:active {
+  background: var(--border);
+}
 
 </style>
 </head>
@@ -688,7 +735,7 @@
 
 <div id="map"></div>
 
-<button id="fab-report"><span class="icon">📢</span> Kanar obok!</button>
+<button id="fab-report"><span class="icon">📢</span> Kontrola!</button>
 
 <div id="overlay"></div>
 
@@ -829,21 +876,35 @@
   </div>
 </div>
 
-<!-- Нижня навігація (ЗМІНЕНИЙ ПОРЯДОК) -->
+<!-- Нижня навігація -->
 <div id="bottom-nav">
-<button class="nav-item active" id="nav-map" onclick="switchScreen('map', this)">
-    <span class="nav-icon">🗺️</span> Mapa
+  <button class="nav-item active" id="nav-map" onclick="switchScreen('map', this)">
+    <div class="nav-icon" style="-webkit-mask-image: url('map.svg'); mask-image: url('map.svg');"></div> 
+    Mapa
   </button>
   <button class="nav-item" id="nav-route" onclick="switchScreen('route', this)">
-    <span class="nav-icon">🚌</span> Trasa
+    <div class="nav-icon" style="-webkit-mask-image: url('route.svg'); mask-image: url('route.svg');"></div> 
+    Trasa
   </button>
   <button class="nav-item" id="nav-stop" onclick="switchScreen('stop', this)">
-    <span class="nav-icon">🚏</span> Przystanek
+    <div class="nav-icon" style="-webkit-mask-image: url('stop.svg'); mask-image: url('stop.svg');"></div> 
+    Przystanek
   </button>
   <button class="nav-item" id="nav-reports" onclick="switchScreen('reports', this)">
-    <span class="nav-icon">📋</span> Zgłoszenia
+    <div class="nav-icon" style="-webkit-mask-image: url('reports.svg'); mask-image: url('reports.svg');"></div> 
+    Zgłoszenia
   </button>
 </div>
+<!-- Модальне вікно для стеження за одним автобусом -->
+<div id="vehicle-modal" class="modal-overlay">
+    <div class="modal-content">
+        <button id="close-modal-btn" class="close-btn">&times;</button>
+        <h3 id="modal-route-title" style="margin-top:0; text-align:center;"></h3>
+        <!-- Контейнер для нашої другої карти -->
+     <div id="modal-map"></div>
+    </div>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="app.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>

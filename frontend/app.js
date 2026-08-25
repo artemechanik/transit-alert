@@ -7,6 +7,11 @@ let currentDeparturesData = [];
 let topTimeOffset = 0;      // Зсув у минуле
 let bottomTimeOffset = 0;   // Зсув у майбутнє
 let isFetchingMore = false; // Блокатор від випадкового спаму скролом
+let modalVehicleMarker = null;
+let modalTrackInterval = null;
+let modalMap = null;
+let modalUserMarker = null; // Додали маркер юзера для модалки
+let modalInitTimeout = null;
 
 // ==================== Toast-повідомлення ====================
 let toastTimeout;
@@ -45,7 +50,29 @@ const passengerIcon = L.icon({
     iconAnchor: [15, 30], // Щоб він стояв ногами на координатах
     className: 'user-marker-icon'
 });
-
+// ==================== КНОПКА GPS ДЛЯ LEAFLET ====================
+L.Control.GPSButton = L.Control.extend({
+  options: { position: 'bottomleft' }, // Буде висіти над кнопками +/-
+  
+  onAdd: function(targetMap) {
+    const btn = L.DomUtil.create('button', 'gps-locate-btn');
+    btn.innerHTML = '🎯'; // Іконка прицілу (можеш змінити на 📍)
+    
+    btn.onclick = function(e) {
+      e.stopPropagation(); // Блокуємо клік, щоб карта під кнопкою не смикалась
+      
+      // Перевіряємо, чи ми вже знайшли юзера (змінна з твого trackUserLocation)
+      if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
+        // Миттєво переносимо камеру на юзера
+        targetMap.flyTo(userLocationMarker.getLatLng(), 16, { duration: 0.5 });
+      } else {
+        showToast('Szukam lokalizacji GPS...');
+      }
+    };
+    
+    return btn;
+  }
+});
 // Функція, яка читає GPS телефону
 function trackUserLocation() {
     if ('geolocation' in navigator) {
@@ -73,7 +100,7 @@ const MAPTILER_KEY = 'xsLUiIXuG5Vl9tmzUizH';
 function initMap() {
   map = L.map('map', { zoomControl: false }).setView(LUBLIN_CENTER, 14);
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
-
+  new L.Control.GPSButton().addTo(map);
   darkTileLayer = L.tileLayer(`https://api.maptiler.com/maps/streets-v4-dark/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`, {
     maxZoom: 22,
     attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
@@ -114,6 +141,8 @@ function updateMapTheme() {
 
 // ==================== LIVE КАРТА МІСТА ====================
 async function updateLiveCityMap() {
+// --- НОВИЙ КОД: Якщо ми стежимо за одним автобусом - загальна карта відпочиває ---
+    if (typeof trackedTripId !== 'undefined' && trackedTripId !== null) return;
     // Економимо батарею і трафік: оновлюємо тільки якщо ми зараз на вкладці "Mapa"
     const mapScreenActive = !document.getElementById('nav-map').classList.contains('active');
     if (mapScreenActive && trackedTripId === null) return; 
@@ -140,7 +169,16 @@ async function updateLiveCityMap() {
         const markers = [];
         vehicles.forEach(v => {
             // Використовуємо твій готовий дизайн vehicle-marker-dot
-            const iconHtml = `<div class="vehicle-marker-dot">${v.route || '🚌'}</div>`;
+            const bearing = v.bearing || 0; 
+
+            const iconHtml = `
+              <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
+                <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
+                  <polygon points="50,10 90,90 10,90" style="fill: var(--blue); stroke: white; stroke-width: 11px; stroke-linejoin: round;" />
+                </svg>
+                <div class="vehicle-marker-dot">${v.route || '🚌'}</div>
+              </div>
+            `;
             
             const icon = L.divIcon({
                 html: iconHtml,
@@ -225,7 +263,7 @@ function flyToStop(stop) {
 // ==================== Розгортання картки табло: наступні зупинки + показ на мапі ====================
 async function toggleDepExpand(card, panel, dep) {
   const isOpen = panel.classList.contains('open');
-  // Схлопуємо всі інші відкриті картки — одна розгорнута за раз, щоб список не роздувався
+  // Схлопуємо всі інші відкриті картки
   document.querySelectorAll('.dep-expand.open').forEach(p => { if (p !== panel) { p.classList.remove('open'); p.innerHTML = ''; } });
   document.querySelectorAll('.dep-card.expandable.open').forEach(c => { if (c !== card) c.classList.remove('open'); });
 
@@ -251,15 +289,22 @@ async function toggleDepExpand(card, panel, dep) {
 
     panel.innerHTML = `
       <div class="dep-expand-stops">${stopsHtml}</div>
-      <button class="dep-expand-map-btn" onclick="showVehicleOnMap('${dep.tripId}')">📍 Pokaż autobus na mapie</button>
+      <button class="dep-expand-map-btn" onclick="showVehicleOnMap('${dep.tripId}')">📍 Pokaż na mapie</button>
     `;
+
+    // --- НОВА ЛОГІКА ПЛАВНОГО СКРОЛУ ---
+    setTimeout(() => {
+      // 'nearest' означає, що екран підсунеться рівно настільки, 
+      // щоб нижня частина панелі з кнопкою стала видимою
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 150); // Чекаємо 150мс, поки відпрацює CSS-анімація розкриття
+    // ----------------------------------
+
   } catch (e) {
     panel.innerHTML = '<div class="dep-expand-loading">Nie udało się załadować trasy</div>';
   }
 }
-
-let vehicleTrackInterval = null;
-let trackedTripId = null;
+// --- ЗМІННІ ДЛЯ МІНІ-КАРТИ ---
 
 async function showVehicleOnMap(tripId) {
   try {
@@ -269,32 +314,123 @@ async function showVehicleOnMap(tripId) {
       return;
     }
 
-    switchScreen('map', document.getElementById('nav-map'));
-    drawVehicleMarker(vehicle);
+    // 1. Показуємо вікно
+    const modal = document.getElementById('vehicle-modal');
+    modal.style.display = 'flex';
+    document.getElementById('modal-route-title').innerText = `Linia ${vehicle.route}`;
 
-    // --- НОВА ЛОГІКА МАСШТАБУВАННЯ ---
-    if (userLocationMarker) {
-      // Беремо твої координати
-      const userLatLng = userLocationMarker.getLatLng();
-      // Створюємо "коробку" (bounds), яка вміщує тебе і автобус
-      const bounds = L.latLngBounds(userLatLng, [vehicle.lat, vehicle.lon]);
+    // Збиваємо старий таймаут, якщо він раптом завис
+    if (modalInitTimeout) clearTimeout(modalInitTimeout);
+
+    // 2. Даємо браузеру 300мс на відмальовку, щоб не було сірого квадрата
+    modalInitTimeout = setTimeout(() => {
       
-      // Летимо так, щоб обидві точки влізли, з відступом від країв екрана (padding)
-      map.flyToBounds(bounds, { padding: [60, 60], maxZoom: 17 });
-    } else {
-      // Якщо GPS вимкнено, просто летимо до автобуса
-      map.flyTo([vehicle.lat, vehicle.lon], 16);
-    }
-    // ----------------------------------
+      // БРОНЕЖИЛЕТ: Якщо юзер уже встиг закрити вікно за ці 300мс - скасовуємо все!
+      if (modal.style.display === 'none') return;
 
-    // Починаємо стежити за цим рейсом
-    trackedTripId = tripId;
-    if (vehicleTrackInterval) clearInterval(vehicleTrackInterval);
-    vehicleTrackInterval = setInterval(refreshTrackedVehicle, 15000);
+      // 3. Ініціалізуємо карту
+            if (!modalMap) {
+        modalMap = L.map('modal-map', { 
+            zoomControl: false, 
+            attributionControl: false // <--- Вимикаємо копірайт Leaflet
+        }).setView([vehicle.lat, vehicle.lon], 16);
+        L.control.zoom({ position: 'bottomleft' }).addTo(modalMap);
+        new L.Control.GPSButton().addTo(modalMap);
+        const isDarkOS = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const tileUrl = isDarkOS 
+          ? `https://api.maptiler.com/maps/streets-v4-dark/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`
+          : `https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`;
+
+        L.tileLayer(tileUrl, {
+          maxZoom: 22,
+          attribution: '© MapTiler © OSM'
+        }).addTo(modalMap);
+      }
+
+      modalMap.invalidateSize();
+      
+      // 4. Твоя логіка масштабування та пасажир
+      if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
+        const userLatLng = userLocationMarker.getLatLng();
+        
+        if (modalUserMarker) {
+            modalUserMarker.setLatLng(userLatLng);
+        } else {
+            modalUserMarker = L.marker(userLatLng, { icon: passengerIcon, zIndexOffset: 1000 }).addTo(modalMap);
+        }
+
+        const bounds = L.latLngBounds(userLatLng, [vehicle.lat, vehicle.lon]);
+        modalMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
+      } else {
+        modalMap.setView([vehicle.lat, vehicle.lon], 16);
+      }
+
+      // 5. ПОВЕРТАЄМО ТВОЮ КРАСИВУ ІКОНКУ (З SVG-СТРІЛКОЮ)
+      if (modalVehicleMarker) {
+        modalMap.removeLayer(modalVehicleMarker);
+      }
+      
+      const bearing = vehicle.bearing || 0;
+      const iconHtml = `
+        <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
+          <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
+            <polygon points="50,10 90,90 10,90" style="fill: var(--blue); stroke: white; stroke-width: 11px; stroke-linejoin: round;" />
+          </svg>
+          <div class="vehicle-marker-dot">${vehicle.route || '🚌'}</div>
+        </div>
+      `;
+      
+      const customBusIcon = L.divIcon({
+          html: iconHtml,
+          className: 'vehicle-marker-icon',
+          iconSize: [34, 34],
+          iconAnchor: [17, 17]
+      });
+
+      const popupHtml = `<b>Linia ${vehicle.route}</b><br>${vehicle.vehicleLabel || ''}`;
+      modalVehicleMarker = L.marker([vehicle.lat, vehicle.lon], { icon: customBusIcon })
+        .bindPopup(popupHtml)
+        .addTo(modalMap);
+
+      // 6. Запускаємо стеження
+      if (modalTrackInterval) clearInterval(modalTrackInterval);
+      modalTrackInterval = setInterval(async () => {
+        const updatedVehicle = await fetchVehiclePosition(tripId);
+        if (updatedVehicle && modalVehicleMarker) {
+          modalVehicleMarker.setLatLng([updatedVehicle.lat, updatedVehicle.lon]);
+          modalMap.setView([updatedVehicle.lat, updatedVehicle.lon]); 
+          
+          // Крутимо стрілочку при русі
+          const arrow = modalVehicleMarker.getElement().querySelector('.vehicle-arrow');
+          if (arrow) arrow.style.transform = `rotate(${updatedVehicle.bearing || 0}deg)`;
+        }
+      }, 15000);
+
+    }, 300);
+
   } catch (e) {
     showToast('Brak połączenia z serwerem');
   }
 }
+// --- ЛОГІКА ЗАКРИТТЯ (ЯДЕРНА ОПЦІЯ ДЛЯ LEAFLET) ---
+document.getElementById('close-modal-btn').addEventListener('click', () => {
+  // 1. Ховаємо вікно
+  document.getElementById('vehicle-modal').style.display = 'none';
+  
+  // 2. Зупиняємо таймер
+  if (modalTrackInterval) {
+    clearInterval(modalTrackInterval);
+    modalTrackInterval = null;
+  }
+  
+  // 3. ПОВНІСТЮ ЗНИЩУЄМО КАРТУ (щоб при наступному відкритті вона зібралася з нуля)
+  if (modalMap) {
+    modalMap.remove(); 
+    modalMap = null;
+    modalVehicleMarker = null;
+    modalUserMarker = null;
+  }
+});
 
 async function fetchVehiclePosition(tripId) {
   const res = await fetch(`${API_BASE_URL}/live-vehicles/${tripId}`);
@@ -343,33 +479,62 @@ async function refreshTrackedVehicle() {
   if (!vehicle) {
     // Рейс зник з GPS (доїхав до кінцевої або GTFS-RT перестав його бачити)
     stopVehicleTracking();
-    showToast('Autobus zniknął z GPS (kurs zakończony?)');
+    showToast('Pojazd zniknął z GPS (kurs zakończony?)');
     return;
   }
   drawVehicleMarker(vehicle);
 }
 
 function stopVehicleTracking() {
-  if (vehicleTrackInterval) clearInterval(vehicleTrackInterval);
-  vehicleTrackInterval = null;
-  trackedTripId = null;
-  if (vehicleMarker) { map.removeLayer(vehicleMarker); vehicleMarker = null; }
+    // Безпечно зупиняємо старий таймер, якщо він є
+    if (typeof vehicleTrackInterval !== 'undefined' && vehicleTrackInterval) {
+        clearInterval(vehicleTrackInterval);
+        vehicleTrackInterval = null;
+    }
+    
+    // Безпечно зупиняємо новий таймер модального вікна
+    if (typeof modalTrackInterval !== 'undefined' && modalTrackInterval) {
+        clearInterval(modalTrackInterval);
+        modalTrackInterval = null;
+    }
+
+    trackedTripId = null;
 }
 
 // ==================== Нижня навігація ====================
 function switchScreen(screen, btn) {
-  // 1. Оновлюємо активну кнопку
+  // --- ДОДАЄМО: ЗАКРИВАЄМО МІНІ-КАРТУ, ЯКЩО ВОНА ВІДКРИТА ---
+  const vehicleModal = document.getElementById('vehicle-modal');
+  if (vehicleModal && vehicleModal.style.display !== 'none') {
+    document.getElementById('close-modal-btn').click(); // Імітуємо клік по хрестику, щоб знищити карту правильно
+  }
+  // --------------------------------------------------------
+
+  // Оновлюємо активну кнопку
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  
+  if (btn) {
+      btn.classList.add('active');
+  } else {
+// ... і далі йде твій старий код без змін
+      // Якщо this не передали в HTML, шукаємо кнопку по ID
+      const activeBtn = document.getElementById(`nav-${screen}`);
+      if (activeBtn) activeBtn.classList.add('active');
+  }
 
   // Елементи, які належать тільки до карти
   const mapSearchBar = document.getElementById('search-bar');
   const fabReport = document.getElementById('fab-report');
 
-  // Ховаємо екран зупинки за замовчуванням
+  // Ховаємо ВСІ екрани за замовчуванням (щоб не накладалися)
   const stopScreen = document.getElementById('screen-stop');
   if (stopScreen) stopScreen.style.display = 'none';
 
+  // ДОДАЄМО СЮДИ НАШУ ТРАСУ
+  const routeScreen = document.getElementById('screen-route');
+  if (routeScreen) routeScreen.style.display = 'none';
+  
+  // ... далі твій існуючий код (if (screen === 'map') і т.д.)
   // 3. Обробляємо логіку для кожної вкладки
   if (screen === 'map') {
     closeDrawer(false); 
@@ -395,11 +560,17 @@ function switchScreen(screen, btn) {
     
   } else if (screen === 'route') {
     stopVehicleTracking();
-    openDrawer('Trasa', (container) => {
-      container.innerHTML = '<div id="drawer-empty">Перегляд маршруту й прибуттів з\'явиться пізніше...</div>';
-    });
-    if (mapSearchBar) mapSearchBar.style.display = 'flex';
-    if (fabReport) fabReport.style.display = 'flex';
+    
+    // 1. Якщо є шторка - закриваємо її (щоб не заважала)
+    if (typeof closeDrawer === 'function') closeDrawer(false);
+    
+    // 2. Показуємо наш новий повноцінний екран планувальника
+    const routeScreen = document.getElementById('screen-route');
+    if (routeScreen) routeScreen.style.display = 'flex'; // flex, щоб елементи красиво стали
+    
+    // 3. Ховаємо зайве
+    if (mapSearchBar) mapSearchBar.style.display = 'none';
+    if (fabReport) fabReport.style.display = 'none';
   }
 }
 
@@ -900,6 +1071,86 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
+
+// ==================== ПЛАНУВАЛЬНИК МАРШРУТУ (TRASA) ====================
+
+let routeFromStop = null;
+let routeToStop = null;
+
+function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
+    const input = document.getElementById(inputId);
+    const suggestionsBox = document.getElementById(suggestionsId);
+
+    if (!input || !suggestionsBox) return;
+
+    input.addEventListener('input', async (e) => {
+        const query = e.target.value.trim();
+        
+        if (query.length < 2) {
+            suggestionsBox.innerHTML = '';
+            suggestionsBox.style.display = 'none';
+            if (isFrom) routeFromStop = null; else routeToStop = null;
+            return;
+        }
+
+        try {
+            // Використовуємо твій правильний формат ?q=
+            const res = await fetch(`${API_BASE_URL}/stops/search?q=${encodeURIComponent(query)}`);
+            if (!res.ok) throw new Error('Помилка мережі');
+            
+            const stops = await res.json();
+            
+            if (stops.length === 0) {
+                suggestionsBox.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">Нічого не знайдено</div>';
+                suggestionsBox.style.display = 'block';
+                return;
+            }
+
+            suggestionsBox.innerHTML = '';
+            
+            stops.forEach(stop => {
+                const div = document.createElement('div');
+                div.className = 'suggestion-item'; // Використовуємо існуючий клас
+                div.textContent = stop.name; // Якщо у тебе інше поле (наприклад stopName), зміни тут
+                
+                div.style.padding = '12px 16px';
+                div.style.cursor = 'pointer';
+                div.style.borderBottom = '1px solid var(--border)';
+                div.style.background = 'var(--bg)';
+                div.style.color = 'var(--text)';
+                
+                div.addEventListener('click', () => {
+                    input.value = stop.name; // Підставляємо в інпут
+                    suggestionsBox.innerHTML = '';
+                    suggestionsBox.style.display = 'none';
+                    
+                    // Зберігаємо вибрану зупинку для побудови маршруту
+                    if (isFrom) routeFromStop = stop;
+                    else routeToStop = stop;
+                });
+                
+                suggestionsBox.appendChild(div);
+            });
+            
+            suggestionsBox.style.display = 'block';
+        } catch (error) {
+            console.error('Помилка пошуку зупинок для маршруту:', error);
+        }
+    });
+
+    // Ховаємо підказки при кліку деінде
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !suggestionsBox.contains(e.target)) {
+            suggestionsBox.style.display = 'none';
+        }
+    });
+}
+
+// Запускаємо логіку для обох полів
+setupRouteAutocomplete('route-input-from', 'route-suggestions-from', true);
+setupRouteAutocomplete('route-input-to', 'route-suggestions-to', false);
+
+
 // ==================== Вкладка "Przystanek" (Розклад) ====================
 
 const stopSearchInput = document.getElementById('stop-screen-search');
@@ -921,31 +1172,6 @@ ptrBottomIndicator.id = 'ptr-indicator-bottom';
 ptrBottomIndicator.innerHTML = '↻ Ładowanie...';
 // ВАЖЛИВО: вставляємо його ПІСЛЯ списку
 departuresList.parentNode.insertBefore(ptrBottomIndicator, departuresList.nextSibling);
-
-const refreshFab = document.createElement('div');
-refreshFab.id = 'refresh-fab';
-refreshFab.innerHTML = '↻';
-refreshFab.style.display = 'none'; 
-stopScreenContainer.appendChild(refreshFab);
-
-// ДОДАЙ ОСЬ ЦЕЙ БЛОК:
-refreshFab.addEventListener('click', async () => {
-    if (!currentStopIdForDepartures) return; // Якщо зупинка не вибрана - нічого не робимо
-
-    // 1. Починаємо крутити стрілочку
-    refreshFab.classList.add('spin');
-    
-    try {
-        // 2. Викликаємо твою функцію завантаження розкладу (підстав свою назву функції, 
-        // скоріш за все це щось типу fetchDepartures або loadDepartures)
-        await loadDepartures(currentStopIdForDepartures); 
-    } catch (error) {
-        console.error("Помилка при оновленні:", error);
-    } finally {
-        // 3. Дані прийшли - зупиняємо анімацію
-        refreshFab.classList.remove('spin');
-    }
-});
 
 let currentStopIdForDepartures = null;
 let departuresRefreshInterval = null;
@@ -1007,7 +1233,6 @@ function createStopSuggestionElement(stop, distanceStr = '') {
         topTimeOffset = 0;
         bottomTimeOffset = 0; 
         loadDepartures(currentStopIdForDepartures);
-        refreshFab.style.display = 'flex';
     });
     
     return item;

@@ -812,7 +812,12 @@ document.addEventListener('DOMContentLoaded', () => {
   initMap();
   initSearchBar();
   refreshMapMarkers();
-  setInterval(refreshMapMarkers, 45000); 
+  setInterval(refreshMapMarkers, 45000);
+
+  // Стартуємо GPS одразу на відкритті застосунку (не чекаючи переходу на Przystanek) —
+  // до моменту, коли юзер реально відкриє вкладку розкладу, userLocationMarker
+  // вже здебільшого готовий, і loadNearbyStopsDefault() піде швидкою гілкою без затримки.
+  trackUserLocation(); 
 
   // ДОДАТИ ЦЕ: Плавний скрол поля вводу над клавіатурою
   document.querySelectorAll('#report-modal input').forEach(input => {
@@ -873,298 +878,7 @@ refreshFab.addEventListener('click', async () => {
 
 let currentStopIdForDepartures = null;
 let departuresRefreshInterval = null;
-// 1. Створюємо окрему функцію, яку зможемо викликати будь-коли
-function loadNearbyStopsDefault() {
-    // Якщо в полі вже є текст, не перебиваємо його
-    if (stopSearchInput.value.trim() !== '') return;
 
-    // ⚡ МИТТЄВИЙ СТАРТ: Якщо ми вже знаємо твою локацію, малюємо зупинки без затримки
-    if (userLocationMarker) {
-        const lat = userLocationMarker.getLatLng().lat;
-        const lon = userLocationMarker.getLatLng().lng;
-        showNearbyStops(lat, lon);
-        return; 
-    }
-
-    // Якщо це перший запуск і маркера ще немає — показуємо індикатор
-    stopSuggestionsBox.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">📍 Шукаємо локацію...</div>';
-    stopSuggestionsBox.style.display = 'block';
-
-    if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                
-                if (!userLocationMarker) {
-                    userLocationMarker = L.marker([lat, lon], { icon: passengerIcon, zIndexOffset: 1000 }).addTo(map);
-                } else {
-                    userLocationMarker.setLatLng([lat, lon]);
-                }
-                
-                showNearbyStops(lat, lon); 
-            }, 
-            (error) => {
-                console.warn('GPS помилка:', error.message);
-                stopSuggestionsBox.innerHTML = '<div style="padding: 10px; color: red;">Увімкніть GPS для пошуку поруч</div>';
-            }, 
-            // 🚀 МАГІЯ ТУТ: maximumAge дозволяє браузеру миттєво віддати останню відому точку (якщо їй менше хвилини)
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
-        );
-    }
-}
-
-// 2. Залишаємо виклик при кліку або коли користувач стирає текст (щоб повернутися до GPS-зупинок)
-stopSearchInput.addEventListener('focus', loadNearbyStopsDefault);
-stopSearchInput.addEventListener('input', (e) => {
-    if (e.target.value.trim() === '') loadNearbyStopsDefault();
-});
-async function showNearbyStops(lat, lon) {
-    try {
-        const res = await fetch(`${API_BASE_URL}/stops/nearby?lat=${lat}&lon=${lon}`);
-        if (!res.ok) throw new Error(`Код помилки: ${res.status}`);
-        
-        const groups = await res.json();
-        
-        if (groups.length === 0) {
-            stopSuggestionsBox.innerHTML = `<div style="padding: 10px; color: var(--text-muted);">Зупинок поруч не знайдено 😕</div>`;
-            return;
-        }
-        
-        stopSuggestionsBox.innerHTML = '<div style="padding: 10px; font-weight: bold; color: var(--blue);">📍 Przystanki w pobliżu</div>';
-        
-        groups.forEach(group => {
-            group.stops.forEach(stop => {
-                const item = document.createElement('div');
-                item.className = 'stop-suggestion-item';
-                
-                const title = document.createElement('div');
-                title.className = 'stop-suggestion-title';
-                title.innerHTML = `${stop.name} <span class="stop-suggestion-code">${stop.code}</span> <span style="float: right; font-size: 13px; color: #888;">${group.distance}m</span>`;
-                item.appendChild(title);
-                
-                // --- ОСЬ НАШ НОВИЙ БЛОК З МАРШРУТАМИ ---
-                if (stop.routes && stop.routes.length > 0) {
-                    const carousel = document.createElement('div');
-                    carousel.className = 'stop-routes-carousel';
-                    
-                    stop.routes.forEach(r => {
-                        const pill = document.createElement('div');
-                        pill.className = 'route-pill';
-                        pill.innerHTML = `<span class="route-pill-num">${r.route}</span><span class="route-pill-dir">${r.direction}</span>`;
-                        carousel.appendChild(pill);
-                    });
-                    
-                    item.appendChild(carousel);
-                }
-                // ---------------------------------------
-                
-                item.addEventListener('click', () => {
-                    stopSuggestionsBox.style.display = 'none';
-                    stopSearchInput.value = '';
-                    stopTitleContainer.style.display = 'block';
-                    stopNameDisplay.textContent = `${stop.name} ${stop.code}`;
-                    
-                    currentStopIdForDepartures = stop.stopId;
-                    topTimeOffset = 0;
-                    bottomTimeOffset = 0; 
-                    loadDepartures(currentStopIdForDepartures);
-                    refreshFab.style.display = 'flex';
-                });
-                
-                stopSuggestionsBox.appendChild(item);
-            });
-        });
-        
-        stopSuggestionsBox.style.display = 'block';
-        
-    } catch (error) {
-        stopSuggestionsBox.innerHTML = `<div style="padding: 10px; color: red;">Помилка: ${error.message}</div>`;
-        stopSuggestionsBox.style.display = 'block';
-    }
-}
-
-// ==================== Історія пошуків (localStorage) ====================
-function getRecentStops() {
-    try {
-        return JSON.parse(localStorage.getItem('ta_recent_stops')) || [];
-    } catch (e) { return []; }
-}
-
-function saveRecentStop(stop) {
-    let recents = getRecentStops();
-    // Видаляємо дублікат, якщо ця зупинка вже є (щоб підняти її наверх)
-    recents = recents.filter(s => s.stopId !== stop.stopId); 
-    recents.unshift(stop); // Додаємо на початок
-    if (recents.length > 3) recents.length = 3; // Лишаємо тільки 3 останні
-    localStorage.setItem('ta_recent_stops', JSON.stringify(recents));
-}
-
-// ==================== Універсальний генератор карток зупинок ====================
-function createStopSuggestionElement(stop, distanceStr = '') {
-    const item = document.createElement('div');
-    item.className = 'stop-suggestion-item';
-    
-    const title = document.createElement('div');
-    title.className = 'stop-suggestion-title';
-    title.innerHTML = `${stop.name} <span class="stop-suggestion-code">${stop.code}</span>`;
-    
-    // Якщо передали дистанцію (для GPS) - малюємо її праворуч
-    if (distanceStr) {
-        title.innerHTML += ` <span style="float: right; font-size: 13px; color: #888;">${distanceStr}</span>`;
-    }
-    item.appendChild(title);
-    
-    // Малюємо карусель ліній, якщо вони є
-    if (stop.routes && stop.routes.length > 0) {
-        const carousel = document.createElement('div');
-        carousel.className = 'stop-routes-carousel';
-        stop.routes.forEach(r => {
-            const pill = document.createElement('div');
-            pill.className = 'route-pill';
-            pill.innerHTML = `<span class="route-pill-num">${r.route}</span><span class="route-pill-dir">${r.direction}</span>`;
-            carousel.appendChild(pill);
-        });
-        item.appendChild(carousel);
-    }
-    
-    // Обробка кліку по картці
-    item.addEventListener('click', () => {
-        stopSuggestionsBox.style.display = 'none';
-        stopSearchInput.value = '';
-        stopTitleContainer.style.display = 'block';
-        stopNameDisplay.textContent = `${stop.name} ${stop.code}`;
-        
-        saveRecentStop(stop); // 💾 ЗБЕРІГАЄМО В ІСТОРІЮ ПРИ КЛІКУ
-        
-        currentStopIdForDepartures = stop.stopId;
-        topTimeOffset = 0;
-        bottomTimeOffset = 0; 
-        loadDepartures(currentStopIdForDepartures);
-        refreshFab.style.display = 'flex';
-    });
-    
-    return item;
-}
-
-// ==================== Логіка відображення порожнього пошуку ====================
-function loadNearbyStopsDefault() {
-    if (stopSearchInput.value.trim() !== '') return;
-
-    stopSuggestionsBox.innerHTML = ''; 
-    
-    // 1. ОСТАННІ ПОШУКИ (малюємо миттєво з пам'яті браузера)
-    const recents = getRecentStops();
-    if (recents.length > 0) {
-        const recentsHeader = document.createElement('div');
-        recentsHeader.style = 'padding: 10px; font-weight: bold; color: var(--blue);';
-        recentsHeader.textContent = '🕒 Ostatnio wyszukiwane';
-        stopSuggestionsBox.appendChild(recentsHeader);
-        
-        recents.forEach(stop => {
-            stopSuggestionsBox.appendChild(createStopSuggestionElement(stop)); // Без дистанції
-        });
-    }
-
-    // 2. ГОТУЄМО КОНТЕЙНЕР ДЛЯ ЗУПИНОК ПОРУЧ
-    const nearbyContainer = document.createElement('div');
-    nearbyContainer.id = 'nearby-container';
-    stopSuggestionsBox.appendChild(nearbyContainer);
-    stopSuggestionsBox.style.display = 'block';
-
-    // 3. ЗАПУСКАЄМО GPS ЛОГІКУ
-    if (userLocationMarker) {
-        const lat = userLocationMarker.getLatLng().lat;
-        const lon = userLocationMarker.getLatLng().lng;
-        showNearbyStops(lat, lon);
-        return;
-    }
-
-    nearbyContainer.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">📍 Шукаємо локацію...</div>';
-
-    if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                if (!userLocationMarker) {
-                    userLocationMarker = L.marker([lat, lon], { icon: passengerIcon, zIndexOffset: 1000 }).addTo(map);
-                } else {
-                    userLocationMarker.setLatLng([lat, lon]);
-                }
-                showNearbyStops(lat, lon); 
-            }, 
-            (error) => {
-                console.warn('GPS помилка:', error.message);
-                nearbyContainer.innerHTML = '<div style="padding: 10px; color: red;">Увімкніть GPS для Przystanki w pobliżu</div>';
-            }, 
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
-        );
-    }
-}
-
-async function showNearbyStops(lat, lon) {
-    const nearbyContainer = document.getElementById('nearby-container');
-    if (!nearbyContainer) return; 
-
-    try {
-        const res = await fetch(`${API_BASE_URL}/stops/nearby?lat=${lat}&lon=${lon}`);
-        if (!res.ok) throw new Error(`Код помилки: ${res.status}`);
-        
-        const groups = await res.json();
-        
-        if (groups.length === 0) {
-            nearbyContainer.innerHTML = `<div style="padding: 10px; color: var(--text-muted);">Зупинок поруч не знайдено 😕</div>`;
-            return;
-        }
-        
-        nearbyContainer.innerHTML = '<div style="padding: 10px; font-weight: bold; color: var(--blue);">📍 Przystanki w pobliżu</div>';
-        
-        groups.forEach(group => {
-            group.stops.forEach(stop => {
-                nearbyContainer.appendChild(createStopSuggestionElement(stop, `${group.distance}m`));
-            });
-        });
-    } catch (error) {
-        nearbyContainer.innerHTML = `<div style="padding: 10px; color: red;">Помилка: ${error.message}</div>`;
-    }
-}
-
-stopSearchInput.addEventListener('focus', loadNearbyStopsDefault);
-
-// ==================== Логіка текстового пошуку ====================
-stopSearchInput.addEventListener('input', async (e) => {
-  const query = e.target.value.trim();
-  
-  if (query.length < 2) {
-    if (query.length === 0) loadNearbyStopsDefault();
-    else stopSuggestionsBox.style.display = 'none';
-    return;
-  }
-
-  try {
-    const res = await fetch(`${API_BASE_URL}/stops/search?q=${encodeURIComponent(query)}`);
-    if (!res.ok) throw new Error('Помилка мережі');
-    
-    const stops = await res.json();
-    
-    if (stops.length === 0) {
-      stopSuggestionsBox.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">Нічого не знайдено</div>';
-      stopSuggestionsBox.style.display = 'block';
-      return;
-    }
-
-    stopSuggestionsBox.innerHTML = '';
-    stops.forEach(stop => {
-      // Тут ми теж використовуємо нашу нову універсальну функцію!
-      stopSuggestionsBox.appendChild(createStopSuggestionElement(stop));
-    });
-    
-    stopSuggestionsBox.style.display = 'block';
-  } catch (error) {
-    console.error('Помилка пошуку зупинки:', error);
-  }
-});
 // ==================== Історія пошуків (localStorage) ====================
 function getRecentStops() {
     try {
@@ -1349,7 +1063,11 @@ stopSearchInput.addEventListener('input', async (e) => {
 
 
 document.addEventListener('click', (e) => {
-  if (!stopSearchInput.contains(e.target) && !stopSuggestionsBox.contains(e.target)) {
+  if (
+    !stopSearchInput.contains(e.target) &&
+    !stopSuggestionsBox.contains(e.target) &&
+    !e.target.closest('.nav-item')
+  ) {
     stopSuggestionsBox.style.display = 'none';
   }
 });

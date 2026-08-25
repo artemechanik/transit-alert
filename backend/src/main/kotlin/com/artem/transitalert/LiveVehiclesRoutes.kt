@@ -27,7 +27,7 @@ data class LiveVehicleResponse(
 fun Application.liveVehiclesRoutes() {
     routing {
         
-        // 1. Маршрут для всіх машин на карті
+      // 1. Маршрут для всіх машин на карті
         get("/live-vehicles") {
             val routeFilter = call.request.queryParameters["route"]
 
@@ -38,13 +38,20 @@ fun Application.liveVehiclesRoutes() {
             }
 
             val result = transaction {
+                // КРОК 1: Збираємо всі tripId в один список
+                val tripIds = positions.map { it.tripId }.distinct()
+
+                // КРОК 2: Робимо ОДИН швидкий запит до БД для всіх автобусів одразу
+                // Використовуємо inList замість циклу
+                val tripToRouteMap = StopDepartures
+                    .select(StopDepartures.tripId, StopDepartures.route)
+                    .where { StopDepartures.tripId inList tripIds }
+                    .associate { it[StopDepartures.tripId] to it[StopDepartures.route] }
+
+                // КРОК 3: Блискавично збираємо результат у пам'яті
                 positions.mapNotNull { pos ->
-                    val route = StopDepartures.selectAll()
-                        .where { StopDepartures.tripId eq pos.tripId }
-                        .limit(1)
-                        .firstOrNull()
-                        ?.get(StopDepartures.route)
-                        ?: return@mapNotNull null
+                    // Беремо маршрут із нашого готового словника
+                    val route = tripToRouteMap[pos.tripId] ?: return@mapNotNull null
 
                     if (routeFilter != null && route != routeFilter) return@mapNotNull null
 
@@ -60,7 +67,7 @@ fun Application.liveVehiclesRoutes() {
                     )
                 }
             }
-
+            
             call.respond(result)
         }
 

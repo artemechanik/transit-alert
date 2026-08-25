@@ -36,12 +36,14 @@ function getFingerprint() {
 // ==================== Карта ====================
 let map, reportMarkersLayer, searchMarker, vehicleMarker;
 let userLocationMarker; // Наша синя крапка (або чоловічок з валізою)
-
-// Налаштовуємо твою круту іконку
+let allVehiclesClusterGroup = null;
+let liveMapInterval = null;
+// Налаштовуємо круту іконку
 const passengerIcon = L.icon({
     iconUrl: '43976.svg', 
-    iconSize: [32, 32], 
-    iconAnchor: [16, 32] // Щоб він стояв ногами на координатах
+    iconSize: [30, 30], 
+    iconAnchor: [15, 30], // Щоб він стояв ногами на координатах
+    className: 'user-marker-icon'
 });
 
 // Функція, яка читає GPS телефону
@@ -58,7 +60,7 @@ function trackUserLocation() {
                 // Якщо немає - створюємо
                 userLocationMarker = L.marker([lat, lon], { icon: passengerIcon, zIndexOffset: 1000 }).addTo(map);
                 // За бажанням: можна розкоментувати рядок нижче, щоб карта відразу центрувалась на тобі
-                map.flyTo([lat, lon], 15);
+                map.flyTo([lat, lon], 14);
             }
         }, (error) => {
             console.warn('Помилка GPS:', error.message);
@@ -89,6 +91,9 @@ function initMap() {
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateMapTheme);
 
   reportMarkersLayer = L.layerGroup().addTo(map);
+  // Запускаємо живу карту міста
+    updateLiveCityMap();
+    liveMapInterval = setInterval(updateLiveCityMap, 15000);
 }
 
 // Функція, яка перевіряє системну тему і змінює карту
@@ -106,6 +111,60 @@ function updateMapTheme() {
     lightTileLayer.addTo(map);
   }
 }
+
+// ==================== LIVE КАРТА МІСТА ====================
+async function updateLiveCityMap() {
+    // Економимо батарею і трафік: оновлюємо тільки якщо ми зараз на вкладці "Mapa"
+    const mapScreenActive = !document.getElementById('nav-map').classList.contains('active');
+    if (mapScreenActive && trackedTripId === null) return; 
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/live-vehicles`);
+        if (!res.ok) throw new Error('Помилка мережі');
+        const vehicles = await res.json();
+
+        // 1. Ініціалізуємо групу кластерів, якщо її ще немає
+        if (!allVehiclesClusterGroup) {
+            allVehiclesClusterGroup = L.markerClusterGroup({
+                disableClusteringAtZoom: 16, // На 16+ зумі показуємо всі автобуси окремо
+                maxClusterRadius: 50, // Радіус "злипання" маркерів
+                spiderfyOnMaxZoom: true
+            });
+            map.addLayer(allVehiclesClusterGroup);
+        }
+
+        // 2. Очищаємо попередні координати
+        allVehiclesClusterGroup.clearLayers();
+
+        // 3. Генеруємо нові маркери
+        const markers = [];
+        vehicles.forEach(v => {
+            // Використовуємо твій готовий дизайн vehicle-marker-dot
+            const iconHtml = `<div class="vehicle-marker-dot">${v.route || '🚌'}</div>`;
+            
+            const icon = L.divIcon({
+                html: iconHtml,
+                className: 'vehicle-marker-icon', // Твій клас для плавних CSS-анімацій
+                iconSize: [34, 34],
+                iconAnchor: [17, 17]
+            });
+
+            const marker = L.marker([v.lat, v.lon], { icon: icon });
+            
+            // Маленький бонус: по кліку на автобус можна побачити його номер
+            marker.bindPopup(`<b>Linia ${v.route || '?'}</b>`);
+            
+            markers.push(marker);
+        });
+
+        // 4. Додаємо всі маркери на карту одним махом (для високої продуктивності)
+        allVehiclesClusterGroup.addLayers(markers);
+
+    } catch (error) {
+        console.error('Не вдалося оновити живу карту:', error);
+    }
+}
+
 // ==================== Пошук зупинки (верхня панель) ====================
 let searchDebounce;
 
@@ -212,10 +271,23 @@ async function showVehicleOnMap(tripId) {
 
     switchScreen('map', document.getElementById('nav-map'));
     drawVehicleMarker(vehicle);
-    map.flyTo([vehicle.lat, vehicle.lon], 16);
 
-    // Починаємо стежити за цим рейсом — оновлюємо позицію в тому ж темпі,
-    // в якому бекенд сам оновлює GTFS-RT (15с), частіше пінгувати сенсу нема.
+    // --- НОВА ЛОГІКА МАСШТАБУВАННЯ ---
+    if (userLocationMarker) {
+      // Беремо твої координати
+      const userLatLng = userLocationMarker.getLatLng();
+      // Створюємо "коробку" (bounds), яка вміщує тебе і автобус
+      const bounds = L.latLngBounds(userLatLng, [vehicle.lat, vehicle.lon]);
+      
+      // Летимо так, щоб обидві точки влізли, з відступом від країв екрана (padding)
+      map.flyToBounds(bounds, { padding: [60, 60], maxZoom: 17 });
+    } else {
+      // Якщо GPS вимкнено, просто летимо до автобуса
+      map.flyTo([vehicle.lat, vehicle.lon], 16);
+    }
+    // ----------------------------------
+
+    // Починаємо стежити за цим рейсом
     trackedTripId = tripId;
     if (vehicleTrackInterval) clearInterval(vehicleTrackInterval);
     vehicleTrackInterval = setInterval(refreshTrackedVehicle, 15000);
@@ -810,7 +882,6 @@ function resetForm() {
 // ==================== Старт ====================
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
-  initSearchBar();
   refreshMapMarkers();
   setInterval(refreshMapMarkers, 45000);
 

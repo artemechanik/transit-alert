@@ -47,6 +47,8 @@ object LiveVehiclesCache {
             while (isActive) {
                 try {
                     refresh()
+                } catch (e: CancellationException) {
+                    throw e // Пропускаємо системне скасування далі
                 } catch (e: Exception) {
                     logger.warn("Не вдалось оновити live-позиції: ${e.message}")
                 }
@@ -94,7 +96,11 @@ object LiveVehiclesCache {
     }
 
     private suspend fun refresh() {
-        val bytes: ByteArray = client.get(ZBIORKOM_LUBLIN_PB_URL).readBytes()
+        // Якщо сервер мовчить 10 секунд - корутина викине TimeoutCancellationException, 
+        // яку спіймає наш catch у startPolling і перезапустить цикл.
+        val bytes: ByteArray = withTimeout(10_000L) {
+            client.get(ZBIORKOM_LUBLIN_PB_URL).readBytes()
+        }
         val feed = GtfsRealtime.FeedMessage.parseFrom(bytes)
 
         val actualTimes = collectActualTimes(feed)

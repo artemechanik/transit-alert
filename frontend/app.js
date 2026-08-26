@@ -43,6 +43,26 @@ let map, reportMarkersLayer, searchMarker, vehicleMarker;
 let userLocationMarker; // Наша синя крапка (або чоловічок з валізою)
 let allVehiclesClusterGroup = null;
 let liveMapInterval = null;
+L.Marker.prototype.smoothMove = function(newLat, newLon, durationMs) {
+    const startLatLng = this.getLatLng();
+    const startTime = performance.now();
+    const marker = this;
+
+    function step(currentTime) {
+        let progress = (currentTime - startTime) / durationMs;
+        if (progress > 1) progress = 1;
+
+        const currentLat = startLatLng.lat + (newLat - startLatLng.lat) * progress;
+        const currentLon = startLatLng.lng + (newLon - startLatLng.lng) * progress;
+        
+        marker.setLatLng([currentLat, currentLon]);
+
+        if (progress < 1) {
+            requestAnimationFrame(step);
+        }
+    }
+    requestAnimationFrame(step);
+};
 // Налаштовуємо круту іконку
 const passengerIcon = L.icon({
     iconUrl: '43976.svg', 
@@ -56,7 +76,7 @@ L.Control.GPSButton = L.Control.extend({
   
   onAdd: function(targetMap) {
     const btn = L.DomUtil.create('button', 'gps-locate-btn');
-    btn.innerHTML = '🎯'; // Іконка прицілу (можеш змінити на 📍)
+    btn.innerHTML = '<div class="svg-icon icon-gps"></div>';
     
     btn.onclick = function(e) {
       e.stopPropagation(); // Блокуємо клік, щоб карта під кнопкою не смикалась
@@ -140,10 +160,11 @@ function updateMapTheme() {
 }
 
 // ==================== LIVE КАРТА МІСТА ====================
+// Додаємо словник для збереження міток, щоб не створювати їх заново
+let activeVehicleMarkers = {}; 
+
 async function updateLiveCityMap() {
-// --- НОВИЙ КОД: Якщо ми стежимо за одним автобусом - загальна карта відпочиває ---
     if (typeof trackedTripId !== 'undefined' && trackedTripId !== null) return;
-    // Економимо батарею і трафік: оновлюємо тільки якщо ми зараз на вкладці "Mapa"
     const mapScreenActive = !document.getElementById('nav-map').classList.contains('active');
     if (mapScreenActive && trackedTripId === null) return; 
 
@@ -152,52 +173,57 @@ async function updateLiveCityMap() {
         if (!res.ok) throw new Error('Помилка мережі');
         const vehicles = await res.json();
 
-        // 1. Ініціалізуємо групу кластерів, якщо її ще немає
+       // 1. ПОВЕРТАЄМО КЛАСТЕРИ (БУЛЬБАШКИ!)
         if (!allVehiclesClusterGroup) {
             allVehiclesClusterGroup = L.markerClusterGroup({
-                disableClusteringAtZoom: 16, // На 16+ зумі показуємо всі автобуси окремо
-                maxClusterRadius: 50, // Радіус "злипання" маркерів
+                disableClusteringAtZoom: 16, 
+                maxClusterRadius: 50, 
                 spiderfyOnMaxZoom: true
             });
             map.addLayer(allVehiclesClusterGroup);
         }
+        const currentTripIds = new Set();
 
-        // 2. Очищаємо попередні координати
-        allVehiclesClusterGroup.clearLayers();
-
-        // 3. Генеруємо нові маркери
-        const markers = [];
         vehicles.forEach(v => {
-            // Використовуємо твій готовий дизайн vehicle-marker-dot
-            const bearing = v.bearing || 0; 
+            const tripId = v.tripId; 
+            currentTripIds.add(tripId);
 
-            const iconHtml = `
-              <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
-                <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
-                  <polygon points="50,10 90,90 10,90" style="fill: var(--blue); stroke: white; stroke-width: 11px; stroke-linejoin: round;" />
-                </svg>
-                <div class="vehicle-marker-dot">${v.route || '🚌'}</div>
-              </div>
-            `;
-            
-            const icon = L.divIcon({
-                html: iconHtml,
-                className: 'vehicle-marker-icon', // Твій клас для плавних CSS-анімацій
-                iconSize: [34, 34],
-                iconAnchor: [17, 17]
-            });
+            if (activeVehicleMarkers[tripId]) {
+                // АВТОБУС Є -> плавно рухаємо його новим методом!
+                activeVehicleMarkers[tripId].smoothMove(v.lat, v.lon, 2000);
+                
+                // Крутимо стрілочку
+                const arrow = activeVehicleMarkers[tripId].getElement()?.querySelector('.vehicle-arrow');
+                if (arrow) arrow.style.transform = `rotate(${v.bearing || 0}deg)`;
 
-            const marker = L.marker([v.lat, v.lon], { icon: icon });
-            
-            // Маленький бонус: по кліку на автобус можна побачити його номер
-            marker.bindPopup(`<b>Linia ${v.route || '?'}</b>`);
-            
-            markers.push(marker);
+            } else {
+                // НОВИЙ АВТОБУС -> створюємо
+                const bearing = v.bearing || 0; 
+                const iconHtml = `
+                  <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
+                    <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
+                      <polygon points="50,10 90,90 10,90" style="fill: var(--blue); stroke: white; stroke-width: 11px; stroke-linejoin: round;" />
+                    </svg>
+                    <div class="vehicle-marker-dot">${v.route || '🚌'}</div>
+                  </div>
+                `;
+                const icon = L.divIcon({ html: iconHtml, className: 'vehicle-marker-icon', iconSize: [34, 34], iconAnchor: [17, 17] });
+                
+                const marker = L.marker([v.lat, v.lon], { icon: icon });
+                marker.bindPopup(`<b>Linia ${v.route || '?'}</b>`);
+                
+                activeVehicleMarkers[tripId] = marker;
+                allVehiclesClusterGroup.addLayer(marker);
+            }
         });
 
-        // 4. Додаємо всі маркери на карту одним махом (для високої продуктивності)
-        allVehiclesClusterGroup.addLayers(markers);
-
+        // Видаляємо з карти ті автобуси, які вже доїхали до кінцевої
+        for (const tripId in activeVehicleMarkers) {
+            if (!currentTripIds.has(tripId)) {
+                allVehiclesClusterGroup.removeLayer(activeVehicleMarkers[tripId]);
+                delete activeVehicleMarkers[tripId];
+            }
+        }
     } catch (error) {
         console.error('Не вдалося оновити живу карту:', error);
     }
@@ -397,9 +423,9 @@ async function showVehicleOnMap(tripId) {
       modalTrackInterval = setInterval(async () => {
         const updatedVehicle = await fetchVehiclePosition(tripId);
         if (updatedVehicle && modalVehicleMarker) {
-          modalVehicleMarker.setLatLng([updatedVehicle.lat, updatedVehicle.lon]);
-          modalMap.setView([updatedVehicle.lat, updatedVehicle.lon]); 
-          
+          // Було: modalVehicleMarker.setLatLng([updatedVehicle.lat, updatedVehicle.lon]);
+          modalVehicleMarker.smoothMove(updatedVehicle.lat, updatedVehicle.lon, 2000); // СТАЛО
+          modalMap.setView([updatedVehicle.lat, updatedVehicle.lon]);
           // Крутимо стрілочку при русі
           const arrow = modalVehicleMarker.getElement().querySelector('.vehicle-arrow');
           if (arrow) arrow.style.transform = `rotate(${updatedVehicle.bearing || 0}deg)`;
@@ -443,9 +469,9 @@ function drawVehicleMarker(vehicle) {
   const bearing = vehicle.bearing || 0; 
   const popupHtml = `<b>Linia ${vehicle.route}</b><br>${vehicle.vehicleLabel || ''}`;
 
-  if (vehicleMarker) {
-    // 1. Оновлюємо позицію. Завдяки нашому CSS transition, він туди плавно "поїде"
-    vehicleMarker.setLatLng([vehicle.lat, vehicle.lon]);
+ if (vehicleMarker) {
+    // Було: vehicleMarker.setLatLng([vehicle.lat, vehicle.lon]);
+    vehicleMarker.smoothMove(vehicle.lat, vehicle.lon, 2000); // СТАЛО
     vehicleMarker.setPopupContent(popupHtml);
     
     // 2. Знаходимо нашу стрілочку всередині іконки і повертаємо її на новий кут
@@ -1483,7 +1509,7 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
         }
         
         let statusHtml = '';
-        const liveIcon = `<span class="live-icon">🛰️</span>`; // Наш супутник для GPS-даних
+        const liveIcon = '<div class="live-indicator"></div>'; // Наш супутник для GPS-даних
 
         if (dep.isRealTime) {
           if (dep.delayMinutes > 0) {

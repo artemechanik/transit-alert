@@ -786,6 +786,24 @@
 .icon-megaphone {
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='11 5 6 9 2 9 2 15 6 15 11 19 11 5'%3E%3C/polygon%3E%3Cpath d='M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07'%3E%3C/path%3E%3C/svg%3E");
 }
+/* 5. Автобус (спереду) */
+.icon-bus {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='3' width='16' height='16' rx='2' ry='2'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M8 15h.01'/%3E%3Cpath d='M16 15h.01'/%3E%3Cpath d='M6 19v2'/%3E%3Cpath d='M18 19v2'/%3E%3C/svg%3E");
+}
+
+/* 6. Знак зупинки */
+.icon-bus-stop {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22v-9'/%3E%3Cpath d='M12 2v7'/%3E%3Cpath d='M8 2h8a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z'/%3E%3C/svg%3E");
+}
+/* 7. Годинник (Історія) */
+.icon-clock {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpolyline points='12 6 12 12 16 14'/%3E%3C/svg%3E");
+}
+
+/* 8. Пісочний годинник (Завантаження) */
+.icon-hourglass {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 22h16v-6l-4-4 4-4V2H4v6l4 4-4 4v6z'/%3E%3C/svg%3E");
+}
 
 </style>
 </head>
@@ -871,15 +889,15 @@
   <div class="quick-options" id="quick-options-list">
     <!-- За замовчуванням обрано перший варіант -->
     <button class="quick-option selected" onclick="selectQuickOption(this, 'Linia 14')">
-      <span class="icon">🚌</span> Linia 14 (w pobliżu)
+      <div class="svg-icon icon-bus"></div> Linia 14 (w pobliżu)
     </button>
     <button class="quick-option" onclick="selectQuickOption(this, 'Lotnicza 01')">
-      <span class="icon">🚏</span> Lotnicza 01 (30m)
+      <div class="svg-icon icon-bus-stop"></div> Lotnicza 01 (30m)
     </button>
     <button class="quick-option" onclick="selectQuickOption(this, 'Obecna lokalizacja')">
-      <span class="icon">📍</span> Obecna lokalizacja
+      <div class="svg-icon icon-map-pin"></div> Obecna lokalizacja
     </button>
-  </div>
+  </div> 
   
   <div class="quick-actions">
     <button class="quick-action-btn btn-cancel" onclick="closeQuickModal()">Anuluj</button>

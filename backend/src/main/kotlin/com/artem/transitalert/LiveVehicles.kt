@@ -50,8 +50,10 @@ object LiveVehiclesCache {
                 } catch (e: CancellationException) {
                     throw e // Пропускаємо системне скасування далі
                 } catch (e: Exception) {
-                    logger.warn("Не вдалось оновити live-позиції: ${e.message}")
-                }
+    // Передаємо сам об'єкт винятку 'e' другим параметром. 
+    // Це змусить логер роздрукувати ВЕСЬ стек викликів (stack trace).
+    logger.error("Критична помилка при оновленні live-позицій", e)
+}
                 delay(POLL_INTERVAL_MS)
             }
         }
@@ -98,41 +100,58 @@ object LiveVehiclesCache {
     private suspend fun refresh() {
         // Якщо сервер мовчить 10 секунд - корутина викине TimeoutCancellationException, 
         // яку спіймає наш catch у startPolling і перезапустить цикл.
-        val bytes: ByteArray = withTimeout(10_000L) {
-            client.get(ZBIORKOM_LUBLIN_PB_URL).readBytes()
-        }
+       // Якщо сервер мовчить 10 секунд - поверне null, і ми кинемо звичайний Exception
+	val bytes: ByteArray = withTimeoutOrNull(10_000L) {
+  	  client.get(ZBIORKOM_LUBLIN_PB_URL).readBytes()
+	} ?: throw Exception("Таймаут 10с при запиті до GTFS-RT")
         val feed = GtfsRealtime.FeedMessage.parseFrom(bytes)
 
         val actualTimes = collectActualTimes(feed)
 
-        val fresh = ConcurrentHashMap<String, VehiclePosition>()
-        transaction {
-            for (entity in feed.entityList) {
-                if (!entity.hasVehicle()) continue
-                val v = entity.vehicle
-                if (!v.hasPosition() || !v.trip.hasTripId()) continue
+	     val fresh = ConcurrentHashMap<String, VehiclePosition>()
+		
+		// 1. Спочатку пробігаємось і збираємо всі (tripId, seq), які зараз є на лінії
+		val targetStops = mutableListOf<Pair<String, Int>>()
+		for (entity in feed.entityList) {
+		    if (!entity.hasVehicle()) continue
+		    val v = entity.vehicle
+		    if (!v.hasPosition() || !v.trip.hasTripId()) continue
+		    
+		    targetStops.add(v.trip.tripId to v.currentStopSequence)
+		}
 
-                val tripId = v.trip.tripId
-                val seq = v.currentStopSequence
+		// 2. Робимо ОДИН запит до бази даних!
+		val scheduledMap = transaction {
+		    scheduledDepartureMinutesBulk(targetStops)
+		}
 
-                val delaySeconds = actualTimes[tripId to seq]?.let { actualUnix ->
-                    scheduledDepartureMinutes(tripId, seq)?.let { scheduledMin ->
-                        computeDelaySeconds(scheduledMin, actualUnix)
-                    }
-                }
+		// 3. Збираємо свіжі дані для кешу, використовуючи словник у пам'яті
+		for (entity in feed.entityList) {
+		    if (!entity.hasVehicle()) continue
+		    val v = entity.vehicle
+		    if (!v.hasPosition() || !v.trip.hasTripId()) continue
 
-                fresh[tripId] = VehiclePosition(
-                    vehicleLabel = if (v.vehicle.hasLabel()) v.vehicle.label else v.vehicle.id,
-                    tripId = tripId,
-                    lat = v.position.latitude.toDouble(),
-                    lon = v.position.longitude.toDouble(),
-                    bearing = v.position.bearing,
-                    currentStopSequence = seq,
-                    timestamp = v.timestamp,
-                    delaySeconds = delaySeconds,
-                )
-            }
-        }
+		    val tripId = v.trip.tripId
+		    val seq = v.currentStopSequence
+
+		    // Беремо плановий час не з бази, а зі словника
+		    val delaySeconds = actualTimes[tripId to seq]?.let { actualUnix ->
+		        scheduledMap[tripId to seq]?.let { scheduledMin ->
+		            computeDelaySeconds(scheduledMin, actualUnix)
+		        }
+		    }
+
+		    fresh[tripId] = VehiclePosition(
+		        vehicleLabel = if (v.vehicle.hasLabel()) v.vehicle.label else v.vehicle.id,
+		        tripId = tripId,
+		        lat = v.position.latitude.toDouble(),
+		        lon = v.position.longitude.toDouble(),
+		        bearing = v.position.bearing,
+		        currentStopSequence = seq,
+		        timestamp = v.timestamp,
+		        delaySeconds = delaySeconds,
+		    )
+		}
 
         positionsByTrip.clear()
         positionsByTrip.putAll(fresh)

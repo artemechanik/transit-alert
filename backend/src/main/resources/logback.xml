@@ -1,0 +1,33 @@
+<configuration>
+    <!-- Пишемо логи в консоль (як і раніше) -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{YYYY-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Пишемо логи у файл з щоденною ротацією -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/transit-alert.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- Щодня створюватиметься новий файл, наприклад: transit-alert-2026-08-27.log -->
+            <fileNamePattern>logs/transit-alert-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <!-- Зберігати логи тільки за останні 14 днів, щоб не забивати диск -->
+            <maxHistory>14</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{YYYY-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+<!-- Вимикаємо спам від бази даних -->
+<logger name="Exposed" level="INFO" />
+
+<!-- За бажанням: Вимикаємо спам від Ktor про кожен успішний HTTP-запит (200 OK) -->
+<logger name="ktor.application" level="INFO" />
+    <!-- Налаштування рівня логування -->
+    <!-- INFO означає, що ми записуємо info, warn та error, але ігноруємо зайвий спам (debug) -->
+    <root level="INFO">
+        <appender-ref ref="STDOUT" />
+        <appender-ref ref="FILE" />
+    </root>
+</configuration>

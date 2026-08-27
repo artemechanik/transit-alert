@@ -125,6 +125,35 @@ fun Application.formRoutes() {
             }
             call.respond(results)
         }
+        
+      // Пошук прямих маршрутів між зупинками
+        get("/route/search") {
+            val fromParam = call.parameters["from"]
+            val toParam = call.parameters["to"]
+
+            if (fromParam.isNullOrBlank() || toParam.isNullOrBlank()) {
+                call.respond(emptyList<DirectRoute>())
+                return@get
+            }
+
+            val fromIds = fromParam.split(",")
+            val toIds = toParam.split(",")
+
+            // Час можна дізнаватися і без бази даних
+            val now = java.time.LocalTime.now(LUBLIN_ZONE)
+            val currentMin = now.hour * 60 + now.minute
+            val today = java.time.LocalDate.now(LUBLIN_ZONE)
+
+            // А от усе, що стосується бази, ховаємо сюди:
+            val routes = transaction {
+                val activeServices = activeServiceIds(today) // <--- ТЕПЕР ВОНО В БЕЗПЕЦІ
+                findDirectTrips(fromIds, toIds, activeServices, currentMin)
+            }
+            
+            call.respond(routes)
+        }
+        
+        
         // Напрямки для конкретної лінії — тільки ті, якими вона реально їде
         // біля поточного часу (±90 хв), відсортовані від найближчого рейсу.
         get("/routes/{route}/directions") {

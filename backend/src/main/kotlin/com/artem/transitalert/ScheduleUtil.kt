@@ -4,6 +4,8 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.andWhere
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.innerJoin
+import org.jetbrains.exposed.sql.JoinType
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -91,4 +93,114 @@ fun findNearestDeparture(
         }
     }
     return best
+}
+/** 
+ * Масовий запит планового часу для списку (tripId, stopSequence).
+ * Робить лише 1 запит до бази замість N. Викликати всередині transaction {}. 
+ */
+fun scheduledDepartureMinutesBulk(requests: List<Pair<String, Int>>): Map<Pair<String, Int>, Int> {
+    if (requests.isEmpty()) return emptyMap()
+    
+    // Дістаємо унікальні tripId, щоб не тягнути зайвого
+    val targetTripIds = requests.map { it.first }.distinct()
+    val requestSet = requests.toSet()
+    
+    val result = HashMap<Pair<String, Int>, Int>()
+    
+    TripStops.selectAll()
+        .where { TripStops.tripId inList targetTripIds }
+        .forEach { row ->
+            val tripId = row[TripStops.tripId]
+            val seq = row[TripStops.stopSequence]
+            val pair = tripId to seq
+            
+            // Записуємо в словник лише ті зупинки, які нас просили знайти
+            if (pair in requestSet) {
+                result[pair] = row[TripStops.departureMinutes]
+            }
+        }
+        
+    return result
+}
+/** Шукає прямі рейси між двома групами зупинок */
+fun findDirectTrips(fromIds: List<String>, toIds: List<String>, activeServices: List<String>, currentMin: Int): List<DirectRoute> {
+    // Якщо немає активних сервісів на сьогодні — повертаємо порожнечу
+    if (fromIds.isEmpty() || toIds.isEmpty() || activeServices.isEmpty()) return emptyList()
+// Якщо немає активних сервісів на сьогодні — повертаємо порожнечу
+    if (fromIds.isEmpty() || toIds.isEmpty() || activeServices.isEmpty()) return emptyList()
+
+   // --- НОВИЙ БЛОК: Витягуємо красиві назви зупинок з номерами платформ ---
+    val stopNames = mutableMapOf<String, String>()
+    Stops.selectAll().where { Stops.stopId inList (fromIds + toIds) }.forEach {
+        val name = it[Stops.name]
+        val code = it[Stops.code] // <--- ВИКОРИСТОВУЄМО Stops.code
+        
+        stopNames[it[Stops.stopId]] = "$name $code"
+    }
+    // 1. Збираємо відправлення з точок А (тільки ТІ, ЩО БУДУТЬ)
+    val fromStops = mutableMapOf<String, Triple<Int, Int, String>>()
+    
+    TripStops.join(StopDepartures, JoinType.INNER, onColumn = TripStops.tripId, otherColumn = StopDepartures.tripId)
+        .selectAll()
+        .where { 
+            (TripStops.stopId inList fromIds) and 
+            (StopDepartures.stopId eq TripStops.stopId) and
+            (StopDepartures.serviceId inList activeServices) and // Відсікаємо клонів (інші дні)
+            (TripStops.departureMinutes greaterEq currentMin)    // Відсікаємо минуле (машину часу)
+        }
+        .forEach {
+            val tripId = it[TripStops.tripId]
+            val seq = it[TripStops.stopSequence]
+            val min = it[TripStops.departureMinutes]
+            val sId = it[TripStops.stopId]
+            
+            if (!fromStops.containsKey(tripId) || seq < fromStops[tripId]!!.first) {
+                fromStops[tripId] = Triple(seq, min, sId)
+            }
+        }
+
+    if (fromStops.isEmpty()) return emptyList()
+
+    // 2. Збираємо прибуття в точки Б
+    val validTripIds = fromStops.keys.toList()
+    val results = mutableListOf<DirectRoute>()
+
+    TripStops.join(StopDepartures, JoinType.INNER, onColumn = TripStops.tripId, otherColumn = StopDepartures.tripId)
+        .selectAll()
+        .where { 
+            (TripStops.stopId inList toIds) and 
+            (TripStops.tripId inList validTripIds) and
+            (StopDepartures.stopId eq TripStops.stopId)
+        }
+        .forEach { row ->
+            val tripId = row[TripStops.tripId]
+            val toSeq = row[TripStops.stopSequence]
+            val toMin = row[TripStops.departureMinutes]
+            val toStopId = row[TripStops.stopId]
+            val routeNumber = row[StopDepartures.route]
+
+            val fromData = fromStops[tripId] ?: return@forEach
+            val fromSeq = fromData.first
+            val fromMin = fromData.second
+            val fromStopId = fromData.third
+
+           // 3. ПЕРЕВІРКА ФІЗИКИ
+            if (fromSeq < toSeq) {
+                results.add(
+                    DirectRoute(
+                        route = routeNumber,
+                        tripId = tripId,
+                        fromStopId = fromStopId,
+                        fromStopName = stopNames[fromStopId] ?: fromStopId, // <--- ДОДАЛИ
+                        toStopId = toStopId,
+                        toStopName = stopNames[toStopId] ?: toStopId,       // <--- ДОДАЛИ
+                        departureMin = fromMin,
+                        arrivalMin = toMin
+                    )
+                )
+            }
+        }
+
+    // Сортуємо за часом і беремо тільки 15 найближчих рейсів (щоб не вантажити інтерфейс)
+    return results.sortedBy { it.departureMin }.take(15)
 }

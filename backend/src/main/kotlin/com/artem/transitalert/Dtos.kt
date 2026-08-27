@@ -72,3 +72,15 @@ data class NearbyStopDto(val stopId: String, val name: String, val code: String,
 
 @Serializable
 data class NearbyGroupDto(val name: String, val distance: Long, val stops: List<NearbyStopDto>)
+
+@Serializable
+data class DirectRoute(
+    val route: String,
+    val tripId: String,
+    val fromStopId: String,
+    val fromStopName: String, // <--- ДОДАЛИ
+    val toStopId: String,
+    val toStopName: String,   // <--- ДОДАЛИ
+    val departureMin: Int,
+    val arrivalMin: Int
+)

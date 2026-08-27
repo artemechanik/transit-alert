@@ -63,6 +63,27 @@ L.Marker.prototype.smoothMove = function(newLat, newLon, durationMs) {
     }
     requestAnimationFrame(step);
 };
+//=======Update Vehicle Bearing
+        function updateVehicleBearing(marker, route, bearing) {
+            // 1. Оновлюємо "живий" DOM (якщо автобус зараз видимий на екрані)
+            const domElement = marker.getElement();
+            if (domElement) {
+                const arrow = domElement.querySelector('.vehicle-arrow');
+                if (arrow) arrow.style.transform = `rotate(${bearing}deg)`;
+            }
+
+            // 2. ВАЖЛИВО: Оновлюємо внутрішній шаблон Leaflet!
+            // Тепер при виході з кластера або зумі маркер перемалюється з НОВИМ кутом.
+            marker.options.icon.options.html = `
+              <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
+                <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
+                  <polygon points="50,10 90,90 10,90" style="fill: var(--blue); stroke: white; stroke-width: 11px; stroke-linejoin: round;" />
+                </svg>
+                <div class="vehicle-marker-dot">${route || '🚌'}</div>
+              </div>
+            `;
+        }
+
 // Налаштовуємо круту іконку
 const passengerIcon = L.icon({
     iconUrl: '43976.svg', 
@@ -188,13 +209,13 @@ async function updateLiveCityMap() {
             const tripId = v.tripId; 
             currentTripIds.add(tripId);
 
-            if (activeVehicleMarkers[tripId]) {
-                // АВТОБУС Є -> плавно рухаємо його новим методом!
-                activeVehicleMarkers[tripId].smoothMove(v.lat, v.lon, 2000);
+          if (activeVehicleMarkers[tripId]) {
+                // АВТОБУС ВЖЕ Є: рухаємо і крутимо!
+                const marker = activeVehicleMarkers[tripId];
+                marker.smoothMove(v.lat, v.lon, 2000);
                 
-                // Крутимо стрілочку
-                const arrow = activeVehicleMarkers[tripId].getElement()?.querySelector('.vehicle-arrow');
-                if (arrow) arrow.style.transform = `rotate(${v.bearing || 0}deg)`;
+                // Викликаємо нашу нову функцію:
+                updateVehicleBearing(marker, v.route, v.bearing || 0);
 
             } else {
                 // НОВИЙ АВТОБУС -> створюємо
@@ -315,7 +336,7 @@ async function toggleDepExpand(card, panel, dep) {
 
     panel.innerHTML = `
       <div class="dep-expand-stops">${stopsHtml}</div>
-      <button class="dep-expand-map-btn" onclick="showVehicleOnMap('${dep.tripId}')">📍 Pokaż na mapie</button>
+      <button class="dep-expand-map-btn" onclick="showVehicleOnMap('${dep.tripId}')"> <div class="svg-icon icon-map-pin"></div> Pokaż na mapie</button>
     `;
 
     // --- НОВА ЛОГІКА ПЛАВНОГО СКРОЛУ ---
@@ -420,15 +441,14 @@ async function showVehicleOnMap(tripId) {
 
       // 6. Запускаємо стеження
       if (modalTrackInterval) clearInterval(modalTrackInterval);
-      modalTrackInterval = setInterval(async () => {
+    modalTrackInterval = setInterval(async () => {
         const updatedVehicle = await fetchVehiclePosition(tripId);
         if (updatedVehicle && modalVehicleMarker) {
-          // Було: modalVehicleMarker.setLatLng([updatedVehicle.lat, updatedVehicle.lon]);
-          modalVehicleMarker.smoothMove(updatedVehicle.lat, updatedVehicle.lon, 2000); // СТАЛО
-          modalMap.setView([updatedVehicle.lat, updatedVehicle.lon]);
-          // Крутимо стрілочку при русі
-          const arrow = modalVehicleMarker.getElement().querySelector('.vehicle-arrow');
-          if (arrow) arrow.style.transform = `rotate(${updatedVehicle.bearing || 0}deg)`;
+          modalVehicleMarker.smoothMove(updatedVehicle.lat, updatedVehicle.lon, 2000);
+          modalMap.setView([updatedVehicle.lat, updatedVehicle.lon]); 
+          
+          // Викликаємо нашу нову функцію:
+          updateVehicleBearing(modalVehicleMarker, updatedVehicle.route, updatedVehicle.bearing || 0);
         }
       }, 15000);
 
@@ -470,15 +490,11 @@ function drawVehicleMarker(vehicle) {
   const popupHtml = `<b>Linia ${vehicle.route}</b><br>${vehicle.vehicleLabel || ''}`;
 
  if (vehicleMarker) {
-    // Було: vehicleMarker.setLatLng([vehicle.lat, vehicle.lon]);
-    vehicleMarker.smoothMove(vehicle.lat, vehicle.lon, 2000); // СТАЛО
+    vehicleMarker.smoothMove(vehicle.lat, vehicle.lon, 2000);
     vehicleMarker.setPopupContent(popupHtml);
     
-    // 2. Знаходимо нашу стрілочку всередині іконки і повертаємо її на новий кут
-    const arrow = vehicleMarker.getElement().querySelector('.vehicle-arrow');
-    if (arrow) {
-      arrow.style.transform = `rotate(${bearing}deg)`;
-    }
+    // Викликаємо нашу нову функцію:
+    updateVehicleBearing(vehicleMarker, vehicle.route, vehicle.bearing || 0);
   } else {
     // Якщо маркера ще немає — створюємо його ВПЕРШЕ
    const icon = L.divIcon({
@@ -1120,11 +1136,11 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
         }
 
         try {
-            // Використовуємо твій правильний формат ?q=
+            // Твій оригінальний і правильний ендпоінт
             const res = await fetch(`${API_BASE_URL}/stops/search?q=${encodeURIComponent(query)}`);
             if (!res.ok) throw new Error('Помилка мережі');
             
-            const stops = await res.json();
+          const stops = await res.json();
             
             if (stops.length === 0) {
                 suggestionsBox.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">Нічого не знайдено</div>';
@@ -1132,27 +1148,54 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                 return;
             }
 
+            // 1. ГРУПУЄМО ЗУПИНКИ ЗА НАЗВОЮ
+            const groupedStops = {};
+            stops.forEach(stop => {
+                if (!groupedStops[stop.name]) {
+                    groupedStops[stop.name] = {
+                        name: stop.name,
+                        ids: [stop.stopId], // Робимо масив ID, щоб зберегти обидві платформи
+                        routes: stop.routes ? [...stop.routes] : []
+                    };
+                } else {
+                    // Якщо така назва вже є, просто докидаємо ID другої платформи і її маршрути
+                    groupedStops[stop.name].ids.push(stop.stopId);
+                    if (stop.routes) {
+                        groupedStops[stop.name].routes.push(...stop.routes);
+                    }
+                }
+            });
+
+            // Перетворюємо об'єкт назад на масив унікальних зупинок
+            const finalStops = Object.values(groupedStops);
+
             suggestionsBox.innerHTML = '';
             
-            stops.forEach(stop => {
+           // 2. МАЛЮЄМО МІНІМАЛІСТИЧНІ ЗУПИНКИ (тільки назва)
+            finalStops.forEach(group => {
                 const div = document.createElement('div');
-                div.className = 'suggestion-item'; // Використовуємо існуючий клас
-                div.textContent = stop.name; // Якщо у тебе інше поле (наприклад stopName), зміни тут
+                div.className = 'stop-card';
                 
                 div.style.padding = '12px 16px';
                 div.style.cursor = 'pointer';
                 div.style.borderBottom = '1px solid var(--border)';
                 div.style.background = 'var(--bg)';
-                div.style.color = 'var(--text)';
+                
+                const nameDiv = document.createElement('div');
+                nameDiv.style.fontWeight = 'bold';
+                nameDiv.style.color = 'var(--text)';
+                nameDiv.textContent = group.name; // Тільки назва!
+                
+                div.appendChild(nameDiv);
                 
                 div.addEventListener('click', () => {
-                    input.value = stop.name; // Підставляємо в інпут
+                    input.value = group.name; 
                     suggestionsBox.innerHTML = '';
                     suggestionsBox.style.display = 'none';
                     
-                    // Зберігаємо вибрану зупинку для побудови маршруту
-                    if (isFrom) routeFromStop = stop;
-                    else routeToStop = stop;
+                    // Під капотом ми все ще зберігаємо всі ID платформ для бекенду
+                    if (isFrom) routeFromStop = group;
+                    else routeToStop = group;
                 });
                 
                 suggestionsBox.appendChild(div);
@@ -1164,17 +1207,131 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
         }
     });
 
-    // Ховаємо підказки при кліку деінде
     document.addEventListener('click', (e) => {
         if (!input.contains(e.target) && !suggestionsBox.contains(e.target)) {
             suggestionsBox.style.display = 'none';
         }
     });
 }
-
 // Запускаємо логіку для обох полів
 setupRouteAutocomplete('route-input-from', 'route-suggestions-from', true);
 setupRouteAutocomplete('route-input-to', 'route-suggestions-to', false);
+
+
+//=====================Результат пошуку маршруту====================
+// Допоміжна функція: перетворює хвилини від півночі (напр. 500) у формат HH:MM (08:20)
+function formatTime(minutes) {
+    const h = Math.floor(minutes / 60).toString().padStart(2, '0');
+    const m = (minutes % 60).toString().padStart(2, '0');
+    return `${h}:${m}`;
+}
+
+// Використовуємо твої реальні ID з HTML
+const searchRouteBtn = document.getElementById('route-search-btn');
+const routeResultsBox = document.getElementById('route-results-list');
+
+if (searchRouteBtn && routeResultsBox) {
+    searchRouteBtn.addEventListener('click', async () => {
+        // 1. Перевіряємо, чи юзер обрав обидві зупинки
+        if (!routeFromStop || !routeToStop) {
+            alert('Wybierz przystanek początkowy i końcowy z listy!');
+            return;
+        }
+
+        // Показуємо завантаження в твоєму стилі
+        routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Szukam połączeń... ⏳</div>';
+
+        // 2. Витягуємо масиви ID (наші платформи) і клеїмо їх через кому
+        const fromIds = routeFromStop.ids.join(',');
+        const toIds = routeToStop.ids.join(',');
+
+        try {
+            // 3. Відправляємо запит
+            const res = await fetch(`${API_BASE_URL}/route/search?from=${fromIds}&to=${toIds}`);
+            if (!res.ok) throw new Error('Помилка сервера');
+            
+            const routes = await res.json();
+
+            routeResultsBox.innerHTML = '';
+
+            if (routes.length === 0) {
+                routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Brak bezpośrednich połączeń 😔</div>';
+                return;
+            }
+
+           // 4. Малюємо знайдені маршрути у стилі карток відправлення (dep-card)
+            routes.forEach(route => {
+                // Рахуємо таймер
+                const now = new Date();
+                const currentMin = now.getHours() * 60 + now.getMinutes();
+                let countdown = route.departureMin - currentMin;
+                if (countdown < 0) countdown = 0; 
+                
+                const timeText = countdown === 0 ? '< 1 min' : `${countdown} min`;
+                // Використовуємо твій клас live для акценту (якщо хочеш сірий - прибери ' live')
+                const minClass = 'dep-min live'; 
+
+                const depTime = formatTime(route.departureMin);
+                const arrTime = formatTime(route.arrivalMin);
+                const duration = route.arrivalMin - route.departureMin;
+
+                // Розділяємо "Park Bronowice 02" на назву і код
+                const splitStopName = (fullName) => {
+                    const parts = fullName.split(' ');
+                    const code = parts.pop();
+                    return { name: parts.join(' '), code: code };
+                };
+                const fromStop = splitStopName(route.fromStopName);
+                const toStop = splitStopName(route.toStopName);
+
+                // Визначаємо тролейбус (по твоєму алгоритму)
+                const routeNum = parseInt(route.route, 10);
+                const trolleyClass = (routeNum >= 150) ? ' trolleybus' : '';
+
+                // Створюємо обгортку (як у вкладці Przystanek)
+                const wrapper = document.createElement('div');
+                wrapper.className = 'dep-item';
+                wrapper.style.marginBottom = '10px'; // Трохи відступу між результатами
+
+                const card = document.createElement('div');
+                card.className = 'dep-card';
+
+                // Збираємо картку за твоїм шаблоном
+                card.innerHTML = `
+                  <div class="dep-route-wrap">
+                    <div class="dep-route-box${trolleyClass}">${route.route}</div>
+                  </div>
+                  <div class="dep-info">
+                    <!-- Замість напрямку пишемо зупинку відправлення -->
+                    <div class="dep-dir" style="font-size: 1.05em; margin-bottom: 4px;">
+                        ${fromStop.name} <span style="font-size: 0.85em; opacity: 0.7;">${fromStop.code}</span>
+                    </div>
+                    <!-- Замість статусу пишемо зупинку прибуття -->
+                    <div class="dep-status status-sched">
+                        ➔ ${toStop.name} <span style="font-size: 0.9em;">${toStop.code}</span>
+                    </div>
+                  </div>
+                  <div class="dep-times" style="text-align: right;">
+                    <!-- Великий таймер -->
+                    <div class="${minClass}">${timeText}</div>
+                    <!-- Точний час -->
+                    <div class="dep-sched" style="margin-top: 4px;">
+                        ${depTime} ➔ ${arrTime} <br/> 
+                        <span style="font-size: 0.85em; opacity: 0.8;">(${duration} min)</span>
+                    </div>
+                  </div>
+                `;
+
+                wrapper.appendChild(card);
+                routeResultsBox.appendChild(wrapper);
+            });
+
+        } catch (error) {
+            console.error('Помилка пошуку:', error);
+            routeResultsBox.innerHTML = '<div style="text-align: center; color: red; margin-top: 40px;">Błąd wyszukiwania trasy.</div>';
+        }
+    });
+}
 
 
 // ==================== Вкладка "Przystanek" (Розклад) ====================
@@ -1275,7 +1432,7 @@ function loadNearbyStopsDefault() {
     if (recents.length > 0) {
         const recentsHeader = document.createElement('div');
         recentsHeader.style = 'padding: 10px; font-weight: bold; color: var(--blue);';
-        recentsHeader.textContent = '🕒 Ostatnio wyszukiwane';
+        recentsHeader.innerHTML = '<div class="svg-icon icon-clock"></div> Ostatnio wyszukiwane';
         stopSuggestionsBox.appendChild(recentsHeader);
         
         recents.forEach(stop => {
@@ -1297,7 +1454,7 @@ function loadNearbyStopsDefault() {
         return;
     }
 
-    nearbyContainer.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">📍 Шукаємо локацію...</div>';
+    nearbyContainer.innerHTML = '<div style="padding: 10px; color: var(--text-muted);"><div class="svg-icon icon-map-pin"></div>Шукаємо локацію...</div>';
 
     if ('geolocation' in navigator) {
         navigator.geolocation.getCurrentPosition(
@@ -1335,7 +1492,7 @@ async function showNearbyStops(lat, lon) {
             return;
         }
         
-        nearbyContainer.innerHTML = '<div style="padding: 10px; font-weight: bold; color: var(--blue);">📍 Przystanki w pobliżu</div>';
+        nearbyContainer.innerHTML = '<div style="padding: 10px; font-weight: bold; color: var(--blue);"><div class="svg-icon icon-map-pin"></div> Przystanki w pobliżu</div>';
         
         groups.forEach(group => {
             group.stops.forEach(stop => {
@@ -1404,7 +1561,7 @@ function addMinutesToTime(timeStr, mins) {
 // Крок 3: Завантаження та малювання розкладу
 async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset = 0) {
   if (!isBackgroundRefresh && fetchOffset === 0) {
-    departuresList.innerHTML = '<div style="text-align: center; margin-top: 40px; color: var(--text-muted);">Завантаження... ⏳</div>';
+    departuresList.innerHTML = '<div style="text-align: center; margin-top: 40px; color: var(--text-muted);">Завантаження... <div class="svg-icon icon-hourglass"></div></div>';
   }
   
   try {

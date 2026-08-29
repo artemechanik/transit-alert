@@ -608,8 +608,24 @@
     line-height: 1;
     background: transparent;
     position: relative;
-  }
-  
+  } 
+  .live-label {
+    position: absolute;
+    bottom: 2px; /* Притискаємо до самого низу квадратика */
+    left: 50%;
+    transform: translateX(-50%); /* Вирівнюємо рівно по центру */
+    font-size: 8px; /* Дуже дрібний шрифт */
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--danger); /* Зелений колір (або заміни на var(--danger) для червоного) */
+    letter-spacing: 0.5px;
+    animation: blink-live 1.5s infinite; /* Наше різке моргання */
+}
+
+@keyframes blink-live {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}
 /* Малюємо самі ріжки */
 .dep-route-box.trolleybus::before,
 .dep-route-box.trolleybus::after {
@@ -694,19 +710,6 @@
     display: flex; 
     align-items: center; 
     justify-content: center;
-  }
-  /* --- Live індикатор (Супутник) --- */
-  .live-icon {
-    display: inline-block;
-    margin-right: 6px;
-    font-size: 14px; /* Підганяємо під розмір тексту статусу */
-    animation: satellite-float 2s ease-in-out infinite;
-  }
-
-  @keyframes satellite-float {
-    0% { transform: translateY(0px) scale(0.95); opacity: 0.8; }
-    50% { transform: translateY(-1px) scale(1.15); opacity: 1; }
-    100% { transform: translateY(0px) scale(0.95); opacity: 0.8; }
   }
 
 /* --- КНОПКА ЛОКАЛІЗАЦІЇ (GPS) --- */

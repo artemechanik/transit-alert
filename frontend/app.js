@@ -37,7 +37,10 @@ function getFingerprint() {
   }
   return fp;
 }
-
+window.addEventListener('DOMContentLoaded', () => {
+    // Фіксуємо початковий стан при завантаженні
+    window.history.replaceState({ screen: 'map' }, "");
+});
 // ==================== Карта ====================
 let map, reportMarkersLayer, searchMarker, vehicleMarker;
 let userLocationMarker; // Наша синя крапка (або чоловічок з валізою)
@@ -544,11 +547,11 @@ function stopVehicleTracking() {
 }
 
 // ==================== Нижня навігація ====================
-function switchScreen(screen, btn) {
+function switchScreen(screenId, btn, isBackAction = false) {
   // --- ДОДАЄМО: ЗАКРИВАЄМО МІНІ-КАРТУ, ЯКЩО ВОНА ВІДКРИТА ---
   const vehicleModal = document.getElementById('vehicle-modal');
   if (vehicleModal && vehicleModal.style.display !== 'none') {
-    document.getElementById('close-modal-btn').click(); // Імітуємо клік по хрестику, щоб знищити карту правильно
+    document.getElementById('close-modal-btn').click(); 
   }
   // --------------------------------------------------------
 
@@ -558,9 +561,8 @@ function switchScreen(screen, btn) {
   if (btn) {
       btn.classList.add('active');
   } else {
-// ... і далі йде твій старий код без змін
       // Якщо this не передали в HTML, шукаємо кнопку по ID
-      const activeBtn = document.getElementById(`nav-${screen}`);
+      const activeBtn = document.getElementById(`nav-${screenId}`);
       if (activeBtn) activeBtn.classList.add('active');
   }
 
@@ -576,45 +578,44 @@ function switchScreen(screen, btn) {
   const routeScreen = document.getElementById('screen-route');
   if (routeScreen) routeScreen.style.display = 'none';
   
-  // ... далі твій існуючий код (if (screen === 'map') і т.д.)
   // 3. Обробляємо логіку для кожної вкладки
-  if (screen === 'map') {
+  if (screenId === 'map') {
     closeDrawer(false); 
-    // Показуємо елементи карти
     if (mapSearchBar) mapSearchBar.style.display = 'flex';
     if (fabReport) fabReport.style.display = 'flex';
     
-  } else if (screen === 'stop') {
+  } else if (screenId === 'stop') {
     stopVehicleTracking();
     closeDrawer(false); 
-    // ХОВАЄМО пошук карти та кнопку, бо тут є свій пошук
     if (mapSearchBar) mapSearchBar.style.display = 'none';
     if (fabReport) fabReport.style.display = 'none';
     if (stopScreen) stopScreen.style.display = 'flex'; 
     
     loadNearbyStopsDefault();
   
-  } else if (screen === 'reports') {
+  } else if (screenId === 'reports') {
     stopVehicleTracking();
     openDrawer('Zgłoszenia', renderReportsList);
     if (mapSearchBar) mapSearchBar.style.display = 'flex';
     if (fabReport) fabReport.style.display = 'flex';
     
-  } else if (screen === 'route') {
+  } else if (screenId === 'route') {
     stopVehicleTracking();
-    
-    // 1. Якщо є шторка - закриваємо її (щоб не заважала)
     if (typeof closeDrawer === 'function') closeDrawer(false);
-    
-    // 2. Показуємо наш новий повноцінний екран планувальника
-    const routeScreen = document.getElementById('screen-route');
-    if (routeScreen) routeScreen.style.display = 'flex'; // flex, щоб елементи красиво стали
-    
-    // 3. Ховаємо зайве
+    if (routeScreen) routeScreen.style.display = 'flex'; 
     if (mapSearchBar) mapSearchBar.style.display = 'none';
     if (fabReport) fabReport.style.display = 'none';
   }
-}
+
+  // МАГІЯ ІСТОРІЇ: Якщо перемикання відбулося через клік юзера, записуємо крок
+  if (!isBackAction) {
+      const currentState = window.history.state;
+      if (!currentState || currentState.screen !== screenId) {
+          window.history.pushState({ screen: screenId }, "");
+      }
+  }
+} // <--- ВАЖЛИВО: Ось ця дужка закриває функцію!
+
 
 function openDrawer(title, fillFn) {
   document.querySelector('#drawer-header h2').textContent = title;
@@ -1431,7 +1432,7 @@ function loadNearbyStopsDefault() {
     const recents = getRecentStops();
     if (recents.length > 0) {
         const recentsHeader = document.createElement('div');
-        recentsHeader.style = 'padding: 10px; font-weight: bold; color: var(--blue);';
+        recentsHeader.style = 'padding: 10px; font-weight: bold; color: var(--blue); display: flex; align-items: center; gap: 12px;';
         recentsHeader.innerHTML = '<div class="svg-icon icon-clock"></div> Ostatnio wyszukiwane';
         stopSuggestionsBox.appendChild(recentsHeader);
         
@@ -1443,6 +1444,8 @@ function loadNearbyStopsDefault() {
     // 2. ГОТУЄМО КОНТЕЙНЕР ДЛЯ ЗУПИНОК ПОРУЧ
     const nearbyContainer = document.createElement('div');
     nearbyContainer.id = 'nearby-container';
+    nearbyContainer.style.margin = '0';
+    nearbyContainer.style.padding = '0';
     stopSuggestionsBox.appendChild(nearbyContainer);
     stopSuggestionsBox.style.display = 'block';
 
@@ -1492,7 +1495,7 @@ async function showNearbyStops(lat, lon) {
             return;
         }
         
-        nearbyContainer.innerHTML = '<div style="padding: 10px; font-weight: bold; color: var(--blue);"><div class="svg-icon icon-map-pin"></div> Przystanki w pobliżu</div>';
+        nearbyContainer.innerHTML = '<div style="padding: 10px; font-weight: bold; color: var(--blue); display: flex; align-items: center; gap: 12px;"><div class="svg-icon icon-map-pin"></div> Przystanki w pobliżu</div>';
         
         groups.forEach(group => {
             group.stops.forEach(stop => {
@@ -1666,7 +1669,7 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
         }
         
         let statusHtml = '';
-        const liveIcon = '<div class="live-indicator"></div>'; // Наш супутник для GPS-даних
+        const liveIcon = ''; // Надпис LIVE
 
         if (dep.isRealTime) {
           if (dep.delayMinutes > 0) {
@@ -1719,9 +1722,16 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
         const routeNum = parseInt(dep.route, 10);
         const trolleyClass = (routeNum >= 150) ? ' trolleybus' : '';
         // ОНОВЛЕНА РОЗМІТКА КАРТКИ
+                // Перевіряємо чи рейс онлайн, щоб додати напис
+        const liveLabelHtml = dep.isRealTime ? '<span class="live-label">LIVE</span>' : '';
+
+        // ОНОВЛЕНА РОЗМІТКА КАРТКИ
         card.innerHTML = `
           <div class="dep-route-wrap">
-            <div class="dep-route-box${trolleyClass}">${dep.route}</div>
+            <div class="dep-route-box${trolleyClass}">
+                ${dep.route}
+                ${liveLabelHtml} <!-- Вставляємо наше малесеньке слово -->
+            </div>
             <div class="dep-vehicle-id">${vehicleIdHtml}</div>
           </div>
           <div class="dep-info">
@@ -1733,7 +1743,7 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
             <div class="dep-sched">${schedHtml}</div>
           </div>
         `;
-
+        
         const expandPanel = document.createElement('div');
         expandPanel.className = 'dep-expand';
 
@@ -1850,4 +1860,23 @@ departuresList.addEventListener('touchend', async (e) => {
   }
   startY = 0;
 });
+window.addEventListener('popstate', (event) => {
+    if (event.state && event.state.screen) {
+        const targetScreenId = event.state.screen;
+        
+        // Знаходимо HTML-кнопку, яка відповідає за цей екран
+        let targetButton;
+        switch(targetScreenId) {
+            case 'map': targetButton = document.getElementById('nav-map'); break;
+            case 'route': targetButton = document.getElementById('nav-route'); break;
+            case 'stop': targetButton = document.getElementById('nav-stop'); break;
+            case 'reports': targetButton = document.getElementById('nav-reports'); break;
+        }
 
+        // Викликаємо твою ж функцію перемикання, але передаємо true, 
+        // щоб вона знову не записала це в історію
+        if (targetButton) {
+            switchScreen(targetScreenId, targetButton, true);
+        }
+    }
+});

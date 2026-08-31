@@ -48,7 +48,9 @@ object TransitGraph {
         val today = java.time.LocalDate.now(LUBLIN_ZONE)
         
         transaction {
-            val activeServices = activeServiceIds(today)
+            // Беремо сервіси за сьогодні І ЗА ВЧОРА (для нічних рейсів)
+            val activeServices = activeServiceIds(today) + activeServiceIds(today.minusDays(1))
+            
             if (activeServices.isEmpty()) {
                 println("Немає активних сервісів на сьогодні, граф не побудовано.")
                 return@transaction

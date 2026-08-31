@@ -31,7 +31,8 @@ fun Application.stopRoutes() {
             }
 
             val nearbyGroups = transaction {
-                Stops.selectAll().map { row ->
+                // 1. Знаходимо всі зупинки в радіусі
+                val allNearbyStops = Stops.selectAll().map { row ->
                     TempStop(
                         stopId = row[Stops.stopId],
                         name = row[Stops.name],
@@ -41,45 +42,61 @@ fun Application.stopRoutes() {
                             row[Stops.lat], row[Stops.lon]
                         )
                     )
-                }
-                .filter { it.distance <= 1500.0 } // Фільтр увімкнено!
-                .groupBy { it.name }
-                .mapNotNull { (groupName, stopsInGroup) ->
-                    val minDistance = stopsInGroup.minOf { it.distance }
-                    
-                    NearbyGroupDto(
-                        name = groupName,
-                        distance = minDistance.roundToLong(),
-                        stops = stopsInGroup.map { tempStop ->
-                            
-                            // Дістаємо унікальні маршрути та напрямки для цієї платформи
-                            val platformRoutes = StopDepartures
-                                .join(TripHeadsigns, JoinType.INNER, onColumn = StopDepartures.tripId, otherColumn = TripHeadsigns.tripId)
-                                .select(StopDepartures.route, TripHeadsigns.headsign)
-                                .where { StopDepartures.stopId eq tempStop.stopId }
-                                .withDistinct()
-                                .map { row ->
-                                    RoutePillDto(
-                                        route = row[StopDepartures.route],
-                                        direction = row[TripHeadsigns.headsign]
-                                    )
-                                }
-                                .distinctBy { it.route to it.direction.trim() }
-                                .sortedBy { it.route.toIntOrNull() ?: 9999 } // Сортуємо за номером (14, 17, 150)
+                }.filter { it.distance <= 1500.0 }
 
-                            NearbyStopDto(
-                                stopId = tempStop.stopId, 
-                                name = tempStop.name, 
-                                code = tempStop.code, 
-                                routes = platformRoutes
-                            ) 
+                val stopIds = allNearbyStops.map { it.stopId }
+                
+                // 2. Беремо активні сервіси (сьогодні + вчора)
+                val today = java.time.LocalDate.now(LUBLIN_ZONE)
+                val activeServices = activeServiceIds(today) + activeServiceIds(today.minusDays(1))
+
+                // 3. ОДИН запит до бази для всіх знайдених зупинок відразу!
+                val routesByStop = mutableMapOf<String, MutableSet<RoutePillDto>>()
+                
+                if (stopIds.isNotEmpty() && activeServices.isNotEmpty()) {
+                    StopDepartures
+                        .join(TripHeadsigns, JoinType.INNER, onColumn = StopDepartures.tripId, otherColumn = TripHeadsigns.tripId)
+                        .select(StopDepartures.stopId, StopDepartures.route, TripHeadsigns.headsign)
+                        .where { 
+                            (StopDepartures.stopId inList stopIds) and 
+                            (StopDepartures.serviceId inList activeServices) // Фільтр на сьогодні!
                         }
-                    )
+                        .forEach { row ->
+                            val sId = row[StopDepartures.stopId]
+                            val pill = RoutePillDto(
+                                route = row[StopDepartures.route],
+                                direction = row[TripHeadsigns.headsign]
+                            )
+                            routesByStop.getOrPut(sId) { mutableSetOf() }.add(pill)
+                        }
                 }
-                .sortedBy { it.distance }
-                .take(8)
-            }
 
+                // 4. Групуємо і формуємо відповідь у пам'яті
+                allNearbyStops.groupBy { it.name }
+                    .mapNotNull { (groupName, stopsInGroup) ->
+                        val minDistance = stopsInGroup.minOf { it.distance }
+                        
+                        NearbyGroupDto(
+                            name = groupName,
+                            distance = minDistance.roundToLong(),
+                            stops = stopsInGroup.map { tempStop ->
+                                
+                                val platformRoutes = (routesByStop[tempStop.stopId] ?: emptySet())
+                                    .distinctBy { it.route to it.direction.trim() }
+                                    .sortedBy { it.route.toIntOrNull() ?: 9999 }
+
+                                NearbyStopDto(
+                                    stopId = tempStop.stopId, 
+                                    name = tempStop.name, 
+                                    code = tempStop.code, 
+                                    routes = platformRoutes
+                                ) 
+                            }
+                        )
+                    }
+                    .sortedBy { it.distance }
+                    .take(8)
+            }
             call.respond(nearbyGroups)
         }
     }

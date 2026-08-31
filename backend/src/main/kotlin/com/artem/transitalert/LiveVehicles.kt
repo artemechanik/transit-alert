@@ -106,6 +106,17 @@ object LiveVehiclesCache {
 	} ?: throw Exception("Таймаут 10с при запиті до GTFS-RT")
         val feed = GtfsRealtime.FeedMessage.parseFrom(bytes)
 
+        // --- НОВИЙ БЛОК: Захист від застарілого фіда ---
+        if (feed.header.hasTimestamp()) {
+            val feedTimestamp = feed.header.timestamp
+            val currentTimestamp = java.time.Instant.now().epochSecond
+
+            val diff = currentTimestamp - feedTimestamp
+            if (diff > 300) { // Якщо дані старіші за 5 хвилин (300 секунд)
+                println("⚠️ УВАГА! GTFS-RT фід застарів. Затримка: $diff секунд!")
+            }
+        }
+        // -----------------------------------------------
         val actualTimes = collectActualTimes(feed)
 
 	     val fresh = ConcurrentHashMap<String, VehiclePosition>()

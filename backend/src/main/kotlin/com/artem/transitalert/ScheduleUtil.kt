@@ -127,7 +127,6 @@ fun findDirectTrips(fromIds: List<String>, toIds: List<String>, activeServices: 
     // Якщо немає активних сервісів на сьогодні — повертаємо порожнечу
     if (fromIds.isEmpty() || toIds.isEmpty() || activeServices.isEmpty()) return emptyList()
 // Якщо немає активних сервісів на сьогодні — повертаємо порожнечу
-    if (fromIds.isEmpty() || toIds.isEmpty() || activeServices.isEmpty()) return emptyList()
 
    // --- НОВИЙ БЛОК: Витягуємо красиві назви зупинок з номерами платформ ---
     val stopNames = mutableMapOf<String, String>()

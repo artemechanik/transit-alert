@@ -84,3 +84,20 @@ data class DirectRoute(
     val departureMin: Int,
     val arrivalMin: Int
 )
+
+// Це один "шматок" поїздки (від посадки до висадки/пересадки)
+@Serializable
+data class JourneyLeg(
+    val route: String,
+    val fromStopName: String,
+    val toStopName: String,
+    val departureMin: Int,
+    val arrivalMin: Int
+)
+
+// Це весь маршрут цілком (сумарний час і список шматків)
+@Serializable
+data class JourneyResponse(
+    val totalMinutes: Int,
+    val legs: List<JourneyLeg>
+)

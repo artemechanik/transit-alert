@@ -153,6 +153,81 @@ fun Application.formRoutes() {
             call.respond(routes)
         }
         
+        // Новий розумний пошук з пересадками
+        get("/route/complex") {
+            val fromParam = call.parameters["from"]
+            val toParam = call.parameters["to"]
+
+            if (fromParam.isNullOrBlank() || toParam.isNullOrBlank()) {
+                call.respond(emptyList<JourneyResponse>())
+                return@get
+            }
+
+            val fromIds = fromParam.split(",")
+            val toIds = toParam.split(",")
+            val now = java.time.LocalTime.now(LUBLIN_ZONE)
+            val currentMin = now.hour * 60 + now.minute
+
+            // 1. Питаємо алгоритм Дейкстри!
+            val path = TransitGraph.findBestRoute(fromIds, toIds, currentMin)
+
+            if (path == null || path.isEmpty()) {
+                call.respond(emptyList<JourneyResponse>()) // Немає шляху
+                return@get
+            }
+
+            // 2. Витягуємо красиві назви зупинок одним запитом
+            val stopIdsToFetch = path.flatMap { listOf(it.fromStopId, it.toStopId) }.distinct()
+            val stopNames = transaction {
+                Stops.select(Stops.stopId, Stops.name, Stops.code)
+                    .where { Stops.stopId inList stopIdsToFetch }
+                    .associate { it[Stops.stopId] to "${it[Stops.name]} ${it[Stops.code]}" }
+            }
+
+            // 3. СКЛЕЮЄМО ЗУПИНКИ (щоб не показувати кожну проміжну платформу, а лише місця посадки/пересадки)
+            val legs = mutableListOf<JourneyLeg>()
+            var currentLeg = mutableListOf<RouteEdge>()
+
+            for (edge in path) {
+                // Якщо це той самий автобус - продовжуємо збирати його шлях
+                if (currentLeg.isEmpty() || currentLeg.last().tripId == edge.tripId) {
+                    currentLeg.add(edge)
+                } else {
+                    // Автобус змінився (пересадка)! Зберігаємо попередній відрізок
+                    val first = currentLeg.first()
+                    val last = currentLeg.last()
+                    legs.add(JourneyLeg(
+                        route = first.route,
+                        fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
+                        toStopName = stopNames[last.toStopId] ?: last.toStopId,
+                        departureMin = first.departureMin,
+                        arrivalMin = last.arrivalMin
+                    ))
+                    currentLeg = mutableListOf(edge) // Починаємо збирати новий автобус
+                }
+            }
+            
+            // Не забуваємо додати останній автобус, на якому ми доїхали до фінішу
+            if (currentLeg.isNotEmpty()) {
+                val first = currentLeg.first()
+                val last = currentLeg.last()
+                legs.add(JourneyLeg(
+                    route = first.route,
+                    fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
+                    toStopName = stopNames[last.toStopId] ?: last.toStopId,
+                    departureMin = first.departureMin,
+                    arrivalMin = last.arrivalMin
+                ))
+            }
+
+            // Формуємо фінальну відповідь
+            val response = JourneyResponse(
+                totalMinutes = path.last().arrivalMin - path.first().departureMin,
+                legs = legs
+            )
+
+            call.respond(listOf(response))
+        }
         
         // Напрямки для конкретної лінії — тільки ті, якими вона реально їде
         // біля поточного часу (±90 хв), відсортовані від найближчого рейсу.

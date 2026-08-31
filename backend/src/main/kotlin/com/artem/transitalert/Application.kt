@@ -21,7 +21,8 @@ fun main() {
 fun Application.module() {
     // 1. База даних
     DatabaseFactory.init()
-
+	// БУДУЄМО ГРАФ МАРШРУТІВ ДЛЯ ПОШУКУ З ПЕРЕСАДКАМИ
+  	  TransitGraph.buildGraphForToday()
     // 2. Встановлюємо наш новий потужний CORS (один раз!)
     install(CORS) {
         anyHost()

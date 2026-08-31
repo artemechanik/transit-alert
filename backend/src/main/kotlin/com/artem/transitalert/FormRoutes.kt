@@ -153,10 +153,12 @@ fun Application.formRoutes() {
             call.respond(routes)
         }
         
-        // Новий розумний пошук з пересадками
+      // Новий розумний МУЛЬТИПОШУК з пересадками
         get("/route/complex") {
             val fromParam = call.parameters["from"]
             val toParam = call.parameters["to"]
+            // Додаємо можливість фронтенду вказати ліміт, за замовчуванням 5
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 5 
 
             if (fromParam.isNullOrBlank() || toParam.isNullOrBlank()) {
                 call.respond(emptyList<JourneyResponse>())
@@ -166,34 +168,53 @@ fun Application.formRoutes() {
             val fromIds = fromParam.split(",")
             val toIds = toParam.split(",")
             val now = java.time.LocalTime.now(LUBLIN_ZONE)
-            val currentMin = now.hour * 60 + now.minute
+            
+            // Змінна для поточного часу пошуку (буде зсуватися)
+            var currentSearchMin = now.hour * 60 + now.minute
+            
+            // Масив, куди ми будемо складати всі знайдені варіанти поїздки
+            val allJourneys = mutableListOf<JourneyResponse>()
 
-            // 1. Питаємо алгоритм Дейкстри!
-            val path = TransitGraph.findBestRoute(fromIds, toIds, currentMin)
+            // --- ПОЧАТОК ЦИКЛУ МУЛЬТИПОШУКУ ---
+            while (allJourneys.size < limit) {
+                // 1. Питаємо алгоритм Дейкстри!
+                val path = TransitGraph.findBestRoute(fromIds, toIds, currentSearchMin)
 
-            if (path == null || path.isEmpty()) {
-                call.respond(emptyList<JourneyResponse>()) // Немає шляху
-                return@get
-            }
+                // Якщо шляхів більше немає - розриваємо цикл
+                if (path == null || path.isEmpty()) {
+                    break 
+                }
 
-            // 2. Витягуємо красиві назви зупинок одним запитом
-            val stopIdsToFetch = path.flatMap { listOf(it.fromStopId, it.toStopId) }.distinct()
-            val stopNames = transaction {
-                Stops.select(Stops.stopId, Stops.name, Stops.code)
-                    .where { Stops.stopId inList stopIdsToFetch }
-                    .associate { it[Stops.stopId] to "${it[Stops.name]} ${it[Stops.code]}" }
-            }
+                // 2. Витягуємо красиві назви зупинок
+                val stopIdsToFetch = path.flatMap { listOf(it.fromStopId, it.toStopId) }.distinct()
+                val stopNames = transaction {
+                    Stops.select(Stops.stopId, Stops.name, Stops.code)
+                        .where { Stops.stopId inList stopIdsToFetch }
+                        .associate { it[Stops.stopId] to "${it[Stops.name]} ${it[Stops.code]}" }
+                }
 
-            // 3. СКЛЕЮЄМО ЗУПИНКИ (щоб не показувати кожну проміжну платформу, а лише місця посадки/пересадки)
-            val legs = mutableListOf<JourneyLeg>()
-            var currentLeg = mutableListOf<RouteEdge>()
+                // 3. СКЛЕЮЄМО ЗУПИНКИ
+                val legs = mutableListOf<JourneyLeg>()
+                var currentLeg = mutableListOf<RouteEdge>()
 
-            for (edge in path) {
-                // Якщо це той самий автобус - продовжуємо збирати його шлях
-                if (currentLeg.isEmpty() || currentLeg.last().tripId == edge.tripId) {
-                    currentLeg.add(edge)
-                } else {
-                    // Автобус змінився (пересадка)! Зберігаємо попередній відрізок
+                for (edge in path) {
+                    if (currentLeg.isEmpty() || currentLeg.last().tripId == edge.tripId) {
+                        currentLeg.add(edge)
+                    } else {
+                        val first = currentLeg.first()
+                        val last = currentLeg.last()
+                        legs.add(JourneyLeg(
+                            route = first.route,
+                            fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
+                            toStopName = stopNames[last.toStopId] ?: last.toStopId,
+                            departureMin = first.departureMin,
+                            arrivalMin = last.arrivalMin
+                        ))
+                        currentLeg = mutableListOf(edge)
+                    }
+                }
+                
+                if (currentLeg.isNotEmpty()) {
                     val first = currentLeg.first()
                     val last = currentLeg.last()
                     legs.add(JourneyLeg(
@@ -203,30 +224,32 @@ fun Application.formRoutes() {
                         departureMin = first.departureMin,
                         arrivalMin = last.arrivalMin
                     ))
-                    currentLeg = mutableListOf(edge) // Починаємо збирати новий автобус
+                }
+
+                // 4. Додаємо готовий маршрут до загального списку
+                allJourneys.add(
+                    JourneyResponse(
+                        totalMinutes = path.last().arrivalMin - path.first().departureMin,
+                        legs = legs
+                    )
+                )
+
+                // 5. ЗСУВАЄМО ЧАС ДЛЯ НАСТУПНОЇ ІТЕРАЦІЇ
+                // Знаходимо перший реальний транспорт (не пішки)
+                val firstTransit = path.firstOrNull { it.tripId != "WALK" }
+                
+                if (firstTransit != null) {
+                    // Наступний маршрут шукаємо відразу після відправлення цього автобуса
+                    currentSearchMin = firstTransit.departureMin + 1
+                } else {
+                    // Якщо маршрут суто пішохідний (наприклад, зупинки в радіусі 600м)
+                    break 
                 }
             }
-            
-            // Не забуваємо додати останній автобус, на якому ми доїхали до фінішу
-            if (currentLeg.isNotEmpty()) {
-                val first = currentLeg.first()
-                val last = currentLeg.last()
-                legs.add(JourneyLeg(
-                    route = first.route,
-                    fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
-                    toStopName = stopNames[last.toStopId] ?: last.toStopId,
-                    departureMin = first.departureMin,
-                    arrivalMin = last.arrivalMin
-                ))
-            }
+            // --- КІНЕЦЬ ЦИКЛУ МУЛЬТИПОШУКУ ---
 
-            // Формуємо фінальну відповідь
-            val response = JourneyResponse(
-                totalMinutes = path.last().arrivalMin - path.first().departureMin,
-                legs = legs
-            )
-
-            call.respond(listOf(response))
+            // Віддаємо фронтенду цілий масив маршрутів!
+            call.respond(allJourneys)
         }
         
         // Напрямки для конкретної лінії — тільки ті, якими вона реально їде

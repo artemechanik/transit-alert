@@ -12,7 +12,8 @@ let modalTrackInterval = null;
 let modalMap = null;
 let modalUserMarker = null; // Додали маркер юзера для модалки
 let modalInitTimeout = null;
-
+let globalCachedNearbyStops = null;
+let globalCachedNearbyTime = 0;
 // ==================== Toast-повідомлення ====================
 let toastTimeout;
 function showToast(msg) {
@@ -1116,7 +1117,81 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ==================== ПЛАНУВАЛЬНИК МАРШРУТУ (TRASA) ====================
+// ==================== ІСТОРІЯ МАРШРУТІВ ТА ЗУПИНОК (TRASA) ====================
 
+// 1. Незалежна історія зупинок ТІЛЬКИ для полів вкладки Trasa
+function getRecentRouteStops() {
+    try { return JSON.parse(localStorage.getItem('ta_recent_route_stops')) || []; } catch (e) { return []; }
+}
+
+function saveRecentRouteStop(stop) {
+    let recents = getRecentRouteStops();
+    // Видаляємо дублікати по імені (бо платформи вже згруповані)
+    recents = recents.filter(s => s.name !== stop.name);
+    recents.unshift(stop);
+    if (recents.length > 2) recents.length = 2; // Ліміт: 2 зупинки!
+    localStorage.setItem('ta_recent_route_stops', JSON.stringify(recents));
+}
+
+// 2. Історія цілих маршрутів (Від ➔ До)
+function getRecentRoutes() {
+    try { return JSON.parse(localStorage.getItem('ta_recent_routes')) || []; } catch (e) { return []; }
+}
+
+function saveRecentRoute(fromStop, toStop) {
+    let routes = getRecentRoutes();
+    const routeKey = `${fromStop.name}-${toStop.name}`; // Унікальний ключ маршруту
+    
+    // Видаляємо такий самий маршрут, якщо він вже є, щоб підняти його наверх
+    routes = routes.filter(r => `${r.from.name}-${r.to.name}` !== routeKey);
+    routes.unshift({ from: fromStop, to: toStop });
+    
+    if (routes.length > 3) routes.length = 3; // Зберігаємо 3 останні маршрути
+    localStorage.setItem('ta_recent_routes', JSON.stringify(routes));
+}
+
+// 3. Відмальовка блоку "Останні маршрути" на головному екрані
+function renderRecentRoutes() {
+    const container = document.getElementById('recent-routes-list');
+    if (!container) return;
+    
+    const routes = getRecentRoutes();
+    if (routes.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let html = '<div style="padding: 10px; font-weight: bold; color: var(--text-muted); font-size: 0.9em;">OSTATNIE TRASY</div>';
+    
+    routes.forEach(route => {
+        html += `
+        <div class="stop-card" style="padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; gap: 10px;" 
+             onclick='applyRecentRoute(${JSON.stringify(route)})'>
+            <div class="svg-icon icon-clock" style="color: var(--blue);"></div>
+            <div style="flex: 1;">
+                <div style="font-weight: bold; color: var(--text);">${route.from.name}</div>
+                <div style="font-size: 0.85em; color: var(--text-muted);">➔ ${route.to.name}</div>
+            </div>
+        </div>`;
+    });
+    
+    container.innerHTML = html;
+}
+
+// 4. Дія при кліку на маршрут з історії
+function applyRecentRoute(route) {
+    // Заповнюємо поля вводу
+    document.getElementById('route-input-from').value = route.from.name;
+    document.getElementById('route-input-to').value = route.to.name;
+    
+    // Відновлюємо приховані об'єкти з усіма ID
+    routeFromStop = route.from;
+    routeToStop = route.to;
+    
+    // Ховаємо список останніх маршрутів і автоматично запускаємо пошук!
+    document.getElementById('recent-routes-list').style.display = 'none';
+    document.getElementById('route-search-btn').click(); 
+}
 let routeFromStop = null;
 let routeToStop = null;
 
@@ -1127,9 +1202,15 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
     if (!input || !suggestionsBox) return;
 
     input.addEventListener('input', async (e) => {
-        const query = e.target.value.trim();
+       const query = e.target.value.trim();
         
-        if (query.length < 2) {
+        if (query.length === 0) {
+            // Якщо поле повністю очистили — відразу повертаємо історію та GPS!
+            if (isFrom) routeFromStop = null; else routeToStop = null;
+            loadRouteDefaultSuggestions(isFrom);
+            return;
+        } else if (query.length < 2) {
+            // Якщо введена лише 1 літера — просто ховаємо список і чекаємо
             suggestionsBox.innerHTML = '';
             suggestionsBox.style.display = 'none';
             if (isFrom) routeFromStop = null; else routeToStop = null;
@@ -1197,6 +1278,10 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                     // Під капотом ми все ще зберігаємо всі ID платформ для бекенду
                     if (isFrom) routeFromStop = group;
                     else routeToStop = group;
+
+                    // ====== ДОДАЄМО ЦЕЙ РЯДОК ======
+                    // Зберігаємо зупинку в незалежну історію вкладки Trasa
+                   saveRecentRouteStop({ name: group.name, ids: group.ids });
                 });
                 
                 suggestionsBox.appendChild(div);
@@ -1218,7 +1303,211 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
 setupRouteAutocomplete('route-input-from', 'route-suggestions-from', true);
 setupRouteAutocomplete('route-input-to', 'route-suggestions-to', false);
 
+// ДОДАЄМО ВИКЛИК GPS-МЕНЮ ПРИ КЛІКУ В ПОЛЕ
+document.getElementById('route-input-from').addEventListener('focus', () => loadRouteDefaultSuggestions(true));
+document.getElementById('route-input-to').addEventListener('focus', () => loadRouteDefaultSuggestions(false));
+        // ==================== ДОПОМІЖНА ФУНКЦІЯ: ГРУПУВАННЯ ====================
+function groupStopsByNameAndDistance(stopsArray) {
+    const grouped = {};
+    stopsArray.forEach(stop => {
+        // Беремо масив ids (якщо це з історії) або робимо масив з одного stopId (якщо з GPS)
+        const currentIds = stop.ids ? stop.ids : (stop.stopId ? [stop.stopId] : []);
+        
+        if (!grouped[stop.name]) {
+            grouped[stop.name] = {
+                name: stop.name,
+                ids: [...currentIds],
+                routes: stop.routes ? [...stop.routes] : [],
+                distance: stop.distance
+            };
+        } else {
+            // Безпечно докидаємо всі нові ID, яких ще немає в групі
+            currentIds.forEach(id => {
+                if (!grouped[stop.name].ids.includes(id)) {
+                    grouped[stop.name].ids.push(id);
+                }
+            });
+            // Докидаємо маршрути
+            if (stop.routes) {
+                stop.routes.forEach(newRoute => {
+                    if (!grouped[stop.name].routes.find(r => r.route === newRoute.route)) {
+                        grouped[stop.name].routes.push(newRoute);
+                    }
+                });
+            }
+        }
+    });
+    return Object.values(grouped);
+}
 
+// ==================== КАРУСЕЛЬ TRASA (БЕЗ ПЛАТФОРМ) ====================
+function createRouteSuggestionElement(group, inputEl, suggestionsBoxEl, isFrom) {
+    const item = document.createElement('div');
+    item.className = 'stop-suggestion-item';
+    
+    const title = document.createElement('div');
+    title.className = 'stop-suggestion-title';
+    title.innerHTML = `${group.name}`; // БЕЗ КОДУ ПЛАТФОРМИ!
+    
+    if (group.distance) {
+        title.innerHTML += ` <span style="float: right; font-size: 13px; color: #888;">${group.distance}m</span>`;
+    }
+    item.appendChild(title);
+    
+    if (group.routes && group.routes.length > 0) {
+        const carousel = document.createElement('div');
+        carousel.className = 'stop-routes-carousel';
+        group.routes.forEach(r => {
+            const pill = document.createElement('div');
+            pill.className = 'route-pill';
+            pill.innerHTML = `<span class="route-pill-num">${r.route}</span><span class="route-pill-dir">${r.direction}</span>`;
+            carousel.appendChild(pill);
+        });
+        item.appendChild(carousel);
+    }
+    
+    item.addEventListener('click', () => {
+        // Вставляємо чисту назву в інпут
+        inputEl.value = group.name;
+        suggestionsBoxEl.style.display = 'none';
+        
+        // Передаємо в бекенд ВСІ зібрані ID платформ
+        const routeObj = { name: group.name, ids: group.ids };
+        if (isFrom) routeFromStop = routeObj;
+        else routeToStop = routeObj;
+        
+        // Зберігаємо в історію 
+      saveRecentRouteStop({ name: group.name, stopId: group.ids[0], code: '' });
+    });
+    return item;
+}
+
+// ==================== ВИКЛИК ІСТОРІЇ І НАЙБЛИЖЧИХ ЗУПИНОК (TRASA) ====================
+function loadRouteDefaultSuggestions(isFrom) {
+    const inputEl = document.getElementById(isFrom ? 'route-input-from' : 'route-input-to');
+    const boxEl = document.getElementById(isFrom ? 'route-suggestions-from' : 'route-suggestions-to');
+// === АБСОЛЮТНО АДАПТИВНА ВЕРСТКА ДЛЯ БУДЬ-ЯКОГО ЕКРАНА ===
+    // 1. Отримуємо точні координати інпута на поточному телефоні
+    const inputRect = inputEl.getBoundingClientRect();
+    
+    if (inputEl.value.trim() !== '') return;
+
+    boxEl.innerHTML = ''; 
+   // 2. Відриваємо список від звичайного потоку і робимо його "плаваючим"
+    boxEl.style.position = 'fixed'; // Фіксуємо відносно екрана
+    boxEl.style.left = '0';
+    boxEl.style.right = '0';
+    
+    // 3. Прибиваємо верх списку рівно під інпут (додаємо 8px відступу для краси)
+    boxEl.style.top = `${inputRect.bottom + 8}px`;
+    
+    // 4. Прибиваємо низ списку над твоєю навігацією 
+    // (заміни 70px на реальну висоту твого нижнього меню, зазвичай це 60-80px)
+    boxEl.style.bottom = '70px'; 
+    
+    // 5. Вбиваємо старі конфлікти
+    boxEl.style.maxHeight = 'none'; 
+    boxEl.style.height = 'auto'; 
+    boxEl.style.overflowY = 'auto'; 
+    boxEl.style.backgroundColor = 'var(--bg)'; 
+    boxEl.style.zIndex = '100'; 
+    // ========================================================
+    
+    // Якщо список не перекриває кнопку пошуку, а зсуває її вниз, 
+    // розкоментуй наступні три рядки:
+    // boxEl.style.position = 'absolute';
+    // boxEl.style.left = '0';
+    // boxEl.style.right = '0';
+    // ==================================================
+    // 1. ОСТАННІ ПОШУКИ (Групуємо історію, щоб прибрати платформи, якщо вони там були)
+    const recents = getRecentRouteStops();
+    if (recents.length > 0) {
+        const groupedRecents = groupStopsByNameAndDistance(recents);
+        
+        const recentsHeader = document.createElement('div');
+        recentsHeader.style = 'padding: 10px; font-weight: bold; color: var(--blue); display: flex; align-items: center; gap: 12px;';
+        recentsHeader.innerHTML = '<div class="svg-icon icon-clock"></div> Ostatnio wyszukiwane';
+        boxEl.appendChild(recentsHeader);
+        
+        groupedRecents.forEach(group => {
+            boxEl.appendChild(createRouteSuggestionElement(group, inputEl, boxEl, isFrom));
+        });
+    }
+
+    // 2. ЗУПИНКИ ПОРУЧ (GPS)
+    const nearbyContainer = document.createElement('div');
+    nearbyContainer.id = `nearby-route-container-${isFrom ? 'from' : 'to'}`;
+    nearbyContainer.style.margin = '0';
+    nearbyContainer.style.padding = '0';
+    boxEl.appendChild(nearbyContainer);
+    boxEl.style.display = 'block';
+
+  const fetchAndShow = async (lat, lon) => {
+        try {
+            // === 1. ПЕРЕВІРКА КЕШУ (діє 2 хвилини = 120000 мс) ===
+            const now = Date.now();
+            if (globalCachedNearbyStops && (now - globalCachedNearbyTime < 120000)) {
+                renderNearby(globalCachedNearbyStops); 
+                return;
+            }
+
+            // === 2. ЗАПИТ ДО СЕРВЕРА (якщо кешу немає або він старий) ===
+            const res = await fetch(`${API_BASE_URL}/stops/nearby?lat=${lat}&lon=${lon}`);
+            const apiGroups = await res.json();
+            
+            // === 3. ЗБЕРІГАЄМО В ГЛОБАЛЬНИЙ КЕШ ===
+            globalCachedNearbyStops = apiGroups;
+            globalCachedNearbyTime = now;
+            
+            // Відмальовуємо результати
+            renderNearby(apiGroups);
+
+        } catch (error) {
+            nearbyContainer.innerHTML = `<div style="padding: 10px; color: red;">Błąd lokalizacji</div>`;
+        }
+    };
+
+    // Окрема міні-функція для відмальовки (щоб не дублювати код)
+    const renderNearby = (apiGroups) => {
+        if (apiGroups.length === 0) {
+            nearbyContainer.innerHTML = `<div style="padding: 10px; color: var(--text-muted);">Brak przystanków w pobliżu 😕</div>`;
+            return;
+        }
+        
+        // Збираємо всі зупинки з API в один плоский масив і чіпляємо дистанцію
+        let flatNearbyStops = [];
+        apiGroups.forEach(g => {
+            g.stops.forEach(s => {
+                s.distance = g.distance; 
+                flatNearbyStops.push(s);
+            });
+        });
+        
+        // Групуємо їх за назвою (зливаємо 01, 02 і т.д.)
+        const groupedNearby = groupStopsByNameAndDistance(flatNearbyStops);
+        
+        nearbyContainer.innerHTML = '<div style="padding: 10px; font-weight: bold; color: var(--blue); display: flex; align-items: center; gap: 12px;"><div class="svg-icon icon-map-pin"></div> Przystanki w pobliżu</div>';
+        
+        groupedNearby.forEach(group => {
+            nearbyContainer.appendChild(createRouteSuggestionElement(group, inputEl, boxEl, isFrom));
+        });
+    };
+    // 3. ПЕРЕВІРКА GPS ТА ЗАПУСК
+    if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
+        const lat = userLocationMarker.getLatLng().lat;
+        const lon = userLocationMarker.getLatLng().lng;
+        fetchAndShow(lat, lon);
+    } else {
+        nearbyContainer.innerHTML = '<div style="padding: 10px; color: var(--text-muted); display: flex; align-items: center; gap: 12px;"><div class="svg-icon icon-map-pin"></div>Szukam lokalizacji...</div>';
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => fetchAndShow(pos.coords.latitude, pos.coords.longitude),
+                () => { nearbyContainer.innerHTML = '<div style="padding: 10px; color: red;">Włącz GPS, aby zobaczyć pobliskie przystanki</div>'; },
+                { enableHighAccuracy: false, timeout: 5000, maximumAge: 120000 }
+            );
+        }
+    }
+}
 //=====================Результат пошуку маршруту====================
 // Допоміжна функція: перетворює хвилини від півночі (напр. 500) у формат HH:MM (08:20)
 function formatTime(minutes) {
@@ -1239,8 +1528,16 @@ if (searchRouteBtn && routeResultsBox) {
             return;
         }
 
+        // ====== ДОДАЙ ОСЬ ЦІ ТРИ РЯДКИ ======
+        saveRecentRoute(routeFromStop, routeToStop); // Зберігаємо маршрут!
+        const recentRoutesContainer = document.getElementById('recent-routes-list');
+        if (recentRoutesContainer) recentRoutesContainer.style.display = 'none'; // Ховаємо історію
+        // ====================================
+
         // Показуємо завантаження в твоєму стилі
-        routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Szukam połączeń... ⏳</div>';
+        routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Szukam połączeń...</div>';
+        
+        // ... далі йде твій код запиту (fetch)
 
         // 2. Витягуємо масиви ID (наші платформи) і клеїмо їх через кому
         const fromIds = routeFromStop.ids.join(',');
@@ -1256,7 +1553,7 @@ if (searchRouteBtn && routeResultsBox) {
             routeResultsBox.innerHTML = '';
 
             if (routes.length === 0) {
-                routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Brak bezpośrednich połączeń 😔</div>';
+                routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Brak bezpośrednich połączeń</div>';
                 return;
             }
 
@@ -1334,7 +1631,10 @@ if (searchRouteBtn && routeResultsBox) {
     });
 }
 
-
+// Запускаємо відмальовку останніх маршрутів при завантаженні сторінки
+document.addEventListener('DOMContentLoaded', () => {
+    renderRecentRoutes();
+});
 // ==================== Вкладка "Przystanek" (Розклад) ====================
 
 const stopSearchInput = document.getElementById('stop-screen-search');
@@ -1372,7 +1672,7 @@ function saveRecentStop(stop) {
     // Видаляємо дублікат, якщо ця зупинка вже є (щоб підняти її наверх)
     recents = recents.filter(s => s.stopId !== stop.stopId); 
     recents.unshift(stop); // Додаємо на початок
-    if (recents.length > 3) recents.length = 3; // Лишаємо тільки 3 останні
+    if (recents.length > 2) recents.length = 2; // Лишаємо тільки 3 останні
     localStorage.setItem('ta_recent_stops', JSON.stringify(recents));
 }
 
@@ -1475,7 +1775,7 @@ function loadNearbyStopsDefault() {
                 console.warn('GPS помилка:', error.message);
                 nearbyContainer.innerHTML = '<div style="padding: 10px; color: red;">Увімкніть GPS для Przystanki w pobliżu</div>';
             }, 
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
+            { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
         );
     }
 }
@@ -1485,10 +1785,25 @@ async function showNearbyStops(lat, lon) {
     if (!nearbyContainer) return; 
 
     try {
-        const res = await fetch(`${API_BASE_URL}/stops/nearby?lat=${lat}&lon=${lon}`);
-        if (!res.ok) throw new Error(`Код помилки: ${res.status}`);
-        
-        const groups = await res.json();
+        // === ПОЧАТОК РОЗУМНОГО КЕШУ ===
+        const now = Date.now();
+        let groups; // Сюди покладемо дані (з кешу або з сервера)
+
+        if (globalCachedNearbyStops && (now - globalCachedNearbyTime < 120000)) {
+            // 1. Беремо миттєво з кешу, якщо йому менше 2 хвилин
+            groups = globalCachedNearbyStops;
+        } else {
+            // 2. Якщо кешу немає, робимо запит до сервера
+            const res = await fetch(`${API_BASE_URL}/stops/nearby?lat=${lat}&lon=${lon}`);
+            if (!res.ok) throw new Error(`Код помилки: ${res.status}`);
+            
+            groups = await res.json();
+            
+            // 3. Зберігаємо новий результат у спільний кеш
+            globalCachedNearbyStops = groups;
+            globalCachedNearbyTime = now;
+        }
+        // === КІНЕЦЬ РОЗУМНОГО КЕШУ ===
         
         if (groups.length === 0) {
             nearbyContainer.innerHTML = `<div style="padding: 10px; color: var(--text-muted);">Зупинок поруч не знайдено 😕</div>`;

@@ -1524,99 +1524,152 @@ if (searchRouteBtn && routeResultsBox) {
     searchRouteBtn.addEventListener('click', async () => {
         // 1. Перевіряємо, чи юзер обрав обидві зупинки
         if (!routeFromStop || !routeToStop) {
-            alert('Wybierz przystanek początkowy i końcowy z listy!');
+            showToast('Wybierz przystanek początkowy i końcowy z listy!');
             return;
         }
 
-        // ====== ДОДАЙ ОСЬ ЦІ ТРИ РЯДКИ ======
-        saveRecentRoute(routeFromStop, routeToStop); // Зберігаємо маршрут!
+        // Зберігаємо маршрут в історію
+        saveRecentRoute(routeFromStop, routeToStop); 
         const recentRoutesContainer = document.getElementById('recent-routes-list');
-        if (recentRoutesContainer) recentRoutesContainer.style.display = 'none'; // Ховаємо історію
-        // ====================================
+        if (recentRoutesContainer) recentRoutesContainer.style.display = 'none';
 
-        // Показуємо завантаження в твоєму стилі
-        routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Szukam połączeń...</div>';
+        // Показуємо завантаження
+        routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Szukam połączeń... <div class="svg-icon icon-hourglass"></div></div>';
         
-        // ... далі йде твій код запиту (fetch)
-
-        // 2. Витягуємо масиви ID (наші платформи) і клеїмо їх через кому
         const fromIds = routeFromStop.ids.join(',');
         const toIds = routeToStop.ids.join(',');
 
         try {
-            // 3. Відправляємо запит
-            const res = await fetch(`${API_BASE_URL}/route/search?from=${fromIds}&to=${toIds}`);
+            // 2. ВІДПРАВЛЯЄМО ЗАПИТ НА НОВИЙ COMPLEX-ЕНДПОІНТ
+            const res = await fetch(`${API_BASE_URL}/route/complex?from=${fromIds}&to=${toIds}&limit=20`);
             if (!res.ok) throw new Error('Помилка сервера');
             
-            const routes = await res.json();
-
+            const journeys = await res.json();
             routeResultsBox.innerHTML = '';
 
-            if (routes.length === 0) {
-                routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Brak bezpośrednich połączeń</div>';
+            if (journeys.length === 0) {
+                routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Brak połączeń dla tej trasy</div>';
                 return;
             }
 
-           // 4. Малюємо знайдені маршрути у стилі карток відправлення (dep-card)
-            routes.forEach(route => {
-                // Рахуємо таймер
+            journeys.forEach(journey => {
+                const legs = journey.legs;
+                if (!legs || legs.length === 0) return;
+
+                const firstLeg = legs[0];
+                const lastLeg = legs[legs.length - 1];
+
+                // 1. Гібридний таймер (До 30 хв - відлік, далі - година)
                 const now = new Date();
                 const currentMin = now.getHours() * 60 + now.getMinutes();
-                let countdown = route.departureMin - currentMin;
+                let countdown = firstLeg.departureMin - currentMin;
                 if (countdown < 0) countdown = 0; 
                 
-                const timeText = countdown === 0 ? '< 1 min' : `${countdown} min`;
-                // Використовуємо твій клас live для акценту (якщо хочеш сірий - прибери ' live')
-                const minClass = 'dep-min live'; 
+                const depTime = formatTime(firstLeg.departureMin);
+                const arrTime = formatTime(lastLeg.arrivalMin);
+                const duration = journey.totalMinutes;
 
-                const depTime = formatTime(route.departureMin);
-                const arrTime = formatTime(route.arrivalMin);
-                const duration = route.arrivalMin - route.departureMin;
+                let timeText;
+                let minClass = 'dep-min';
+                if (countdown === 0) {
+                    timeText = '< 1 min';
+                    minClass += ' live';
+                } else if (countdown <= 30) {
+                    timeText = `${countdown} min`;
+                    minClass += ' live';
+                } else {
+                    timeText = depTime; // Показуємо годину, якщо чекати довго
+                }
 
-                // Розділяємо "Park Bronowice 02" на назву і код
+                // 2. Будуємо каскад іконок
+                const transitLegs = legs.filter(l => l.route !== "Пішки");
+                const numTransfers = transitLegs.length;
+                
+                // Визначаємо розмір квадратиків
+                let sizeClass = 'route-size-1';
+                if (numTransfers === 2) sizeClass = 'route-size-2';
+                if (numTransfers >= 3) sizeClass = 'route-size-3';
+
+                let cascadeHtml = '<div class="route-cascade">';
+                
+                if (transitLegs.length === 0) {
+                    cascadeHtml += `<div class="dep-route-box ${sizeClass}" style="border-color: var(--text-muted); color: var(--text-muted);">🚶</div>`;
+                } else {
+                    transitLegs.forEach((leg, idx) => {
+                        const routeNum = parseInt(leg.route, 10);
+                        const isTrolley = (routeNum >= 150) ? ' trolleybus' : '';
+                        const zIndex = 10 - idx;
+                        const stepClass = idx > 0 ? ` step-${idx} overlap` : '';
+
+                        // Рахуємо час очікування до НАСТУПНОГО транспорту
+                        let waitHtml = '';
+                        if (idx < transitLegs.length - 1) {
+                            const nextLeg = transitLegs[idx + 1];
+                            const waitTime = nextLeg.departureMin - leg.arrivalMin;
+                            // Якщо пересадка 3 хв і менше - світимо червоним!
+                            const waitColor = waitTime <= 3 ? 'var(--danger)' : 'var(--text-muted)';
+                            waitHtml = `<span class="cascade-wait" style="color: ${waitColor};">${waitTime}m</span>`;
+                        }
+
+                        cascadeHtml += `
+                            <div class="cascade-item${stepClass}" style="z-index: ${zIndex};">
+                                <div class="dep-route-box ${sizeClass}${isTrolley}">${leg.route}</div>
+                                ${waitHtml}
+                            </div>
+                        `;
+                    });
+                }
+                cascadeHtml += '</div>';
+
+                // Розділяємо імена зупинок
                 const splitStopName = (fullName) => {
                     const parts = fullName.split(' ');
                     const code = parts.pop();
                     return { name: parts.join(' '), code: code };
                 };
-                const fromStop = splitStopName(route.fromStopName);
-                const toStop = splitStopName(route.toStopName);
+                const fromStop = splitStopName(firstLeg.fromStopName);
+                const toStop = splitStopName(lastLeg.toStopName);
 
-                // Визначаємо тролейбус (по твоєму алгоритму)
-                const routeNum = parseInt(route.route, 10);
-                const trolleyClass = (routeNum >= 150) ? ' trolleybus' : '';
+                // Збираємо текст пересадок ("przez: ... ➔ ")
+                let transferText = '';
+                if (transitLegs.length > 1) {
+                    const transferNames = [];
+                    for (let i = 0; i < transitLegs.length - 1; i++) {
+                        // Тепер беремо і назву, і номер платформи для пересадки!
+                        const tStop = splitStopName(transitLegs[i].toStopName);
+                        transferNames.push(`${tStop.name} ${tStop.code}`);
+                    }
+                    const uniqueTransfers = [...new Set(transferNames)];
+                    transferText = `${uniqueTransfers.join(', ')} ➔ `;
+                }
 
-                // Створюємо обгортку (як у вкладці Przystanek)
+                // 3. Збираємо фінальну картку
                 const wrapper = document.createElement('div');
                 wrapper.className = 'dep-item';
-                wrapper.style.marginBottom = '10px'; // Трохи відступу між результатами
+                wrapper.style.marginBottom = '10px';
 
                 const card = document.createElement('div');
                 card.className = 'dep-card';
 
-                // Збираємо картку за твоїм шаблоном
                 card.innerHTML = `
-                  <div class="dep-route-wrap">
-                    <div class="dep-route-box${trolleyClass}">${route.route}</div>
+                  <div class="dep-route-wrap" style="width: 75px; align-items: flex-start; margin-right: 8px;">
+                    ${cascadeHtml}
                   </div>
                   <div class="dep-info">
-                    <!-- Замість напрямку пишемо зупинку відправлення -->
-                    <div class="dep-dir" style="font-size: 1.05em; margin-bottom: 4px;">
-                        ${fromStop.name} <span style="font-size: 0.85em; opacity: 0.7;">${fromStop.code}</span>
+                    <div class="dep-dir" style="font-size: 15px; margin-bottom: 4px; line-height: 1.3;">
+                        <!-- Додали номер стартової платформи -->
+                        ${fromStop.name} <span style="font-size: 0.85em; color: var(--text-muted);">${fromStop.code}</span> <br>
+                        <span style="font-size: 0.9em; color: var(--text-muted);">
+                            ➔ <span style="color: var(--blue); font-weight: 500;">${transferText}</span>${toStop.name} <span style="font-size: 0.85em;">${toStop.code}</span>
+                        </span>
                     </div>
-                    <!-- Замість статусу пишемо зупинку прибуття -->
                     <div class="dep-status status-sched">
-                        ➔ ${toStop.name} <span style="font-size: 0.9em;">${toStop.code}</span>
+                        ${depTime} ➔ ${arrTime} <span style="font-weight: 600;">(${duration} min)</span>
                     </div>
                   </div>
-                  <div class="dep-times" style="text-align: right;">
-                    <!-- Великий таймер -->
+                  <div class="dep-times" style="text-align: right; min-width: 65px;">
+                    <div style="font-size: 11px; color: var(--text-muted); font-weight: 600; margin-bottom: 2px;">Odjazd:</div>
                     <div class="${minClass}">${timeText}</div>
-                    <!-- Точний час -->
-                    <div class="dep-sched" style="margin-top: 4px;">
-                        ${depTime} ➔ ${arrTime} <br/> 
-                        <span style="font-size: 0.85em; opacity: 0.8;">(${duration} min)</span>
-                    </div>
                   </div>
                 `;
 
@@ -1626,7 +1679,7 @@ if (searchRouteBtn && routeResultsBox) {
 
         } catch (error) {
             console.error('Помилка пошуку:', error);
-            routeResultsBox.innerHTML = '<div style="text-align: center; color: red; margin-top: 40px;">Błąd wyszukiwania trasy.</div>';
+            routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--danger); margin-top: 40px;">Błąd wyszukiwania trasy.</div>';
         }
     });
 }

@@ -23,6 +23,8 @@ fun Application.module() {
     DatabaseFactory.init()
 	// БУДУЄМО ГРАФ МАРШРУТІВ ДЛЯ ПОШУКУ З ПЕРЕСАДКАМИ
   	  TransitGraph.buildGraphForToday()
+  	  // ДОДАЄМО ЦЕ: Запускаємо фоновий таймер
+   		 TransitGraph.startNightlyRebuild()
     // 2. Встановлюємо наш новий потужний CORS (один раз!)
     install(CORS) {
         anyHost()

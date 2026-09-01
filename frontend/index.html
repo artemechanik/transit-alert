@@ -807,7 +807,49 @@
 .icon-hourglass {
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 22h16v-6l-4-4 4-4V2H4v6l4 4-4 4v6z'/%3E%3C/svg%3E");
 }
+/*=====================*/
+/*=====================*/
+/*=====================*/
+/* --- Динамічні розміри іконок маршрутів (для вкладки Trasa) --- */
+.route-size-1 { width: 48px; height: 48px; font-size: 24px; }
+/* Додаємо background, щоб картки не просвічувались при накладанні! */
+.route-size-2 { width: 36px; height: 36px; font-size: 15px; border-width: 2px; background-color: var(--card) !important; }
+.route-size-3 { width: 28px; height: 28px; font-size: 13px; border-width: 1.5px; background-color: var(--card) !important; }
 
+/* Зменшені ріжки для тролейбусів у каскаді */
+.route-size-2.trolleybus::before, .route-size-2.trolleybus::after { height: 6px; top: -6px; width: 2px; }
+.route-size-3.trolleybus::before, .route-size-3.trolleybus::after { height: 5px; top: -5px; width: 2px; }
+
+/* --- Каскад карток --- */
+.route-cascade {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 4px 0;
+}
+.cascade-item {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+/* Накладання карток (зсув вгору) */
+.cascade-item.overlap { margin-top: -8px; }
+
+/* Зсув вправо для кожного наступного кроку */
+.cascade-item.step-1 { margin-left: 16px; }
+.cascade-item.step-2 { margin-left: 28px; }
+
+/* Текст очікування */
+.cascade-wait {
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 5px;
+  position: relative;
+  z-index: 20;
+}
+/*=====================*/
+/*=====================*/
+/*=====================*/
 </style>
 </head>
 <body>

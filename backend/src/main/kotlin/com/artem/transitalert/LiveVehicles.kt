@@ -113,7 +113,7 @@ object LiveVehiclesCache {
 
             val diff = currentTimestamp - feedTimestamp
             if (diff > 300) { // Якщо дані старіші за 5 хвилин (300 секунд)
-                println("⚠️ УВАГА! GTFS-RT фід застарів. Затримка: $diff секунд!")
+                logger.warn("⚠️ УВАГА! GTFS-RT фід застарів. Затримка: $diff секунд!")
             }
         }
         // -----------------------------------------------

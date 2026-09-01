@@ -4,6 +4,7 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 import kotlin.math.abs
+import kotlinx.coroutines.*
 
 // Це "ребро" нашого графа - фізичний переїзд від однієї зупинки до наступної
 data class RouteEdge(
@@ -28,45 +29,99 @@ data class RoutingState(
     val currentMin: Int,
     val tripId: String?,
     val path: List<RouteEdge>,
-    val transfers: Int // <--- ДОДАЛИ ЛІЧИЛЬНИК ПЕРЕСАДОК
+    val transfers: Int,
+    val lastTransferMin: Int // <--- ДОДАЛИ: запам'ятовує час останньої пересадки
 ) : Comparable<RoutingState> {
     
     override fun compareTo(other: RoutingState): Int {
-        // Віртуальна вартість = реальний час прибуття + 15 хвилин "болю" за кожну пересадку
-        val thisCost = this.currentMin + (this.transfers * 15)
-        val otherCost = other.currentMin + (other.transfers * 15)
-        return thisCost.compareTo(otherCost)
+        val thisCost = this.currentMin + (this.transfers * 1.5)
+        val otherCost = other.currentMin + (other.transfers * 1.5)
+        
+        // Якщо хтось приїжджає швидше або має менше пересадок - перемагає він (стандартна Дейкстра)
+        if (thisCost != otherCost) {
+            return thisCost.compareTo(otherCost)
+        }
+        
+        // НІЧИЯ! Обидва маршрути однаково хороші. 
+        // Тоді перемагає той, хто зробив пересадку РАНІШЕ (менший час)
+        return this.lastTransferMin.compareTo(other.lastTransferMin)
     }
 }
 // Наш головний кеш-граф, який житиме в оперативній пам'яті сервера
 object TransitGraph {
-    // Ключ - це stopId (Звідки). Значення - список усіх доступних переїздів (Куди)
-    var edges: Map<String, List<RouteEdge>> = emptyMap()
-    var isLoaded = false
+// ДОДАЄМО @Volatile до обох змінних:
+    @Volatile var edges: Map<String, List<RouteEdge>> = emptyMap()
+    @Volatile var isLoaded = false
+    
+    // Фоновий процес для нічного оновлення
+    fun startNightlyRebuild() {
+        CoroutineScope(Dispatchers.IO).launch {
+            while (true) {
+                val now = java.time.LocalDateTime.now(LUBLIN_ZONE)
+                var nextRun = now.withHour(3).withMinute(0).withSecond(0).withNano(0)
+                
+                if (now.isAfter(nextRun) || now.isEqual(nextRun)) {
+                    nextRun = nextRun.plusDays(1)
+                }
+                
+                val delayMs = java.time.Duration.between(now, nextRun).toMillis()
+                
+                println("🌙 Наступне оновлення графа заплановано на $nextRun")
+                delay(delayMs) // <--- Без довгого префіксу
+                
+                try {
+                    println("🔄 Починаємо нічне оновлення графа...")
+                    buildGraphForToday()
+                } catch (e: Exception) {
+                    println("❌ Помилка нічного оновлення графа: ${e.message}")
+                }
+            }
+        }
+    }
 
    fun buildGraphForToday() {
         val today = java.time.LocalDate.now(LUBLIN_ZONE)
         
         transaction {
-            // Беремо сервіси за сьогодні І ЗА ВЧОРА (для нічних рейсів)
-            val activeServices = activeServiceIds(today) + activeServiceIds(today.minusDays(1))
+            // РОЗДІЛЯЄМО СЬОГОДНІ І ВЧОРА (щоб відсіяти привидів)
+            val todayServices = activeServiceIds(today).toSet()
+            // Беремо вчорашні сервіси, але віднімаємо ті, що діють і сьогодні, щоб не робити зайву роботу
+            val yesterdayServices = activeServiceIds(today.minusDays(1)).toSet() - todayServices
             
-            if (activeServices.isEmpty()) {
+            if (todayServices.isEmpty() && yesterdayServices.isEmpty()) {
                 println("Немає активних сервісів на сьогодні, граф не побудовано.")
                 return@transaction
             }
 
-            // 1. БЕРЕМО ТІЛЬКИ УНІКАЛЬНІ РЕЙСИ (without Cartesian Explosion!)
-            val todayTrips = mutableMapOf<String, String>()
-            StopDepartures
-                .select(StopDepartures.tripId, StopDepartures.route)
-                .where { StopDepartures.serviceId inList activeServices }
-                .withDistinct(true) // <--- Беремо кожен tripId лише 1 раз!
-                .forEach { 
-                    todayTrips[it[StopDepartures.tripId]] = it[StopDepartures.route] 
-                }
+            // 1. БЕРЕМО ТІЛЬКИ УНІКАЛЬНІ РЕЙСИ
+            val validTrips = mutableMapOf<String, String>()
+            val yesterdayTripIds = mutableSetOf<String>() // Тут будуть лежати підозрювані "вчорашні" рейси
 
-            val allTripIds = todayTrips.keys.toList()
+            // Додаємо сьогоднішні рейси
+            if (todayServices.isNotEmpty()) {
+                StopDepartures
+                    .select(StopDepartures.tripId, StopDepartures.route)
+                    .where { StopDepartures.serviceId inList todayServices }
+                    .withDistinct(true)
+                    .forEach { 
+                        validTrips[it[StopDepartures.tripId]] = it[StopDepartures.route] 
+                    }
+            }
+
+            // Додаємо вчорашні рейси (і помічаємо їх)
+            if (yesterdayServices.isNotEmpty()) {
+                StopDepartures
+                    .select(StopDepartures.tripId, StopDepartures.route)
+                    .where { StopDepartures.serviceId inList yesterdayServices }
+                    .withDistinct(true)
+                    .forEach { 
+                        val tId = it[StopDepartures.tripId]
+                        validTrips[tId] = it[StopDepartures.route]
+                        yesterdayTripIds.add(tId) // ПОМІТКА: цей рейс з минулого
+                    }
+            }
+
+            val allTripIds = validTrips.keys.toList()
             val tripsData = mutableMapOf<String, MutableList<TripStopRecord>>()
 
             // 2. CHUNKING (Завантажуємо безпечними порціями по 500 рейсів)
@@ -76,11 +131,21 @@ object TransitGraph {
                     .where { TripStops.tripId inList chunk }
                     .forEach { row ->
                         val tripId = row[TripStops.tripId]
+                        val depMin = row[TripStops.departureMinutes]
+
+                        // ==========================================
+                        // ФІЛЬТР "ПРИВИДІВ" (Ghost Trips Filter)
+                        // Якщо рейс вчорашній, і час МЕНШЕ 24:00 (1440 хв) - це денний привид, викидаємо!
+                        if (yesterdayTripIds.contains(tripId) && depMin < 1440) {
+                            return@forEach 
+                        }
+                        // ==========================================
+
                         tripsData.getOrPut(tripId) { mutableListOf() }.add(
                             TripStopRecord(
                                 stopId = row[TripStops.stopId],
                                 seq = row[TripStops.stopSequence],
-                                min = row[TripStops.departureMinutes]
+                                min = depMin
                             )
                         )
                     }
@@ -90,7 +155,7 @@ object TransitGraph {
             val newEdges = mutableMapOf<String, MutableList<RouteEdge>>()
             for ((tripId, stops) in tripsData) {
                 stops.sortBy { it.seq }
-                val route = todayTrips[tripId] ?: continue
+                val route = validTrips[tripId] ?: continue // Замінив todayTrips на validTrips
                 
                 for (i in 0 until stops.size - 1) {
                     val current = stops[i]
@@ -123,7 +188,7 @@ object TransitGraph {
 
                     val dist = calculateDistance(s1.second, s1.third, s2.second, s2.third)
                     if (dist <= 600.0) { 
-                        val walkMinutes = (dist / 80.0).toInt().coerceAtLeast(1)
+                        val walkMinutes = (dist / 60.0).toInt().coerceAtLeast(1)
                         
                         val walkEdge = RouteEdge(
                             fromStopId = s1.first,
@@ -157,7 +222,7 @@ object TransitGraph {
 
         // 1. Закидаємо в чергу всі стартові зупинки (групу платформ)
         for (startId in fromIds) {
-            pq.add(RoutingState(startId, startMin, null, emptyList(), 0))
+            pq.add(RoutingState(startId, startMin, null, emptyList(), 0, startMin)) // <--- додали startMin в кінці
         }
 
         while (pq.isNotEmpty()) {
@@ -178,7 +243,8 @@ object TransitGraph {
             for (edge in outgoingEdges) {
                 val isWalk = edge.tripId == "WALK"
                 val isSameTrip = state.tripId == edge.tripId
-                
+                // ДОДАЄМО НОВИЙ РЯДОК: Якщо це пересадка, фіксуємо поточний час
+                val newLastTransferMin = if (!isSameTrip && state.tripId != null) state.currentMin else state.lastTransferMin
                 // Рахуємо зміну транспорту. Якщо ми йдемо пішки до ПЕРШОГО автобуса (state.tripId == null) - це не пересадка.
                 val newTransfers = if (state.tripId == null || isSameTrip) state.transfers else state.transfers + 1
                 
@@ -192,7 +258,7 @@ object TransitGraph {
                     val walkLeg = edge.copy(departureMin = state.currentMin, arrivalMin = arrivalTime)
                     val newPath = state.path + walkLeg
                     
-                    pq.add(RoutingState(edge.toStopId, arrivalTime, "WALK", newPath, newTransfers))
+                   pq.add(RoutingState(edge.toStopId, arrivalTime, "WALK", newPath, newTransfers, newLastTransferMin))
                     
                 } else {
                     // ЗВИЧАЙНИЙ АВТОБУС
@@ -203,7 +269,7 @@ object TransitGraph {
                         if (edge.departureMin - state.currentMin > 60) continue
 
                         val newPath = state.path + edge
-                        pq.add(RoutingState(edge.toStopId, edge.arrivalMin, edge.tripId, newPath, newTransfers))
+                        pq.add(RoutingState(edge.toStopId, edge.arrivalMin, edge.tripId, newPath, newTransfers, newLastTransferMin))
                     }
                 }
             }

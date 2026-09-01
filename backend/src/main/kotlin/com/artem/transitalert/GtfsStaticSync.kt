@@ -134,7 +134,8 @@ object GtfsStaticSync {
         // Скидаємо кеш, бо таблиці в БД щойно оновилися
         ActiveRoutesCache.invalidate() 
         invalidateStopsCache()
-        
+        // ДОДАЄМО ЦЕ:
+        com.artem.transitalert.TransitGraph.buildGraphForToday()
         saveMeta(feedVersion, newEtag, newLastModified)
         logger.info("GTFS static: імпорт завершено, версія $feedVersion")
     }

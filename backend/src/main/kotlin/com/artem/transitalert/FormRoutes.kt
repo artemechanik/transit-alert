@@ -153,12 +153,11 @@ fun Application.formRoutes() {
             call.respond(routes)
         }
         
-      // Новий розумний МУЛЬТИПОШУК з пересадками
+     // Новий розумний МУЛЬТИПОШУК з пересадками
         get("/route/complex") {
             val fromParam = call.parameters["from"]
             val toParam = call.parameters["to"]
-            // Додаємо можливість фронтенду вказати ліміт, за замовчуванням 5
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 5 
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20 
 
             if (fromParam.isNullOrBlank() || toParam.isNullOrBlank()) {
                 call.respond(emptyList<JourneyResponse>())
@@ -169,18 +168,20 @@ fun Application.formRoutes() {
             val toIds = toParam.split(",")
             val now = java.time.LocalTime.now(LUBLIN_ZONE)
             
-            // Змінна для поточного часу пошуку (буде зсуватися)
             var currentSearchMin = now.hour * 60 + now.minute
-            
-            // Масив, куди ми будемо складати всі знайдені варіанти поїздки
             val allJourneys = mutableListOf<JourneyResponse>()
+            
+            // ЗАПОБІЖНИК ВІД ЗАВИСАННЯ
+            var attempts = 0
+            val MAX_ATTEMPTS = 150
 
             // --- ПОЧАТОК ЦИКЛУ МУЛЬТИПОШУКУ ---
-            while (allJourneys.size < limit) {
+            while (allJourneys.size < limit && attempts < MAX_ATTEMPTS) {
+                attempts++
+                
                 // 1. Питаємо алгоритм Дейкстри!
                 val path = TransitGraph.findBestRoute(fromIds, toIds, currentSearchMin)
 
-                // Якщо шляхів більше немає - розриваємо цикл
                 if (path == null || path.isEmpty()) {
                     break 
                 }
@@ -225,31 +226,56 @@ fun Application.formRoutes() {
                         arrivalMin = last.arrivalMin
                     ))
                 }
-
-                // 4. Додаємо готовий маршрут до загального списку
-                allJourneys.add(
-                    JourneyResponse(
-                        totalMinutes = path.last().arrivalMin - path.first().departureMin,
-                        legs = legs
-                    )
-                )
-
-                // 5. ЗСУВАЄМО ЧАС ДЛЯ НАСТУПНОЇ ІТЕРАЦІЇ
-                // Знаходимо перший реальний транспорт (не пішки)
-                val firstTransit = path.firstOrNull { it.tripId != "WALK" }
                 
-                if (firstTransit != null) {
-                    // Наступний маршрут шукаємо відразу після відправлення цього автобуса
-                    currentSearchMin = firstTransit.departureMin + 1
-                } else {
-                    // Якщо маршрут суто пішохідний (наприклад, зупинки в радіусі 600м)
-                    break 
+                // 4. ЛОГІКА "ВЧАСНОГО ВИХОДУ З ДОМУ" (JUST-IN-TIME WALKING)
+                if (legs.isNotEmpty() && legs.first().route == "Пішки" && legs.size > 1) {
+                    val walkLeg = legs[0]
+                    val firstBus = legs[1]
+                    val walkDuration = walkLeg.arrivalMin - walkLeg.departureMin
+                    val perfectDeparture = firstBus.departureMin - walkDuration - 2
+                    
+                    if (perfectDeparture > walkLeg.departureMin) {
+                        legs[0] = walkLeg.copy(
+                            departureMin = perfectDeparture,
+                            arrivalMin = firstBus.departureMin - 2
+                        )
+                    }
                 }
+                
+                val realTotalMinutes = legs.last().arrivalMin - legs.first().departureMin
+
+                // 5. ФІЛЬТРУЄМО КЛОНІВ ЗА УНІКАЛЬНИМИ АВТОБУСАМИ (Ігноруємо час пішки)
+                // Створюємо "відбиток" поточного маршруту: беремо тільки транспорт, клеїмо маршрут + час
+                val currentSignature = legs.filter { it.route != "Пішки" }
+                    .joinToString("|") { "${it.route}-${it.departureMin}" }
+
+                val isDuplicate = allJourneys.any { journey ->
+                    val existingSignature = journey.legs.filter { it.route != "Пішки" }
+                        .joinToString("|") { "${it.route}-${it.departureMin}" }
+                    existingSignature == currentSignature
+                }
+                
+                if (!isDuplicate) {
+                    allJourneys.add(
+                        JourneyResponse(
+                            totalMinutes = realTotalMinutes,
+                            legs = legs
+                        )
+                    )
+                }
+
+                // 6. ЗСУВАЄМО ЧАС ДЛЯ НАСТУПНОЇ ІТЕРАЦІЇ
+		// Зсуваємо пошук на 1 хвилину після ЧАСУ ВИХОДУ З ДОМУ попереднього маршруту
+		if (legs.isNotEmpty()) {
+		    currentSearchMin = legs.first().departureMin + 1
+		} else {
+		    break
+		}
             }
-            // --- КІНЕЦЬ ЦИКЛУ МУЛЬТИПОШУКУ ---
+            // --- КІНЕЦЬ ЦИКЛУ МУЛЬТИПОШУКУ --- 
 
             // Віддаємо фронтенду цілий масив маршрутів!
-            call.respond(allJourneys)
+            call.respond(allJourneys.distinctBy { it.legs })
         }
         
         // Напрямки для конкретної лінії — тільки ті, якими вона реально їде

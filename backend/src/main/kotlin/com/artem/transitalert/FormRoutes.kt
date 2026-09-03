@@ -209,7 +209,11 @@ fun Application.formRoutes() {
                             fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
                             toStopName = stopNames[last.toStopId] ?: last.toStopId,
                             departureMin = first.departureMin,
-                            arrivalMin = last.arrivalMin
+                            arrivalMin = last.arrivalMin,
+                            tripId = first.tripId,
+                            fromStopId = first.fromStopId,
+                            toStopId = last.toStopId // ← додав: без цього фронтенд не міг надійно
+                                                      //   визначити реальну зупинку висадки
                         ))
                         currentLeg = mutableListOf(edge)
                     }
@@ -223,7 +227,10 @@ fun Application.formRoutes() {
                         fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
                         toStopName = stopNames[last.toStopId] ?: last.toStopId,
                         departureMin = first.departureMin,
-                        arrivalMin = last.arrivalMin
+                        arrivalMin = last.arrivalMin,
+                        tripId = first.tripId,
+                        fromStopId = first.fromStopId,
+                        toStopId = last.toStopId // ← додав, той самий фікс
                     ))
                 }
                 
@@ -272,7 +279,7 @@ fun Application.formRoutes() {
 		    break
 		}
             }
-            // --- КІНЕЦЬ ЦИКЛУ МУЛЬТИПОШУКУ --- 
+            // --- КІНЕЦЬ ЦИКЛУ МУЛЬТИПОШУКУ ---
 
             // Віддаємо фронтенду цілий масив маршрутів!
             call.respond(allJourneys.distinctBy { it.legs })

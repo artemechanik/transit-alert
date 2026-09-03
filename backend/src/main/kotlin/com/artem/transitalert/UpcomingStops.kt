@@ -5,26 +5,14 @@ import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.transactions.transaction
 
-@Serializable
-data class UpcomingStop(
-    val name: String,
-    val eta: String, // "HH:MM", локальний час Любліна
-)
-
-@Serializable
-data class UpcomingStopsResponse(
-    val reportId: Int,
-    val route: String,
-    val direction: String?,
-    val upcomingStops: List<UpcomingStop>,
-)
 
 fun Application.upcomingStopsRoutes() {
     routing {
@@ -51,13 +39,17 @@ fun Application.upcomingStopsRoutes() {
 
                 val currentSequence = currentStopRow[TripStops.stopSequence]
 
-                val upcoming = TripStops.selectAll()
-                    .where { (TripStops.tripId eq tripId) and (TripStops.stopSequence greater currentSequence) }
+                val upcoming = TripStops
+                    .join(Stops, JoinType.INNER) { TripStops.stopId eq Stops.stopId }
+                    .selectAll()
+                    .where { (TripStops.tripId eq tripId) and (TripStops.stopSequence greaterEq currentSequence) }
                     .orderBy(TripStops.stopSequence, SortOrder.ASC)
                     .map {
-                        val minutes = it[TripStops.departureMinutes] % (24 * 60) // нормалізуємо 24:xx -> 00:xx для показу
+                        val minutes = it[TripStops.departureMinutes] % (24 * 60)
                         UpcomingStop(
+                            stopId = it[TripStops.stopId],
                             name = it[TripStops.stopName],
+                            platformCode = it[Stops.code],
                             eta = "%02d:%02d".format(minutes / 60, minutes % 60),
                         )
                     }
@@ -96,13 +88,17 @@ fun Application.upcomingStopsRoutes() {
 
                 val currentSequence = currentStopRow[TripStops.stopSequence]
 
-                TripStops.selectAll()
-                    .where { (TripStops.tripId eq tripId) and (TripStops.stopSequence greater currentSequence) }
+                TripStops
+                    .join(Stops, JoinType.INNER) { TripStops.stopId eq Stops.stopId }
+                    .selectAll()
+                    .where { (TripStops.tripId eq tripId) and (TripStops.stopSequence greaterEq currentSequence) }
                     .orderBy(TripStops.stopSequence, SortOrder.ASC)
                     .map {
                         val minutes = it[TripStops.departureMinutes] % (24 * 60)
                         UpcomingStop(
+                            stopId = it[TripStops.stopId],
                             name = it[TripStops.stopName],
+                            platformCode = it[Stops.code],
                             eta = "%02d:%02d".format(minutes / 60, minutes % 60),
                         )
                     }

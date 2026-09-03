@@ -810,206 +810,43 @@
 /*=====================*/
 /*=====================*/
 /*=====================*/
-/*=====================*/
-/* --- СТИЛІ ДЛЯ НОВИХ КАРТОК TRASA (ПЛАВАЮЧА ЛЕГЕНДА) --- */
-.trasa-wrapper {
-  position: relative;
-  margin-top: 18px; 
-  padding-top: 10px;
-}
+/* --- Динамічні розміри іконок маршрутів (для вкладки Trasa) --- */
+.route-size-1 { width: 48px; height: 48px; font-size: 24px; }
+/* Додаємо background, щоб картки не просвічувались при накладанні! */
+.route-size-2 { width: 36px; height: 36px; font-size: 15px; border-width: 2px; background-color: var(--card) !important; }
+.route-size-3 { width: 28px; height: 28px; font-size: 13px; border-width: 1.5px; background-color: var(--card) !important; }
 
-/* Оновлений базовий клас (додано transition) */
-.trasa-card {
-  position: relative;
-  background-color: var(--card);
-  border-radius: 12px;
-  padding: 18px 16px 14px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-  transition: all 0.25s ease-in-out;
-}
+/* Зменшені ріжки для тролейбусів у каскаді */
+.route-size-2.trolleybus::before, .route-size-2.trolleybus::after { height: 6px; top: -6px; width: 2px; }
+.route-size-3.trolleybus::before, .route-size-3.trolleybus::after { height: 5px; top: -5px; width: 2px; }
 
-/* ========================================= */
-/* МАГІЯ ПОВНОЕКРАННОГО РОЗГОРТАННЯ          */
-/* ========================================= */
-.trasa-card.fullscreen-expanded {
-  position: fixed;
-  /* Враховуємо "чубки" смартфонів та нижнє меню */
-  top: calc(15px + var(--safe-top)); 
-  bottom: calc(75px + var(--safe-bottom)); 
-  left: 12px;
-  right: 12px;
-  z-index: 1000;
-  
+/* --- Каскад карток --- */
+.route-cascade {
   display: flex;
   flex-direction: column;
-  margin: 0;
-  max-height: none;
-  
-  /* ВАЖЛИВО: додаємо відступ зверху, щоб новий список не наліз на хрестик закриття */
-  padding-top: 45px; 
-  
-  box-shadow: 0 10px 40px rgba(0,0,0,0.4);
-  border: 1px solid var(--border);
+  align-items: flex-start;
+  padding: 4px 0;
 }
-
-/* ВАЖЛИВО: ПРИХОВУЄМО ДУБЛІКАТИ при розгортанні */
-.trasa-card.fullscreen-expanded .trasa-legend,
-.trasa-card.fullscreen-expanded .trasa-timeline,
-.trasa-card.fullscreen-expanded .trasa-walk-note {
-  display: none !important;
-}
-
-/* Скрол-зона посередині */
-.trasa-middle-scroll {
-  flex-grow: 1; 
-  overflow-y: auto; 
-  
-  /* Оскільки ми сховали старі елементи, рамки та відступи тут більше не потрібні */
-  padding: 0;
-  border: none;
-  margin: 0;
-}
-
-/* Ховаємо скролбар для краси */
-.trasa-middle-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-/* Забороняємо футеру стискатися */
-.trasa-card.fullscreen-expanded .trasa-details {
-  flex-shrink: 0; 
-}
-
-/* Кнопка закриття (Хрестик) */
-.close-trasa-btn {
-  display: none; /* За замовчуванням схована */
-  position: absolute;
-  right: 12px;
-  top: 12px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  font-size: 14px;
-  font-weight: bold;
-  color: var(--text-muted);
-  cursor: pointer;
-  z-index: 10;
+.cascade-item {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 0;
+  position: relative;
 }
-.close-trasa-btn:active {
-  background: var(--border);
-}
+/* Накладання карток (зсув вгору) */
+.cascade-item.overlap { margin-top: -8px; }
 
-/* Показуємо хрестик тільки в розгорнутому стані */
-.trasa-card.fullscreen-expanded .close-trasa-btn {
-  display: flex;
-}
-/* ========================================= */
-.trasa-legend {
-  position: absolute;
-  top: -14px;
-  left: 16px;
-  display: flex;
-  border-radius: 6px;
-  overflow: hidden;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-  background-color: var(--card);
-}
+/* Зсув вправо для кожного наступного кроку */
+.cascade-item.step-1 { margin-left: 16px; }
+.cascade-item.step-2 { margin-left: 28px; }
 
-.trasa-badge {
-  padding: 4px 8px;
+/* Текст очікування */
+.cascade-wait {
+  font-size: 10px;
   font-weight: 700;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  margin-left: 5px;
+  position: relative;
+  z-index: 20;
 }
-
-.badge-bus { background-color: var(--danger); color: white; }
-.badge-trolley { background-color: var(--blue); color: white; }
-.badge-walk { background-color: #2d2e38; color: #a8aab0; } 
-
-.trasa-details {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.trasa-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.trasa-row .stop-name { font-size: 15px; font-weight: 600; color: var(--text); }
-.trasa-row .stop-code { font-size: 13px; color: var(--text-muted); font-weight: 400; margin-left: 2px; }
-.trasa-row .time { font-size: 16px; font-weight: 700; color: var(--text); }
-
-/* Блок пересадки: тепер лише стрілочка */
-.trasa-transfer {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-left: 10px;
-  border-left: 2px solid var(--border);
-  padding-left: 10px;
-  line-height: 1.3;
-}
-
-.trasa-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 6px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.trasa-footer .highlight { color: var(--text); font-weight: 700; }
-.trasa-footer .time-live { color: #10b981; font-weight: 700; }
-
-/* НОВА класична іконка пішохода (силует людини) */
-.icon-walk {
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7'/%3E%3C/svg%3E");
-}
-/* Жорстко фіксуємо розмір квадратиків ТІЛЬКИ для плаваючої легенди */
-.trasa-legend .dep-route-box {
-  width: 28px !important;
-  height: 28px !important;
-  font-size: 13px !important;
-  border-width: 1.5px !important;
-  background-color: var(--card) !important;
-}
-
-/* Зменшуємо та розсовуємо ріжки тролейбуса по краях */
-.trasa-legend .dep-route-box.trolleybus::before {
-  height: 5px !important;
-  top: -5px !important;
-  width: 2px !important;
-  left: 5px !important; /* Відсуваємо лівий ріжок ближче до краю */
-}
-
-.trasa-legend .dep-route-box.trolleybus::after {
-  height: 5px !important;
-  top: -5px !important;
-  width: 2px !important;
-  right: 5px !important; /* Відсуваємо правий ріжок ближче до краю */
-}
-
-
-/* Трохи зменшуємо пішохода, щоб красиво вліз у 28px рамку */
-.trasa-legend .icon-walk {
-  width: 16px !important;
-  height: 16px !important;
-}
-
-
 /*=====================*/
 /*=====================*/
 /*=====================*/

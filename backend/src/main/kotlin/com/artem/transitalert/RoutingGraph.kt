@@ -5,6 +5,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 import kotlin.math.abs
 import kotlinx.coroutines.*
+import org.slf4j.LoggerFactory
 
 // Це "ребро" нашого графа - фізичний переїзд від однієї зупинки до наступної
 data class RouteEdge(
@@ -30,25 +31,25 @@ data class RoutingState(
     val tripId: String?,
     val path: List<RouteEdge>,
     val transfers: Int,
-    val lastTransferMin: Int // <--- ДОДАЛИ: запам'ятовує час останньої пересадки
+    val accumulatedPenalty: Double = 0.0, // <-- Додали це поле
+    val lastTransferMin: Int
 ) : Comparable<RoutingState> {
     
     override fun compareTo(other: RoutingState): Int {
-        val thisCost = this.currentMin + (this.transfers * 1.5)
-        val otherCost = other.currentMin + (other.transfers * 1.5)
+        val thisCost = this.currentMin + this.accumulatedPenalty
+        val otherCost = other.currentMin + other.accumulatedPenalty
         
-        // Якщо хтось приїжджає швидше або має менше пересадок - перемагає він (стандартна Дейкстра)
         if (thisCost != otherCost) {
             return thisCost.compareTo(otherCost)
         }
         
-        // НІЧИЯ! Обидва маршрути однаково хороші. 
-        // Тоді перемагає той, хто зробив пересадку РАНІШЕ (менший час)
         return this.lastTransferMin.compareTo(other.lastTransferMin)
     }
 }
+
 // Наш головний кеш-граф, який житиме в оперативній пам'яті сервера
 object TransitGraph {
+	private val logger = LoggerFactory.getLogger("TransitGraph")
 // ДОДАЄМО @Volatile до обох змінних:
     @Volatile var edges: Map<String, List<RouteEdge>> = emptyMap()
     @Volatile var isLoaded = false
@@ -66,14 +67,14 @@ object TransitGraph {
                 
                 val delayMs = java.time.Duration.between(now, nextRun).toMillis()
                 
-                println("🌙 Наступне оновлення графа заплановано на $nextRun")
+                logger.info("🌙 Наступне оновлення графа заплановано на $nextRun")
                 delay(delayMs) // <--- Без довгого префіксу
                 
                 try {
-                    println("🔄 Починаємо нічне оновлення графа...")
+                    logger.info("🔄 Починаємо нічне оновлення графа...")
                     buildGraphForToday()
                 } catch (e: Exception) {
-                    println("❌ Помилка нічного оновлення графа: ${e.message}")
+                    logger.error("❌ Помилка нічного оновлення графа: ${e.message}")
                 }
             }
         }
@@ -210,72 +211,77 @@ object TransitGraph {
         }
     }
               //======Функція пошуку
-    fun findBestRoute(fromIds: List<String>, toIds: List<String>, startMin: Int): List<RouteEdge>? {
+       fun findBestRoute(fromIds: List<String>, toIds: List<String>, startMin: Int): List<RouteEdge>? {
         if (!isLoaded) return null
         
-        // Черга з пріоритетом (завжди першим видає стан з найменшим currentMin)
         val pq = java.util.PriorityQueue<RoutingState>()
-        
-        // Кеш відвіданих станів: "stopId_tripId". 
-        // Це щоб алгоритм не ходив по колу і не перевіряв один і той самий автобус на одній зупинці двічі
         val visited = mutableSetOf<String>()
 
-        // 1. Закидаємо в чергу всі стартові зупинки (групу платформ)
+        // 1. Додали 0.0 для accumulatedPenalty при старті
         for (startId in fromIds) {
-            pq.add(RoutingState(startId, startMin, null, emptyList(), 0, startMin)) // <--- додали startMin в кінці
+            pq.add(RoutingState(startId, startMin, null, emptyList(), 0, 0.0, startMin)) 
         }
 
         while (pq.isNotEmpty()) {
             val state = pq.poll()
 
-            // 2. Якщо ми дісталися будь-якої з кінцевих платформ - УРА! Повертаємо шлях
-            if (state.stopId in toIds) {
-                return state.path
-            }
+            if (state.stopId in toIds) return state.path
 
-            // 3. Захист від повторних перевірок
             val stateKey = "${state.stopId}_${state.tripId}"
             if (!visited.add(stateKey)) continue
 
-            // 4. Перебираємо всі можливі виїзди з цієї зупинки
             val outgoingEdges = edges[state.stopId] ?: emptyList()
             
             for (edge in outgoingEdges) {
                 val isWalk = edge.tripId == "WALK"
                 val isSameTrip = state.tripId == edge.tripId
-                // ДОДАЄМО НОВИЙ РЯДОК: Якщо це пересадка, фіксуємо поточний час
                 val newLastTransferMin = if (!isSameTrip && state.tripId != null) state.currentMin else state.lastTransferMin
-                // Рахуємо зміну транспорту. Якщо ми йдемо пішки до ПЕРШОГО автобуса (state.tripId == null) - це не пересадка.
                 val newTransfers = if (state.tripId == null || isSameTrip) state.transfers else state.transfers + 1
                 
                 if (isWalk) {
-                    // ПІШКИ: Можна йти просто зараз! Запобігаємо нескінченним прогулянкам (не більше 1 переходу підряд)
                     if (state.tripId == "WALK") continue 
-                    
-                    val arrivalTime = state.currentMin + edge.arrivalMin // edge.arrivalMin тут = тривалість ходьби
-                    
-                    // Робимо копію edge, щоб підставити реальний час
+                    val arrivalTime = state.currentMin + edge.arrivalMin 
                     val walkLeg = edge.copy(departureMin = state.currentMin, arrivalMin = arrivalTime)
                     val newPath = state.path + walkLeg
                     
-                   pq.add(RoutingState(edge.toStopId, arrivalTime, "WALK", newPath, newTransfers, newLastTransferMin))
+                    // Передаємо існуючий state.accumulatedPenalty далі
+                    pq.add(RoutingState(edge.toStopId, arrivalTime, "WALK", newPath, newTransfers, state.accumulatedPenalty, newLastTransferMin))
                     
                 } else {
-                    // ЗВИЧАЙНИЙ АВТОБУС
                     val transferBuffer = if (state.tripId == null || isSameTrip || state.tripId == "WALK") 0 else 2
                     
                     if (edge.departureMin >= state.currentMin + transferBuffer) {
-                        // Відкидаємо очікування автобуса більше 60 хв
-                        if (edge.departureMin - state.currentMin > 60) continue
+                        // Перевіряємо, чи ми вже їхали на якомусь автобусі, чи це наш перший транспорт
+val hasUsedBus = state.path.any { it.tripId != "WALK" }
 
+// Якщо вже в дорозі (пересадка) - максимум 60 хв. Якщо ще вдома (перший рейс) - дозволяємо чекати хоч 10 годин (600 хв)
+val maxWaitTime = if (hasUsedBus) 60 else 600
+
+if (edge.departureMin - state.currentMin > maxWaitTime) continue
+
+
+                        // --- СМАРТ-ШТРАФИ ---
+                        var stepPenalty = 0.0
+                        val isRealTransfer = !isSameTrip && state.tripId != null
+			val transferBuffer = if (state.tripId == null || isSameTrip) 0 else 2
+                        if (isRealTransfer) {
+                            stepPenalty += 5.0 // Базовий штраф в 5 хвилин надійно вбиває "мікро-стрибки" на 1 зупинку
+                            
+                            val waitTime = edge.departureMin - state.currentMin
+                            if (waitTime > 10) {
+                                stepPenalty += (waitTime - 10) * 1.5 // Прогресивно караємо за довге стояння
+                            }
+                        }
+                        
+                        val newPenalty = state.accumulatedPenalty + stepPenalty
                         val newPath = state.path + edge
-                        pq.add(RoutingState(edge.toStopId, edge.arrivalMin, edge.tripId, newPath, newTransfers, newLastTransferMin))
+                        
+                        pq.add(RoutingState(edge.toStopId, edge.arrivalMin, edge.tripId, newPath, newTransfers, newPenalty, newLastTransferMin))
                     }
                 }
             }
-    }
-        
-        // Якщо всю мережу перебрали, але так і не доїхали
+        }
         return null
     }
+
 }

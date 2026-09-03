@@ -92,7 +92,10 @@ data class JourneyLeg(
     val fromStopName: String,
     val toStopName: String,
     val departureMin: Int,
-    val arrivalMin: Int
+    val arrivalMin: Int,
+    val tripId: String,      // ← нове
+    val fromStopId: String,   // ← нове
+     val toStopId: String   // ← нове: реальна зупинка висадки, для надійного матчингу на фронтенді
 )
 
 // Це весь маршрут цілком (сумарний час і список шматків)
@@ -101,3 +104,19 @@ data class JourneyResponse(
     val totalMinutes: Int,
     val legs: List<JourneyLeg>
 )
+@Serializable
+data class UpcomingStop(
+    val stopId: String,
+    val name: String,
+    val platformCode: String? = null,
+    val eta: String,
+)
+
+@Serializable
+data class UpcomingStopsResponse(
+    val reportId: Int,
+    val route: String,
+    val direction: String?,
+    val upcomingStops: List<UpcomingStop>,
+)
+

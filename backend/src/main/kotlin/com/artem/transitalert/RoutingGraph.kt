@@ -236,7 +236,14 @@ object TransitGraph {
                 listOf(RouteEdge("START_COORD", startId, "Пішки", "WALK", startMin, arrivalTime, 0))
             } else emptyList()
             
-            pq.add(RoutingState(startId, arrivalTime, if (walkMins > 0) "WALK" else null, initialPath, 0, 0.0, arrivalTime)) 
+            // "Людський" штраф: до 8 хв - вважаємо звичайним часом, далі - жорстко множимо на 5
+            val initialPenalty = if (walkMins <= 8) {
+                walkMins * 1.0 
+            } else {
+                8.0 + (walkMins - 8) * 5.0 
+            }
+            
+            pq.add(RoutingState(startId, arrivalTime, if (walkMins > 0) "WALK" else null, initialPath, 0, initialPenalty, arrivalTime)) 
         }
 
         while (pq.isNotEmpty()) {
@@ -263,8 +270,12 @@ object TransitGraph {
                 val finalArrivalTime = state.currentMin + finalWalkMins
                 val finalEdge = RouteEdge(state.stopId, "FINISH_COORD", "Пішки", "WALK", state.currentMin, finalArrivalTime, 0)
                 
-                // ТУТ МАГІЯ: Жорстко штрафуємо фінальний крок (1 хвилина пішки = 3 бали)
-                val stepPenalty = finalWalkMins * 3.0 
+                // Симетричний поріг для фінальної прогулянки (до 8 хв - ок, далі - штраф)
+                val stepPenalty = if (finalWalkMins <= 8) {
+                    finalWalkMins * 1.0
+                } else {
+                    8.0 + (finalWalkMins - 8) * 5.0
+                }
                 val newPenalty = state.accumulatedPenalty + stepPenalty
                 
                 pq.add(RoutingState("FINISH_COORD", finalArrivalTime, "WALK", state.path + finalEdge, state.transfers, newPenalty, state.lastTransferMin))

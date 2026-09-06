@@ -1,8 +1,18 @@
 // ==================== Конфіг ====================
-const API_BASE_URL = window.location.protocol + '//' + window.location.hostname + ':8080';
+let API_BASE_URL;
+
+// Перевіряємо, чи ми зайшли через публічний тунель Cloudflare
+if (window.location.hostname.includes('trycloudflare.com')) {
+    API_BASE_URL = 'https://vice-craps-lesson-conscious.trycloudflare.com';
+} else {
+    // Якщо зайшли локально (192.168...), через localhost або Tailscale (100.x.x.x)
+    API_BASE_URL = window.location.protocol + '//' + window.location.hostname + ':8080';
+}
+// ================================================
 const LUBLIN_CENTER = [51.2465, 22.5684];
 const REPORT_TTL_MS = 45 * 60 * 1000; // синхронно з REPORT_TTL_MINUTES на бекенді
 
+let lastJourneyDepartureMin = null; // Зберігає час для наступного свайпу
 let currentDeparturesData = [];
 let topTimeOffset = 0;      // Зсув у минуле
 let bottomTimeOffset = 0;   // Зсув у майбутнє
@@ -1129,7 +1139,7 @@ function saveRecentRouteStop(stop) {
     // Видаляємо дублікати по імені (бо платформи вже згруповані)
     recents = recents.filter(s => s.name !== stop.name);
     recents.unshift(stop);
-    if (recents.length > 2) recents.length = 2; // Ліміт: 2 зупинки!
+    if (recents.length > 4) recents.length = 4; // Ліміт: 4 зупинки!
     localStorage.setItem('ta_recent_route_stops', JSON.stringify(recents));
 }
 
@@ -1251,7 +1261,7 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                 .then(r => r.ok ? r.json() : []);
                 
             // Bounding box для Любліна, щоб не шукало вулиці у Варшаві (minLon, minLat, maxLon, maxLat)
-            const mapTilerUrl = `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${MAPTILER_KEY}&language=pl&bbox=22.35,51.11,22.75,51.36`;
+            const mapTilerUrl = `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${MAPTILER_KEY}&language=pl&autocomplete=true&bbox=22.35,51.11,22.75,51.36`;
             const geocodePromise = fetch(mapTilerUrl)
                 .then(r => r.ok ? r.json() : { features: [] });
 
@@ -1285,9 +1295,9 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                     div.className = 'stop-card';
                     div.style = 'padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; gap: 12px;';
                     
-                    // Додали іконку зупинки, щоб візуально відділити від адрес
+                   // Використовуємо іконку stop.svg через маску
                     div.innerHTML = `
-                        <div class="svg-icon icon-bus-stop" style="color: var(--blue);"></div>
+                        <div style="-webkit-mask-image: url('stop.svg'); mask-image: url('stop.svg'); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; background-color: var(--blue); width: 20px; height: 20px; flex-shrink: 0;"></div>
                         <div style="font-weight: bold; color: var(--text);">${group.name}</div>
                     `;
                     
@@ -1348,6 +1358,8 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                         
                         if (isFrom) routeFromStop = routeObj;
                         else routeToStop = routeObj;
+                   // ДОДАНО: Зберігаємо адресу в історію
+                        saveRecentRouteStop(routeObj);
                     });
                     suggestionsBox.appendChild(div);
                 });
@@ -1383,7 +1395,10 @@ function groupStopsByNameAndDistance(stopsArray) {
                 name: stop.name,
                 ids: [...currentIds],
                 routes: stop.routes ? [...stop.routes] : [],
-                distance: stop.distance
+                distance: stop.distance,
+                // ДОДАНО: Зберігаємо координати, якщо це адреса
+                lat: stop.lat,
+                lon: stop.lon
             };
         } else {
             // Безпечно докидаємо всі нові ID, яких ще немає в групі
@@ -1432,21 +1447,29 @@ function createRouteSuggestionElement(group, inputEl, suggestionsBoxEl, isFrom) 
     }
     
     item.addEventListener('click', () => {
-        // Вставляємо чисту назву в інпут
         inputEl.value = group.name;
         suggestionsBoxEl.style.display = 'none';
         
-        // ДОДАНО: Примусово показуємо хрестик
         const clearBtn = document.getElementById(isFrom ? 'route-clear-from' : 'route-clear-to');
         if (clearBtn) clearBtn.style.display = 'flex';
         
-        // Передаємо в бекенд ВСІ зібрані ID платформ
-        const routeObj = { name: group.name, ids: group.ids };
+        // ДОДАНО: Розділяємо логіку для адрес і зупинок
+        let routeObj;
+        if (group.lat && group.lon) {
+            routeObj = { name: group.name, lat: group.lat, lon: group.lon }; // Це адреса
+        } else {
+            routeObj = { name: group.name, ids: group.ids }; // Це зупинка
+        }
+        
         if (isFrom) routeFromStop = routeObj;
         else routeToStop = routeObj;
         
-        // Зберігаємо в історію 
-      saveRecentRouteStop({ name: group.name, stopId: group.ids[0], code: '' });
+        // Зберігаємо в історію, оновлюючи її
+        if (group.lat && group.lon) {
+            saveRecentRouteStop(routeObj);
+        } else {
+            saveRecentRouteStop({ name: group.name, stopId: group.ids[0], code: '' });
+        }
     });
     return item;
 }
@@ -1894,7 +1917,7 @@ if (searchRouteBtn && routeResultsBox) {
                 const currentMin = now.getHours() * 60 + now.getMinutes();
                 let countdown = firstTransitLeg.departureMin - currentMin;
                 if (countdown < 0) countdown = 0;
-                let timeText = countdown === 0 ? '< 1 min' : (countdown <= 30 ? `${countdown} min` : depTime);
+                let timeText = countdown === 0 ? '< 1 min' : (countdown <= 30 ? `za ${countdown} min` : depTime);
                 const minClass = countdown <= 30 ? 'trasa-dep-min time-live' : 'trasa-dep-min highlight';
 
                 // Компактна легенда — тільки реальний транспорт (піша хода позначена окремо нижче)
@@ -1967,7 +1990,7 @@ card.innerHTML = `
         ${walkNoteHtml}
         ${timelineHtml}
         <div class="trasa-footer">
-            <span class="departure-in">Odjazd za: <span class="${minClass}" data-dep="${firstTransitLeg.departureMin}">${timeText}</span></span>
+            <span class="departure-in">Odjazd: <span class="${minClass}" data-dep="${firstTransitLeg.departureMin}">${timeText}</span></span>
             <span class="duration">czas <span class="highlight">${duration} min</span></span>
         </div>
     </div>
@@ -1986,6 +2009,17 @@ routeResultsBox.appendChild(wrapper);
 // ... (далі йде updateTrasaCountdowns() як і було) ...            
 });
 
+// ЗАПАМ'ЯТОВУЄМО ЧАС ОСТАННЬОГО МАРШРУТУ ДЛЯ СВАЙПУ
+            if (journeys.length > 0) {
+                const lastJourney = journeys[journeys.length - 1];
+                // Беремо саме транспорт, ігноруємо пішу ходу
+                const transitLegs = lastJourney.legs.filter(l => l.route !== "Пішки" && l.route);
+                if (transitLegs.length > 0) {
+                    // Зберігаємо час відправлення САМЕ АВТОБУСА
+                    lastJourneyDepartureMin = transitLegs[0].departureMin;
+                }
+            }
+
             updateTrasaCountdowns();
             if (!window.trasaCountdownInterval) {
                 window.trasaCountdownInterval = setInterval(updateTrasaCountdowns, 20000);
@@ -1997,6 +2031,158 @@ routeResultsBox.appendChild(wrapper);
         }
     });
 }
+
+// ==================== СВАЙПИ ДЛЯ МАРШРУТІВ (TRASA) ====================
+
+// Створюємо індикатор "завантаження майбутнього"
+const trasaBottomIndicator = document.createElement('div');
+trasaBottomIndicator.innerHTML = '↻ Szukam późniejszych...';
+trasaBottomIndicator.style.textAlign = 'center';
+trasaBottomIndicator.style.color = 'var(--text-muted)';
+trasaBottomIndicator.style.height = '0';
+trasaBottomIndicator.style.overflow = 'hidden';
+trasaBottomIndicator.style.transition = 'height 0.2s ease-out';
+// Вставляємо під списком результатів
+routeResultsBox.parentNode.insertBefore(trasaBottomIndicator, routeResultsBox.nextSibling);
+
+let trasaStartY = 0;
+let trasaIsAtBottom = false;
+let trasaIsRefreshing = false;
+
+routeResultsBox.addEventListener('touchstart', (e) => {
+    trasaStartY = e.touches[0].clientY;
+    // Перевіряємо, чи доскролили до низу результатів
+    trasaIsAtBottom = Math.ceil(routeResultsBox.scrollTop + routeResultsBox.clientHeight) >= routeResultsBox.scrollHeight - 2;
+}, { passive: true });
+
+routeResultsBox.addEventListener('touchmove', (e) => {
+    if (!trasaStartY || trasaIsRefreshing) return;
+    const dy = e.touches[0].clientY - trasaStartY;
+
+    // Тягнемо ВВЕРХ, будучи на дні
+    if (dy < 0 && trasaIsAtBottom) {
+        trasaBottomIndicator.style.height = Math.min(-dy, 50) + 'px';
+    }
+}, { passive: true });
+
+routeResultsBox.addEventListener('touchend', async (e) => {
+    if (!trasaStartY || trasaIsRefreshing) return;
+    const dy = e.changedTouches[0].clientY - trasaStartY;
+
+    // ДОДАНО: Перевіряємо, чи є збережений час (lastJourneyDepartureMin !== null)
+    if (dy < -60 && trasaIsAtBottom && lastJourneyDepartureMin !== null) {
+        trasaIsRefreshing = true;
+        trasaBottomIndicator.style.height = '40px';
+
+        try {
+            // 1. Формуємо параметри (звідки/куди), так само як в основному пошуку
+            let fromParams = '';
+            if (routeFromStop.ids) fromParams = `from=${routeFromStop.ids.join(',')}`;
+            else if (routeFromStop.lat && routeFromStop.lon) fromParams = `fromLat=${routeFromStop.lat}&fromLon=${routeFromStop.lon}`;
+
+            let toParams = '';
+            if (routeToStop.ids) toParams = `to=${routeToStop.ids.join(',')}`;
+            else if (routeToStop.lat && routeToStop.lon) toParams = `toLat=${routeToStop.lat}&toLon=${routeToStop.lon}`;
+
+            // 2. Робимо запит до сервера зі ЗСУВОМ ЧАСУ (+1 хвилина від останнього на екрані)
+            const nextSearchMin = lastJourneyDepartureMin + 1;
+            const res = await fetch(`${API_BASE_URL}/route/complex?${fromParams}&${toParams}&limit=3&time=${nextSearchMin}`);
+            if (!res.ok) throw new Error('Помилка сервера');
+
+            const newJourneys = await res.json();
+
+            if (newJourneys.length > 0) {
+               // Оновлюємо час для наступного свайпу!
+                const lastJourney = newJourneys[newJourneys.length - 1];
+                const transitLegs = lastJourney.legs.filter(l => l.route !== "Пішки" && l.route);
+                if (transitLegs.length > 0) {
+                    lastJourneyDepartureMin = transitLegs[0].departureMin;
+                }
+
+                // 3. Відмальовуємо нові картки (Це копія твоєї логіки малювання з головного пошуку)
+                newJourneys.forEach(journey => {
+                    const legs = journey.legs;
+                    if (!legs || legs.length === 0) return;
+                    const firstLeg = legs[0];
+                    const lastLeg = legs[legs.length - 1];
+                    const transitLegs = legs.filter(l => l.route !== "Пішки" && l.route);
+                    if (transitLegs.length === 0) return;
+
+                    const firstTransitLeg = transitLegs[0];
+                    const initialWalkLeg = (firstLeg.route === "Пішки" || !firstLeg.route) ? firstLeg : null;
+                    const walkMin = initialWalkLeg ? Math.max(0, initialWalkLeg.arrivalMin - initialWalkLeg.departureMin) : 0;
+                    const depTime = formatTime(firstTransitLeg.departureMin);
+                    const arrTime = formatTime(lastLeg.arrivalMin);
+                    const duration = journey.totalMinutes;
+
+                    const now = new Date();
+                    const currentMin = now.getHours() * 60 + now.getMinutes();
+                    let countdown = firstTransitLeg.departureMin - currentMin;
+                    if (countdown < 0) countdown = 0;
+                    let timeText = countdown === 0 ? '< 1 min' : (countdown <= 30 ? `za ${countdown} min` : depTime);
+                    const minClass = countdown <= 30 ? 'trasa-dep-min time-live' : 'trasa-dep-min highlight';
+
+                    let legendHtml = '<div class="trasa-legend" style="background: transparent; box-shadow: none; overflow: visible; gap: 6px; top: -14px;">';
+                    transitLegs.forEach(leg => {
+                        const routeNum = parseInt(leg.route, 10);
+                        const isTrolley = (routeNum >= 150) ? ' trolleybus' : '';
+                        legendHtml += `<div class="dep-route-box route-size-3${isTrolley}">${leg.route}</div>`;
+                    });
+                    legendHtml += '</div>';
+
+                    const startName = firstLeg.route === 'Пішки' ? routeFromStop.name : firstTransitLeg.fromStopName;
+                    const endName = lastLeg.route === 'Пішки' ? routeToStop.name : lastLeg.toStopName;
+                    const fromStop = splitStopName(startName);
+                    const toStop = splitStopName(endName);
+
+                    const walkNoteHtml = initialWalkLeg ? `<div class="trasa-walk-note" style="display:flex; align-items:center; gap:6px; font-size:12px; color: var(--text-muted); margin-bottom: 4px;"><div class="svg-icon icon-walk" style="width: 12px; height: 12px;"></div>${walkMin} min do przystanku</div>` : '';
+
+                    let timelineHtml = '<div class="trasa-timeline" style="position:relative; padding-left:14px; border-left:2px dotted var(--text-muted); margin: 2px 0 6px;">';
+                    const dot = (color) => `<div style="position:absolute; left:-19px; top:6px; width:8px; height:8px; border-radius:50%; background:${color};"></div>`;
+                    
+                    const startColor = firstLeg.route === 'Пішки' ? 'var(--danger)' : 'var(--blue)';
+                    timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0;">${dot(startColor)}<span class="stop-name">${fromStop.name} ${fromStop.code ? `<span class="stop-code">(${fromStop.code})</span>` : ''}</span><span class="time">${depTime}</span></div>`;
+                    
+                    for (let i = 0; i < transitLegs.length - 1; i++) {
+                        const tStop = splitStopName(transitLegs[i].toStopName);
+                        timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0; opacity:0.8;">${dot('var(--text-muted)')}<span class="stop-name">➔ ${tStop.name} <span class="stop-code">(${tStop.code})</span></span><span class="time">${formatTime(transitLegs[i].arrivalMin)}</span></div>`;
+                    }
+                    
+                    const endColor = lastLeg.route === 'Пішки' ? 'var(--danger)' : 'var(--blue)';
+                    timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0;">${dot(endColor)}<span class="stop-name">${toStop.name} ${toStop.code ? `<span class="stop-code">(${toStop.code})</span>` : ''}</span><span class="time">${arrTime}</span></div></div>`;
+
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'trasa-wrapper';
+                    const card = document.createElement('div');
+                    card.className = 'trasa-card expandable';
+                    card.style.cursor = 'pointer';
+                    card.innerHTML = `<button class="close-trasa-btn" title="Zamknij">✕</button>${legendHtml}<div class="trasa-middle-scroll" style="display: none;"></div><div class="trasa-details">${walkNoteHtml}${timelineHtml}<div class="trasa-footer"><span class="departure-in">Odjazd: <span class="${minClass}" data-dep="${firstTransitLeg.departureMin}">${timeText}</span></span><span class="duration">czas <span class="highlight">${duration} min</span></span></div></div>`;
+                    
+                    card.addEventListener('click', (e) => {
+                        if (e.target.closest('.dep-expand-map-btn')) return;
+                        toggleTrasaExpand(card, legs, transitLegs);
+                    });
+                    
+                    wrapper.appendChild(card);
+                    // ВАЖЛИВО: Додаємо нові картки в кінець існуючого списку
+                    routeResultsBox.appendChild(wrapper);
+                });
+
+                updateTrasaCountdowns();
+            } else {
+                showToast('Brak późniejszych połączeń');
+            }
+        } catch (err) {
+            showToast('Błąd sieci');
+        }
+
+        trasaBottomIndicator.style.height = '0';
+        trasaIsRefreshing = false;
+    } else {
+        trasaBottomIndicator.style.height = '0';
+    }
+    trasaStartY = 0;
+});
 
 // Запускаємо відмальовку останніх маршрутів при завантаженні сторінки
 document.addEventListener('DOMContentLoaded', () => {
@@ -2039,7 +2225,7 @@ function saveRecentStop(stop) {
     // Видаляємо дублікат, якщо ця зупинка вже є (щоб підняти її наверх)
     recents = recents.filter(s => s.stopId !== stop.stopId); 
     recents.unshift(stop); // Додаємо на початок
-    if (recents.length > 2) recents.length = 2; // Лишаємо тільки 3 останні
+    if (recents.length > 2) recents.length = 2; // Лишаємо тільки 2 останні
     localStorage.setItem('ta_recent_stops', JSON.stringify(recents));
 }
 

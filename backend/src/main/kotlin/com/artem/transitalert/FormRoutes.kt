@@ -185,7 +185,11 @@ fun Application.formRoutes() {
             }
 
             val now = java.time.LocalTime.now(LUBLIN_ZONE)
-            var currentSearchMin = now.hour * 60 + now.minute
+            
+            // Читаємо параметр time з фронтенду. Якщо його немає — беремо поточний час
+            val timeParam = call.request.queryParameters["time"]?.toIntOrNull()
+            var currentSearchMin = timeParam ?: (now.hour * 60 + now.minute)
+            
             val allJourneys = mutableListOf<JourneyResponse>()
             
             // ЗАПОБІЖНИК ВІД ЗАВИСАННЯ

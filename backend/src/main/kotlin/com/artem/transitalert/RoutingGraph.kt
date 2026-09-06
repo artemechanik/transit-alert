@@ -24,6 +24,12 @@ data class TripStopRecord(
     val seq: Int,
     val min: Int
 )
+// Кеш координат зупинки для A-to-B маршрутизації
+data class StopCoords(
+    val id: String,
+    val lat: Double,
+    val lon: Double
+)
 // Стан нашого віртуального "пасажира" під час пошуку
 data class RoutingState(
     val stopId: String,
@@ -53,7 +59,7 @@ object TransitGraph {
 // ДОДАЄМО @Volatile до обох змінних:
     @Volatile var edges: Map<String, List<RouteEdge>> = emptyMap()
     @Volatile var isLoaded = false
-    
+    @Volatile var activeStops: List<StopCoords> = emptyList()
     // Фоновий процес для нічного оновлення
     fun startNightlyRebuild() {
         CoroutineScope(Dispatchers.IO).launch {
@@ -180,6 +186,8 @@ object TransitGraph {
                 Triple(it[Stops.stopId], it[Stops.lat], it[Stops.lon]) 
             }
             
+            activeStops = allStops.map { StopCoords(it.first, it.second, it.third) }
+            
             for (s1 in allStops) {
                 for (s2 in allStops) {
                     if (s1.first == s2.first) continue 
@@ -211,67 +219,125 @@ object TransitGraph {
         }
     }
               //======Функція пошуку
-       fun findBestRoute(fromIds: List<String>, toIds: List<String>, startMin: Int): List<RouteEdge>? {
+     fun findBestRoute(
+        starts: List<Pair<String, Int>>, 
+        targets: Map<String, Int>,       
+        startMin: Int
+    ): List<RouteEdge>? {
         if (!isLoaded) return null
         
         val pq = java.util.PriorityQueue<RoutingState>()
         val visited = mutableSetOf<String>()
 
-        // 1. Додали 0.0 для accumulatedPenalty при старті
-        for (startId in fromIds) {
-            pq.add(RoutingState(startId, startMin, null, emptyList(), 0, 0.0, startMin)) 
+        // 1. Старт (твій код + підтримка часу пішки від GPS)
+        for ((startId, walkMins) in starts) {
+            val arrivalTime = startMin + walkMins
+            val initialPath = if (walkMins > 0) {
+                listOf(RouteEdge("START_COORD", startId, "Пішки", "WALK", startMin, arrivalTime, 0))
+            } else emptyList()
+            
+            pq.add(RoutingState(startId, arrivalTime, if (walkMins > 0) "WALK" else null, initialPath, 0, 0.0, arrivalTime)) 
         }
 
         while (pq.isNotEmpty()) {
             val state = pq.poll()
 
-            if (state.stopId in toIds) return state.path
+            // 2. ФІНІШ (Оновлена логіка: завершуємо тільки якщо РЕАЛЬНО дійшли до фінішу)
+            if (state.stopId == "FINISH_COORD") {
+                return state.path
+            }
+            
+            // Якщо ми шукали конкретну зупинку (класичний пошук без координат)
+            if (targets.containsKey(state.stopId) && targets[state.stopId] == 0) {
+                return state.path
+            }
 
             val stateKey = "${state.stopId}_${state.tripId}"
             if (!visited.add(stateKey)) continue
 
+            // --- НОВИЙ БЛОК: Віртуальний перехід до координати ---
+            // Якщо від цієї зупинки можна дійти до фінішу, ми НЕ зупиняємо пошук!
+            // Ми додаємо фінальну прогулянку в загальну чергу, щоб вона отримала свій штраф.
+            val finalWalkMins = targets[state.stopId]
+            if (finalWalkMins != null && finalWalkMins > 0) {
+                val finalArrivalTime = state.currentMin + finalWalkMins
+                val finalEdge = RouteEdge(state.stopId, "FINISH_COORD", "Пішки", "WALK", state.currentMin, finalArrivalTime, 0)
+                
+                // ТУТ МАГІЯ: Жорстко штрафуємо фінальний крок (1 хвилина пішки = 3 бали)
+                val stepPenalty = finalWalkMins * 3.0 
+                val newPenalty = state.accumulatedPenalty + stepPenalty
+                
+                pq.add(RoutingState("FINISH_COORD", finalArrivalTime, "WALK", state.path + finalEdge, state.transfers, newPenalty, state.lastTransferMin))
+            }
+
             val outgoingEdges = edges[state.stopId] ?: emptyList()
             
+            // 3. Твоя оригінальна логіка циклу (БЕЗ моїх експериментів)
             for (edge in outgoingEdges) {
                 val isWalk = edge.tripId == "WALK"
                 val isSameTrip = state.tripId == edge.tripId
                 val newLastTransferMin = if (!isSameTrip && state.tripId != null) state.currentMin else state.lastTransferMin
                 val newTransfers = if (state.tripId == null || isSameTrip) state.transfers else state.transfers + 1
                 
+                // ГЛОБАЛЬНИЙ СТАТУС: чи ми вже сідали сьогодні в будь-який транспорт?
+                val hasUsedBus = state.path.any { it.tripId != "WALK" && it.tripId != "START_COORD" }
+
                 if (isWalk) {
                     if (state.tripId == "WALK") continue 
                     val arrivalTime = state.currentMin + edge.arrivalMin 
                     val walkLeg = edge.copy(departureMin = state.currentMin, arrivalMin = arrivalTime)
                     val newPath = state.path + walkLeg
                     
-                    // Передаємо існуючий state.accumulatedPenalty далі
-                    pq.add(RoutingState(edge.toStopId, arrivalTime, "WALK", newPath, newTransfers, state.accumulatedPenalty, newLastTransferMin))
+                    var stepPenalty = 0.0
+                    // Якщо ми вже катались на автобусі, то ця прогулянка - це пересадка між зупинками
+                    if (hasUsedBus) {
+                        stepPenalty += 5.0 // Базовий штраф, щоб не стрибав між зупинками просто так
+                        stepPenalty += edge.arrivalMin * 2.0 // Караємо за кожну хвилину ходьби
+                    }
                     
-                } else {
-                    val transferBuffer = if (state.tripId == null || isSameTrip || state.tripId == "WALK") 0 else 2
+                    // --- НОВИЙ ЖОРСТКИЙ ШТРАФ ЗА БУДЬ-ЯКУ ХОДЬБУ ---
+                    // Робимо так, щоб 1 хвилина пішки коштувала значно дорожче, 
+                    // ніж 1 хвилина їзди в автобусі (яка коштує 0.3)
+                    stepPenalty += (edge.arrivalMin * 3.0) 
+                    
+                    val newPenalty = state.accumulatedPenalty + stepPenalty
+                    pq.add(RoutingState(edge.toStopId, arrivalTime, "WALK", newPath, newTransfers, newPenalty, newLastTransferMin))
+                    
+               } else {
+                    // Пересадка миттєва: якщо приїхав о 14:00, можеш сісти на рейс о 14:00
+                    val transferBuffer = 0 
                     
                     if (edge.departureMin >= state.currentMin + transferBuffer) {
-                        // Перевіряємо, чи ми вже їхали на якомусь автобусі, чи це наш перший транспорт
-val hasUsedBus = state.path.any { it.tripId != "WALK" }
+                        val maxWaitTime = if (hasUsedBus) 60 else 600
+                        if (edge.departureMin - state.currentMin > maxWaitTime) continue
 
-// Якщо вже в дорозі (пересадка) - максимум 60 хв. Якщо ще вдома (перший рейс) - дозволяємо чекати хоч 10 годин (600 хв)
-val maxWaitTime = if (hasUsedBus) 60 else 600
-
-if (edge.departureMin - state.currentMin > maxWaitTime) continue
-
-
-                        // --- СМАРТ-ШТРАФИ ---
                         var stepPenalty = 0.0
-                        val isRealTransfer = !isSameTrip && state.tripId != null
-			val transferBuffer = if (state.tripId == null || isSameTrip) 0 else 2
+                        
+                        // ЗАКРИТА ЛАЗІВКА: Справжня пересадка - це якщо ми не на тому ж рейсі, і ВЖЕ їздили раніше!
+                        // (Неважливо, прийшли ми на цю зупинку пішки чи приїхали)
+                        val isRealTransfer = !isSameTrip && hasUsedBus
+                        
                         if (isRealTransfer) {
-                            stepPenalty += 5.0 // Базовий штраф в 5 хвилин надійно вбиває "мікро-стрибки" на 1 зупинку
+                            stepPenalty += 5.0 
                             
                             val waitTime = edge.departureMin - state.currentMin
                             if (waitTime > 10) {
-                                stepPenalty += (waitTime - 10) * 1.5 // Прогресивно караємо за довге стояння
+                                // 2. КАП ШТРАФУ: Множник 1.0 замість 1.5, 
+                                // і максимальний штраф за очікування не перевищує 15 балів.
+                                stepPenalty += ((waitTime - 10) * 1.0).coerceAtMost(15.0)
                             }
+                        } else if (!hasUsedBus) {
+                            // МІКРО-ШТРАФ за очікування першого автобуса (0.1 бала за хвилину).
+                            // Це змушує Дейкстру при рівних умовах сортувати ранні виїзди першими, 
+                            // щоб цикл мультипошуку їх не пропустив!
+                            val initialWait = edge.departureMin - state.currentMin
+                            stepPenalty += initialWait * 0.1
                         }
+                        // --- ФІКС ДЛЯ ПЕРШОЇ СПІЛЬНОЇ ЗУПИНКИ ---
+                        // Легкий "податок" на час у дорозі (0.3 бала за хвилину).
+                        // Змушує алгоритм уникати зайвих катань і виходити раніше.
+                        val travelTime = edge.arrivalMin - edge.departureMin
+                        stepPenalty += travelTime * 0.3
                         
                         val newPenalty = state.accumulatedPenalty + stepPenalty
                         val newPath = state.path + edge
@@ -282,6 +348,22 @@ if (edge.departureMin - state.currentMin > maxWaitTime) continue
             }
         }
         return null
+    }
+    // Функція шукає зупинки навколо будь-якої координати і рахує час пішки (хвилини)
+    fun getNearbyStopsWalkTimes(lat: Double, lon: Double, maxRadiusMeters: Double = 800.0): List<Pair<String, Int>> {
+        val result = mutableListOf<Pair<String, Int>>()
+        
+        for (stop in activeStops) {
+            // Використовуємо твою існуючу функцію calculateDistance
+            val dist = calculateDistance(lat, lon, stop.lat, stop.lon)
+            
+            if (dist <= maxRadiusMeters) {
+                // Рахуємо хвилини (швидкість людини ~ 80 метрів на хвилину)
+                val walkMinutes = (dist / 80.0).toInt().coerceAtLeast(1)
+                result.add(Pair(stop.id, walkMinutes))
+            }
+        }
+        return result
     }
 
 }

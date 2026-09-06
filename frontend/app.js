@@ -1184,6 +1184,12 @@ function applyRecentRoute(route) {
     document.getElementById('route-input-from').value = route.from.name;
     document.getElementById('route-input-to').value = route.to.name;
     
+    // ДОДАНО: Показуємо обидва хрестики
+    const clearFrom = document.getElementById('route-clear-from');
+    const clearTo = document.getElementById('route-clear-to');
+    if (clearFrom) clearFrom.style.display = 'flex';
+    if (clearTo) clearTo.style.display = 'flex';
+    
     // Відновлюємо приховані об'єкти з усіма ID
     routeFromStop = route.from;
     routeToStop = route.to;
@@ -1198,18 +1204,40 @@ let routeToStop = null;
 function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
     const input = document.getElementById(inputId);
     const suggestionsBox = document.getElementById(suggestionsId);
+    // ДОДАНО: Шукаємо кнопку очищення
+    const clearBtn = document.getElementById(isFrom ? 'route-clear-from' : 'route-clear-to');
 
     if (!input || !suggestionsBox) return;
+
+    // ДОДАНО: Логіка кліку по хрестику
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            input.value = '';
+            clearBtn.style.display = 'none';
+            suggestionsBox.style.display = 'none';
+            if (isFrom) routeFromStop = null;
+            else routeToStop = null;
+            
+            // Відразу показуємо GPS та історію після очищення
+            loadRouteDefaultSuggestions(isFrom);
+            input.focus();
+        });
+    }
 
     input.addEventListener('input', async (e) => {
        const query = e.target.value.trim();
         
-        if (query.length === 0) {
+       // ДОДАНО: Показуємо або ховаємо хрестик, якщо є текст
+       if (clearBtn) {
+           clearBtn.style.display = query.length > 0 ? 'flex' : 'none';
+       }
+        
+       if (query.length === 0) {
             // Якщо поле повністю очистили — відразу повертаємо історію та GPS!
             if (isFrom) routeFromStop = null; else routeToStop = null;
             loadRouteDefaultSuggestions(isFrom);
             return;
-        } else if (query.length < 2) {
+       } else if (query.length < 2) {
             // Якщо введена лише 1 літера — просто ховаємо список і чекаємо
             suggestionsBox.innerHTML = '';
             suggestionsBox.style.display = 'none';
@@ -1218,81 +1246,118 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
         }
 
         try {
-            // Твій оригінальний і правильний ендпоінт
-            const res = await fetch(`${API_BASE_URL}/stops/search?q=${encodeURIComponent(query)}`);
-            if (!res.ok) throw new Error('Помилка мережі');
+            // 1. ПАРАЛЕЛЬНІ ЗАПИТИ: Шукаємо зупинки на бекенді + адреси в MapTiler
+            const stopsPromise = fetch(`${API_BASE_URL}/stops/search?q=${encodeURIComponent(query)}`)
+                .then(r => r.ok ? r.json() : []);
+                
+            // Bounding box для Любліна, щоб не шукало вулиці у Варшаві (minLon, minLat, maxLon, maxLat)
+            const mapTilerUrl = `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${MAPTILER_KEY}&language=pl&bbox=22.35,51.11,22.75,51.36`;
+            const geocodePromise = fetch(mapTilerUrl)
+                .then(r => r.ok ? r.json() : { features: [] });
+
+            // Чекаємо результатів з обох серверів одночасно!
+            const [stops, geocodeData] = await Promise.all([stopsPromise, geocodePromise]);
             
-          const stops = await res.json();
-            
-            if (stops.length === 0) {
-                suggestionsBox.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">Нічого не знайдено</div>';
+            if (stops.length === 0 && (!geocodeData.features || geocodeData.features.length === 0)) {
+                suggestionsBox.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">Brak wyników</div>';
                 suggestionsBox.style.display = 'block';
                 return;
             }
 
-            // 1. ГРУПУЄМО ЗУПИНКИ ЗА НАЗВОЮ
-            const groupedStops = {};
-            stops.forEach(stop => {
-                if (!groupedStops[stop.name]) {
-                    groupedStops[stop.name] = {
-                        name: stop.name,
-                        ids: [stop.stopId], // Робимо масив ID, щоб зберегти обидві платформи
-                        routes: stop.routes ? [...stop.routes] : []
-                    };
-                } else {
-                    // Якщо така назва вже є, просто докидаємо ID другої платформи і її маршрути
-                    groupedStops[stop.name].ids.push(stop.stopId);
-                    if (stop.routes) {
-                        groupedStops[stop.name].routes.push(...stop.routes);
-                    }
-                }
-            });
-
-            // Перетворюємо об'єкт назад на масив унікальних зупинок
-            const finalStops = Object.values(groupedStops);
-
             suggestionsBox.innerHTML = '';
-            
-           // 2. МАЛЮЄМО МІНІМАЛІСТИЧНІ ЗУПИНКИ (тільки назва)
-            finalStops.forEach(group => {
-                const div = document.createElement('div');
-                div.className = 'stop-card';
-                
-                div.style.padding = '12px 16px';
-                div.style.cursor = 'pointer';
-                div.style.borderBottom = '1px solid var(--border)';
-                div.style.background = 'var(--bg)';
-                
-                const nameDiv = document.createElement('div');
-                nameDiv.style.fontWeight = 'bold';
-                nameDiv.style.color = 'var(--text)';
-                nameDiv.textContent = group.name; // Тільки назва!
-                
-                div.appendChild(nameDiv);
-                
-                div.addEventListener('click', () => {
-                    input.value = group.name; 
-                    suggestionsBox.innerHTML = '';
-                    suggestionsBox.style.display = 'none';
-                    
-                    // Під капотом ми все ще зберігаємо всі ID платформ для бекенду
-                    if (isFrom) routeFromStop = group;
-                    else routeToStop = group;
 
-                    // ====== ДОДАЄМО ЦЕЙ РЯДОК ======
-                    // Зберігаємо зупинку в незалежну історію вкладки Trasa
-                   saveRecentRouteStop({ name: group.name, ids: group.ids });
+            // 2. ОБРОБКА ТА ВІДМАЛЬОВКА ЗУПИНОК (твоя логіка групування)
+            if (stops.length > 0) {
+                const groupedStops = {};
+                stops.forEach(stop => {
+                    if (!groupedStops[stop.name]) {
+                        groupedStops[stop.name] = { name: stop.name, ids: [stop.stopId], routes: stop.routes ? [...stop.routes] : [] };
+                    } else {
+                        if (!groupedStops[stop.name].ids.includes(stop.stopId)) {
+                            groupedStops[stop.name].ids.push(stop.stopId);
+                        }
+                        if (stop.routes) groupedStops[stop.name].routes.push(...stop.routes);
+                    }
                 });
-                
-                suggestionsBox.appendChild(div);
-            });
+
+                Object.values(groupedStops).forEach(group => {
+                    const div = document.createElement('div');
+                    div.className = 'stop-card';
+                    div.style = 'padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; gap: 12px;';
+                    
+                    // Додали іконку зупинки, щоб візуально відділити від адрес
+                    div.innerHTML = `
+                        <div class="svg-icon icon-bus-stop" style="color: var(--blue);"></div>
+                        <div style="font-weight: bold; color: var(--text);">${group.name}</div>
+                    `;
+                    
+                    div.addEventListener('click', () => {
+                        input.value = group.name; 
+                        suggestionsBox.innerHTML = '';
+                        suggestionsBox.style.display = 'none';
+                        
+                        // Примусово показуємо хрестик
+                        if (clearBtn) clearBtn.style.display = 'flex';
+                        
+                        const routeObj = { name: group.name, ids: group.ids };
+                        if (isFrom) routeFromStop = routeObj;
+                        else routeToStop = routeObj;
+                        
+                        saveRecentRouteStop({ name: group.name, ids: group.ids });
+                    });
+                    suggestionsBox.appendChild(div);
+                });
+            }
+
+            // 3. ОБРОБКА ТА ВІДМАЛЬОВКА АДРЕС (MapTiler)
+            if (geocodeData.features && geocodeData.features.length > 0) {
+                // Беремо максимум 4 адреси, щоб не засмічувати список
+                geocodeData.features.slice(0, 4).forEach(feature => {
+                    const div = document.createElement('div');
+                    div.className = 'stop-card';
+                    div.style = 'padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; gap: 12px;';
+                    
+                    // Формуємо красиву назву з номером будинку (напр. "Nadbystrzycka 44")
+                    const shortName = feature.text + (feature.address ? ' ' + feature.address : '');
+                    // Відрізаємо саму вулицю, залишаємо контекст (Lublin, woj. lubelskie)
+                    const contextParts = feature.place_name.split(',').slice(1).join(',').trim();
+
+                    // Відображаємо із сірою іконкою піна
+                    div.innerHTML = `
+                        <div class="svg-icon icon-map-pin" style="color: var(--text-muted);"></div>
+                        <div>
+                            <div style="font-weight: bold; color: var(--text);">${shortName}</div>
+                            <div style="font-size: 0.85em; color: var(--text-muted);">${contextParts}</div>
+                        </div>
+                    `;
+                    
+                    div.addEventListener('click', () => {
+                        input.value = shortName; 
+                        suggestionsBox.innerHTML = '';
+                        suggestionsBox.style.display = 'none';
+                        
+                        // Примусово показуємо хрестик
+                        if (clearBtn) clearBtn.style.display = 'flex';
+                        
+                        // ВАЖЛИВО: MapTiler віддає координати у форматі [довгота, широта]
+                        const routeObj = { 
+                            name: shortName, 
+                            lat: feature.center[1], 
+                            lon: feature.center[0] 
+                        };
+                        
+                        if (isFrom) routeFromStop = routeObj;
+                        else routeToStop = routeObj;
+                    });
+                    suggestionsBox.appendChild(div);
+                });
+            }
             
             suggestionsBox.style.display = 'block';
         } catch (error) {
-            console.error('Помилка пошуку зупинок для маршруту:', error);
+            console.error('Помилка пошуку:', error);
         }
     });
-
     document.addEventListener('click', (e) => {
         if (!input.contains(e.target) && !suggestionsBox.contains(e.target)) {
             suggestionsBox.style.display = 'none';
@@ -1371,6 +1436,10 @@ function createRouteSuggestionElement(group, inputEl, suggestionsBoxEl, isFrom) 
         inputEl.value = group.name;
         suggestionsBoxEl.style.display = 'none';
         
+        // ДОДАНО: Примусово показуємо хрестик
+        const clearBtn = document.getElementById(isFrom ? 'route-clear-from' : 'route-clear-to');
+        if (clearBtn) clearBtn.style.display = 'flex';
+        
         // Передаємо в бекенд ВСІ зібрані ID платформ
         const routeObj = { name: group.name, ids: group.ids };
         if (isFrom) routeFromStop = routeObj;
@@ -1419,6 +1488,41 @@ function loadRouteDefaultSuggestions(isFrom) {
     // boxEl.style.left = '0';
     // boxEl.style.right = '0';
     // ==================================================
+    // ========================================================
+    // 0. КНОПКА "MOJA LOKALIZACJA" (GPS) - ТЕПЕР ЗАВЖДИ ВИДИМА
+    // 0. КНОПКА "MOJA LOKALIZACJA" (GPS) - ТЕПЕР ЗАВЖДИ ВИДИМА
+    const gpsButton = document.createElement('div');
+    gpsButton.className = 'stop-card';
+    // ЗМІНЕНО: padding з '14px 16px' на '10px'
+    gpsButton.style = 'padding: 10px; cursor: pointer; border-bottom: 1px solid var(--border); background: rgba(25, 118, 210, 0.05); display: flex; align-items: center; gap: 12px;';
+    gpsButton.innerHTML = `<div class="svg-icon icon-map-pin" style="color: var(--blue);"></div><div style="font-weight: 700; color: var(--blue);">Moja lokalizacja</div>`;
+    
+    gpsButton.addEventListener('click', () => {
+        // Перевіряємо наявність GPS тільки в момент КЛІКУ
+        if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
+            inputEl.value = 'Moja lokalizacja';
+            boxEl.style.display = 'none';
+            
+            // ДОДАНО: Примусово показуємо хрестик
+            const clearBtn = document.getElementById(isFrom ? 'route-clear-from' : 'route-clear-to');
+            if (clearBtn) clearBtn.style.display = 'flex';
+            
+            // Зберігаємо координати
+            const pos = userLocationMarker.getLatLng();
+            const locObj = { name: 'Moja lokalizacja', lat: pos.lat, lon: pos.lng };
+            
+            if (isFrom) {
+                routeFromStop = locObj;
+            } else {
+                routeToStop = locObj;
+            }
+        } else {
+            showToast('Szukam lokalizacji GPS, spróbuj za sekundę...');
+        }
+    });
+    
+    boxEl.appendChild(gpsButton);
+    // ========================================================
     // 1. ОСТАННІ ПОШУКИ (Групуємо історію, щоб прибрати платформи, якщо вони там були)
     const recents = getRecentRouteStops();
     if (recents.length > 0) {
@@ -1486,7 +1590,7 @@ function loadRouteDefaultSuggestions(isFrom) {
         // Групуємо їх за назвою (зливаємо 01, 02 і т.д.)
         const groupedNearby = groupStopsByNameAndDistance(flatNearbyStops);
         
-        nearbyContainer.innerHTML = '<div style="padding: 10px; font-weight: bold; color: var(--blue); display: flex; align-items: center; gap: 12px;"><div class="svg-icon icon-map-pin"></div> Przystanki w pobliżu</div>';
+        nearbyContainer.innerHTML = '<div style="padding: 10px; font-weight: bold; color: var(--blue); display: flex; align-items: center; gap: 12px;"><div class="svg-icon icon-walk"></div> Przystanki w pobliżu</div>';
         
         groupedNearby.forEach(group => {
             nearbyContainer.appendChild(createRouteSuggestionElement(group, inputEl, boxEl, isFrom));
@@ -1511,7 +1615,8 @@ function loadRouteDefaultSuggestions(isFrom) {
 //=====================Результат пошуку маршруту====================
 // Допоміжна функція: перетворює хвилини від півночі (напр. 500) у формат HH:MM (08:20)
 function formatTime(minutes) {
-    const h = Math.floor(minutes / 60).toString().padStart(2, '0');
+    // Додаємо % 24, щоб після 23:59 годинник скидався на 00:xx
+    const h = (Math.floor(minutes / 60) % 24).toString().padStart(2, '0');
     const m = (minutes % 60).toString().padStart(2, '0');
     return `${h}:${m}`;
 }
@@ -1546,10 +1651,20 @@ function updateTrasaCountdowns() {
 }
 
 // Розділяємо імена зупинок і коди платформ (напр. "Lipowa 03" -> {name:"Lipowa", code:"03"})
+// Розділяємо імена зупинок і коди платформ (напр. "Lipowa 03" -> {name:"Lipowa", code:"03"})
 function splitStopName(fullName) {
-    const parts = (fullName || '').split(' ');
-    const code = parts.pop();
-    return { name: parts.join(' '), code: code };
+    if (!fullName) return { name: '', code: '' };
+    const parts = fullName.split(' ');
+    const lastPart = parts[parts.length - 1];
+    
+    // Перевіряємо, чи останнє слово - це рівно 2 цифри (код платформи, напр "01")
+    if (/^\d{2}$/.test(lastPart)) {
+        parts.pop();
+        return { name: parts.join(' '), code: lastPart };
+    }
+    
+    // Якщо це адреса ("Biłgorajska 24") або системна мітка - повертаємо як є
+    return { name: fullName, code: '' };
 }
 
 // ==================== Розгортання картки маршруту: проміжні зупинки, пересадки, показ на мапі ====================
@@ -1602,13 +1717,36 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
             
             // БЛОК 1: Пішохідний перехід
             if (isWalk) {
-                if (i > 0) {
-                    const walkMin = Math.max(0, leg.arrivalMin - leg.departureMin);
+                const walkMin = Math.max(0, leg.arrivalMin - leg.departureMin);
+                
+                // Якщо це найперший крок (старт з адреси)
+                if (i === 0) {
+                    html += `
+                    <div style="position: relative; padding: 10px 14px 10px 42px; display: flex; align-items: center;">
+                        <div style="position: absolute; left: 21px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--danger); z-index: 2;"></div>
+                        <div style="position: absolute; left: 26px; top: 50%; bottom: -50%; width: 2px; background: var(--border); z-index: 1;"></div>
+                        <span style="font-weight: 700; color: var(--text); font-size: 15px;">${routeFromStop.name}</span>
+                    </div>
+                    <div style="padding: 12px 14px; background: rgba(0,0,0,0.02); display: flex; align-items: center; border-left: 2px dashed var(--border); margin-left: 22px;">
+                        <div class="svg-icon icon-walk" style="width:16px; height:16px; margin-right:8px; color: var(--text-muted);"></div>
+                        <span style="font-weight: 600; font-size: 14px; color: var(--text-muted);">Przejście pieszo: ${walkMin} min</span>
+                    </div>`;
+                } 
+                else {
                     html += `
                     <div style="padding: 12px 14px; background: rgba(0,0,0,0.02); display: flex; align-items: center; border-left: 2px dashed var(--border); margin-left: 22px;">
                         <div class="svg-icon icon-walk" style="width:16px; height:16px; margin-right:8px; color: var(--text-muted);"></div>
                         <span style="font-weight: 600; font-size: 14px; color: var(--text-muted);">Przejście pieszo: ${walkMin} min</span>
                     </div>`;
+                    
+                    // Якщо це останній крок (фініш), малюємо червону крапку і назву адреси!
+                    if (i === legs.length - 1) {
+                        html += `
+                        <div style="position: relative; padding: 10px 14px 10px 42px; display: flex; align-items: center;">
+                            <div style="position: absolute; left: 21px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--danger); z-index: 2;"></div>
+                            <span style="font-weight: 700; color: var(--text); font-size: 15px;">${routeToStop.name}</span>
+                        </div>`;
+                    }
                 }
                 return;
             }
@@ -1621,7 +1759,7 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
             html += `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg); position: sticky; top: 0; z-index: 10; border-bottom: 2px solid var(--border);">
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <div class="dep-route-box${trolleyClass}" style="width: 32px; height: 32px; font-size: 14px; border-width: 2px;">${leg.route}</div>
+                    <div class="dep-route-box trasa-detail-box${trolleyClass}">${leg.route}</div>
                     <span style="font-weight: 700; color: var(--text); font-size: 15px;">Wsiądź</span>
                 </div>
                 <button class="dep-expand-map-btn" onclick="showVehicleOnMap('${leg.tripId}')" style="margin: 0; width: auto; background: rgba(25, 118, 210, 0.1); color: var(--blue); border: none; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
@@ -1700,14 +1838,27 @@ if (searchRouteBtn && routeResultsBox) {
         if (recentRoutesContainer) recentRoutesContainer.style.display = 'none';
 
         // Показуємо завантаження
+        // Показуємо завантаження
         routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Szukam połączeń... <div class="svg-icon icon-hourglass"></div></div>';
         
-        const fromIds = routeFromStop.ids.join(',');
-        const toIds = routeToStop.ids.join(',');
+        // --- ДИНАМІЧНИЙ ЗБІР ПАРАМЕТРІВ (Зупинки або Координати) ---
+        let fromParams = '';
+        if (routeFromStop.ids) {
+            fromParams = `from=${routeFromStop.ids.join(',')}`;
+        } else if (routeFromStop.lat && routeFromStop.lon) {
+            fromParams = `fromLat=${routeFromStop.lat}&fromLon=${routeFromStop.lon}`;
+        }
+
+        let toParams = '';
+        if (routeToStop.ids) {
+            toParams = `to=${routeToStop.ids.join(',')}`;
+        } else if (routeToStop.lat && routeToStop.lon) {
+            toParams = `toLat=${routeToStop.lat}&toLon=${routeToStop.lon}`;
+        }
 
         try {
-            // 2. ВІДПРАВЛЯЄМО ЗАПИТ НА НОВИЙ COMPLEX-ЕНДПОІНТ
-            const res = await fetch(`${API_BASE_URL}/route/complex?from=${fromIds}&to=${toIds}&limit=20`);
+            // 2. ВІДПРАВЛЯЄМО ЗАПИТ НА COMPLEX-ЕНДПОІНТ
+            const res = await fetch(`${API_BASE_URL}/route/complex?${fromParams}&${toParams}&limit=10`);
             if (!res.ok) throw new Error('Помилка сервера');
             
             const journeys = await res.json();
@@ -1755,8 +1906,12 @@ if (searchRouteBtn && routeResultsBox) {
                 });
                 legendHtml += '</div>';
 
-                const fromStop = splitStopName(firstTransitLeg.fromStopName);
-                const toStop = splitStopName(lastLeg.toStopName);
+                // Визначаємо правильні назви для початку і кінця (з урахуванням адрес)
+                const startName = firstLeg.route === 'Пішки' ? routeFromStop.name : firstTransitLeg.fromStopName;
+                const endName = lastLeg.route === 'Пішки' ? routeToStop.name : lastLeg.toStopName;
+                
+                const fromStop = splitStopName(startName);
+                const toStop = splitStopName(endName);
 
                 // Нотатка про пішу ходу до зупинки посадки (якщо вона є)
                 const walkNoteHtml = initialWalkLeg
@@ -1767,8 +1922,10 @@ if (searchRouteBtn && routeResultsBox) {
                 let timelineHtml = '<div class="trasa-timeline" style="position:relative; padding-left:14px; border-left:2px dotted var(--text-muted); margin: 2px 0 6px;">';
                 const dot = (color) => `<div style="position:absolute; left:-19px; top:6px; width:8px; height:8px; border-radius:50%; background:${color};"></div>`;
 
-                timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0;">${dot('var(--blue)')}
-                    <span class="stop-name">${fromStop.name} <span class="stop-code">(${fromStop.code})</span></span>
+                // Початкова точка (червона, якщо адреса, синя, якщо зупинка)
+                const startColor = firstLeg.route === 'Пішки' ? 'var(--danger)' : 'var(--blue)';
+                timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0;">${dot(startColor)}
+                    <span class="stop-name">${fromStop.name} ${fromStop.code ? `<span class="stop-code">(${fromStop.code})</span>` : ''}</span>
                     <span class="time">${depTime}</span>
                 </div>`;
 
@@ -1780,8 +1937,10 @@ if (searchRouteBtn && routeResultsBox) {
                     </div>`;
                 }
 
-                timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0;">${dot('var(--blue)')}
-                    <span class="stop-name">${toStop.name} <span class="stop-code">(${toStop.code})</span></span>
+                // Кінцева точка (червона, якщо адреса, синя, якщо зупинка)
+                const endColor = lastLeg.route === 'Пішки' ? 'var(--danger)' : 'var(--blue)';
+                timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0;">${dot(endColor)}
+                    <span class="stop-name">${toStop.name} ${toStop.code ? `<span class="stop-code">(${toStop.code})</span>` : ''}</span>
                     <span class="time">${arrTime}</span>
                 </div>`;
                 timelineHtml += '</div>';
@@ -1936,6 +2095,7 @@ function loadNearbyStopsDefault() {
 
     stopSuggestionsBox.innerHTML = ''; 
     
+    
     // 1. ОСТАННІ ПОШУКИ (малюємо миттєво з пам'яті браузера)
     const recents = getRecentStops();
     if (recents.length > 0) {
@@ -1965,7 +2125,7 @@ function loadNearbyStopsDefault() {
         return;
     }
 
-    nearbyContainer.innerHTML = '<div style="padding: 10px; color: var(--text-muted);"><div class="svg-icon icon-map-pin"></div>Шукаємо локацію...</div>';
+    nearbyContainer.innerHTML = '<div style="padding: 10px; color: var(--text-muted);"><div class="svg-icon icon-walk"></div>Шукаємо локацію...</div>';
 
     if ('geolocation' in navigator) {
         navigator.geolocation.getCurrentPosition(

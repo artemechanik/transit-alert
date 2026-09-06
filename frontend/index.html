@@ -933,6 +933,29 @@
 .badge-trolley { background-color: var(--blue); color: white; }
 .badge-walk { background-color: #2d2e38; color: #a8aab0; } 
 
+/* Розміри для 32px квадратика (Детальний список зупинок у Trasa) */
+.trasa-detail-box {
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 15px !important;
+  border-width: 2px !important;
+}
+
+/* Калібруємо ріжки тролейбуса під цей розмір */
+.trasa-detail-box.trolleybus::before {
+  height: 7px !important;
+  top: -7px !important;
+  width: 2px !important;
+  left: 7px !important;
+}
+
+.trasa-detail-box.trolleybus::after {
+  height: 7px !important;
+  top: -7px !important;
+  width: 2px !important;
+  right: 6px !important;
+}
+
 .trasa-details {
   display: flex;
   flex-direction: column;
@@ -1141,12 +1164,14 @@
   <div class="stop-search-header" style="display: flex; flex-direction: column; gap: 10px;">
     <!-- Поле "Звідки" -->
     <div style="position: relative;">
-      <input type="text" id="route-input-from" style="width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; font-size: 16px; background: var(--bg); color: var(--text);" placeholder="Skąd (np. Plac Litewski)..." autocomplete="off">
+      <input type="text" id="route-input-from" style="width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 12px 40px 12px 16px; font-size: 16px; background: var(--bg); color: var(--text);" placeholder="Skąd (np. Plac Litewski)..." autocomplete="off">
+      <button id="route-clear-from" style="position: absolute; right: 12px; top: 12px; width: 24px; height: 24px; background: none; border: none; font-size: 18px; color: var(--text-muted); cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0;">✕</button>
       <div id="route-suggestions-from" class="autocomplete-list"></div>
     </div>
     <!-- Поле "Куди" -->
     <div style="position: relative;">
-      <input type="text" id="route-input-to" style="width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; font-size: 16px; background: var(--bg); color: var(--text);" placeholder="Dokąd (np. Lotnicza)..." autocomplete="off">
+      <input type="text" id="route-input-to" style="width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 12px 40px 12px 16px; font-size: 16px; background: var(--bg); color: var(--text);" placeholder="Dokąd (np. Lotnicza)..." autocomplete="off">
+      <button id="route-clear-to" style="position: absolute; right: 12px; top: 12px; width: 24px; height: 24px; background: none; border: none; font-size: 18px; color: var(--text-muted); cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0;">✕</button>
       <div id="route-suggestions-to" class="autocomplete-list"></div>
     </div>
     

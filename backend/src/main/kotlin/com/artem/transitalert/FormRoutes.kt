@@ -155,19 +155,36 @@ fun Application.formRoutes() {
         
      // Новий розумний МУЛЬТИПОШУК з пересадками
         get("/route/complex") {
-            val fromParam = call.parameters["from"]
-            val toParam = call.parameters["to"]
+            // 1. Зчитуємо ВСІ параметри
+            val fromParam = call.request.queryParameters["from"]
+            val toParam = call.request.queryParameters["to"]
+            val fromLat = call.request.queryParameters["fromLat"]?.toDoubleOrNull()
+            val fromLon = call.request.queryParameters["fromLon"]?.toDoubleOrNull()
+            val toLat = call.request.queryParameters["toLat"]?.toDoubleOrNull()
+            val toLon = call.request.queryParameters["toLon"]?.toDoubleOrNull()
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20 
 
-            if (fromParam.isNullOrBlank() || toParam.isNullOrBlank()) {
+            // 2. Формуємо список СТАРТІВ (зупинка + час пішки)
+            val starts: List<Pair<String, Int>> = when {
+                fromLat != null && fromLon != null -> TransitGraph.getNearbyStopsWalkTimes(fromLat, fromLon)
+                !fromParam.isNullOrBlank() -> fromParam.split(",").map { Pair(it.trim(), 0) }
+                else -> return@get call.respond(emptyList<JourneyResponse>())
+            }
+
+            // 3. Формуємо словник ФІНІШІВ (зупинка -> час пішки)
+            val targets: Map<String, Int> = when {
+                toLat != null && toLon != null -> TransitGraph.getNearbyStopsWalkTimes(toLat, toLon).toMap()
+                !toParam.isNullOrBlank() -> toParam.split(",").associate { it.trim() to 0 }
+                else -> return@get call.respond(emptyList<JourneyResponse>())
+            }
+
+            // Якщо юзер ввів координати десь у полі, де немає зупинок
+            if (starts.isEmpty() || targets.isEmpty()) {
                 call.respond(emptyList<JourneyResponse>())
                 return@get
             }
 
-            val fromIds = fromParam.split(",")
-            val toIds = toParam.split(",")
             val now = java.time.LocalTime.now(LUBLIN_ZONE)
-            
             var currentSearchMin = now.hour * 60 + now.minute
             val allJourneys = mutableListOf<JourneyResponse>()
             
@@ -179,12 +196,14 @@ fun Application.formRoutes() {
             while (allJourneys.size < limit && attempts < MAX_ATTEMPTS) {
                 attempts++
                 
-                // 1. Питаємо алгоритм Дейкстри!
-                val path = TransitGraph.findBestRoute(fromIds, toIds, currentSearchMin)
+                // 4. Питаємо алгоритм Дейкстри (ПЕРЕДАЄМО НОВІ ПАРАМЕТРИ)
+                val path = TransitGraph.findBestRoute(starts, targets, currentSearchMin)
 
                 if (path == null || path.isEmpty()) {
                     break 
                 }
+
+                // ... ТУТ ПОЧИНАЄТЬСЯ ТВІЙ СТАРИЙ КОД (Витягуємо красиві назви зупинок...)
 
                 // 2. Витягуємо красиві назви зупинок
                 val stopIdsToFetch = path.flatMap { listOf(it.fromStopId, it.toStopId) }.distinct()
@@ -252,13 +271,13 @@ fun Application.formRoutes() {
                 val realTotalMinutes = legs.last().arrivalMin - legs.first().departureMin
 
                 // 5. ФІЛЬТРУЄМО КЛОНІВ ЗА УНІКАЛЬНИМИ АВТОБУСАМИ (Ігноруємо час пішки)
-                // Створюємо "відбиток" поточного маршруту: беремо тільки транспорт, клеїмо маршрут + час
+                // Використовуємо tripId як найнадійніший ідентифікатор рейсу!
                 val currentSignature = legs.filter { it.route != "Пішки" }
-                    .joinToString("|") { "${it.route}-${it.departureMin}" }
+                    .joinToString("|") { it.tripId }
 
                 val isDuplicate = allJourneys.any { journey ->
                     val existingSignature = journey.legs.filter { it.route != "Пішки" }
-                        .joinToString("|") { "${it.route}-${it.departureMin}" }
+                        .joinToString("|") { it.tripId }
                     existingSignature == currentSignature
                 }
                 

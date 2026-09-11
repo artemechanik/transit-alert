@@ -262,24 +262,26 @@ object TransitGraph {
             val stateKey = "${state.stopId}_${state.tripId}"
             if (!visited.add(stateKey)) continue
 
-            // --- НОВИЙ БЛОК: Віртуальний перехід до координати ---
+            // --- Віртуальний перехід до координати ---
             // Якщо від цієї зупинки можна дійти до фінішу, ми НЕ зупиняємо пошук!
             // Ми додаємо фінальну прогулянку в загальну чергу, щоб вона отримала свій штраф.
-            val finalWalkMins = targets[state.stopId]
+                        val finalWalkMins = targets[state.stopId]
             if (finalWalkMins != null && finalWalkMins > 0) {
                 val finalArrivalTime = state.currentMin + finalWalkMins
                 val finalEdge = RouteEdge(state.stopId, "FINISH_COORD", "Пішки", "WALK", state.currentMin, finalArrivalTime, 0)
                 
-                // Симетричний поріг для фінальної прогулянки (до 8 хв - ок, далі - штраф)
-                val stepPenalty = if (finalWalkMins <= 8) {
-                    finalWalkMins * 1.0
+                // РЯТУЄМО ФІНІШ: Значно м'якший штраф!
+                // До 10 хвилин йдемо взагалі без штрафу, далі - легка прогресія (x1.5 замість x5.0)
+                val stepPenalty = if (finalWalkMins <= 10) {
+                    finalWalkMins * 0.5 
                 } else {
-                    8.0 + (finalWalkMins - 8) * 5.0
+                    5.0 + (finalWalkMins - 10) * 1.5
                 }
                 val newPenalty = state.accumulatedPenalty + stepPenalty
                 
                 pq.add(RoutingState("FINISH_COORD", finalArrivalTime, "WALK", state.path + finalEdge, state.transfers, newPenalty, state.lastTransferMin))
             }
+
 
             val outgoingEdges = edges[state.stopId] ?: emptyList()
             
@@ -293,28 +295,27 @@ object TransitGraph {
                 // ГЛОБАЛЬНИЙ СТАТУС: чи ми вже сідали сьогодні в будь-який транспорт?
                 val hasUsedBus = state.path.any { it.tripId != "WALK" && it.tripId != "START_COORD" }
 
-                if (isWalk) {
+                                if (isWalk) {
                     if (state.tripId == "WALK") continue 
                     val arrivalTime = state.currentMin + edge.arrivalMin 
                     val walkLeg = edge.copy(departureMin = state.currentMin, arrivalMin = arrivalTime)
                     val newPath = state.path + walkLeg
                     
                     var stepPenalty = 0.0
-                    // Якщо ми вже катались на автобусі, то ця прогулянка - це пересадка між зупинками
+                    // ПРИБИРАЄМО ПОДВІЙНЕ ПОКАРАННЯ ЗА ХОДЬБУ
                     if (hasUsedBus) {
-                        stepPenalty += 5.0 // Базовий штраф, щоб не стрибав між зупинками просто так
-                        stepPenalty += edge.arrivalMin * 2.0 // Караємо за кожну хвилину ходьби
+                        // Якщо це пересадка, просто рахуємо час пішки x1.5 (без шалених +5.0)
+                        stepPenalty += edge.arrivalMin * 1.5 
+                    } else {
+                        // Йти на першу зупинку - звичайна справа
+                        stepPenalty += edge.arrivalMin * 1.0 
                     }
-                    
-                    // --- НОВИЙ ЖОРСТКИЙ ШТРАФ ЗА БУДЬ-ЯКУ ХОДЬБУ ---
-                    // Робимо так, щоб 1 хвилина пішки коштувала значно дорожче, 
-                    // ніж 1 хвилина їзди в автобусі (яка коштує 0.3)
-                    stepPenalty += (edge.arrivalMin * 3.0) 
                     
                     val newPenalty = state.accumulatedPenalty + stepPenalty
                     pq.add(RoutingState(edge.toStopId, arrivalTime, "WALK", newPath, newTransfers, newPenalty, newLastTransferMin))
                     
                } else {
+
                     // Пересадка миттєва: якщо приїхав о 14:00, можеш сісти на рейс о 14:00
                     val transferBuffer = 0 
                     
@@ -326,23 +327,28 @@ object TransitGraph {
                         
                         // ЗАКРИТА ЛАЗІВКА: Справжня пересадка - це якщо ми не на тому ж рейсі, і ВЖЕ їздили раніше!
                         // (Неважливо, прийшли ми на цю зупинку пішки чи приїхали)
+                                               // ЗАКРИТА ЛАЗІВКА: Справжня пересадка
                         val isRealTransfer = !isSameTrip && hasUsedBus
                         
                         if (isRealTransfer) {
-                            stepPenalty += 5.0 
+                            // ЛОГІКА КІНЦЕВОЇ: Якщо ми сідаємо на той самий номер маршруту (напр. 14 -> 14), 
+                            // це розворот на кінцевій. Робимо знижку на штраф!
+                            val lastBusRoute = state.path.lastOrNull { it.tripId != "WALK" && it.tripId != "START_COORD" }?.route
+                            val isSameRouteName = (lastBusRoute == edge.route)
+                            
+                            stepPenalty += if (isSameRouteName) 1.5 else 5.0 
                             
                             val waitTime = edge.departureMin - state.currentMin
                             if (waitTime > 10) {
-                                // 2. КАП ШТРАФУ: Множник 1.0 замість 1.5, 
-                                // і максимальний штраф за очікування не перевищує 15 балів.
                                 stepPenalty += ((waitTime - 10) * 1.0).coerceAtMost(15.0)
                             }
                         } else if (!hasUsedBus) {
+
                             // МІКРО-ШТРАФ за очікування першого автобуса (0.1 бала за хвилину).
                             // Це змушує Дейкстру при рівних умовах сортувати ранні виїзди першими, 
                             // щоб цикл мультипошуку їх не пропустив!
                             val initialWait = edge.departureMin - state.currentMin
-                            stepPenalty += initialWait * 0.1
+                            stepPenalty += initialWait * 0.3
                         }
                         // --- ФІКС ДЛЯ ПЕРШОЇ СПІЛЬНОЇ ЗУПИНКИ ---
                         // Легкий "податок" на час у дорозі (0.3 бала за хвилину).

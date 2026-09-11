@@ -1319,48 +1319,48 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                 });
             }
 
-            // 3. ОБРОБКА ТА ВІДМАЛЬОВКА АДРЕС (MapTiler)
+                        // 3. ОБРОБКА ТА ВІДМАЛЬОВКА АДРЕС (MapTiler)
             if (geocodeData.features && geocodeData.features.length > 0) {
                 // Беремо максимум 4 адреси, щоб не засмічувати список
                 geocodeData.features.slice(0, 4).forEach(feature => {
                     const div = document.createElement('div');
                     div.className = 'stop-card';
-                    div.style = 'padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; gap: 12px;';
+                    div.style = 'padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; justify-content: space-between; gap: 12px;';
                     
-                    // Формуємо красиву назву з номером будинку (напр. "Nadbystrzycka 44")
                     const shortName = feature.text + (feature.address ? ' ' + feature.address : '');
-                    // Відрізаємо саму вулицю, залишаємо контекст (Lublin, woj. lubelskie)
                     const contextParts = feature.place_name.split(',').slice(1).join(',').trim();
 
-                    // Відображаємо із сірою іконкою піна
+                    // Розділяємо на ліву (клікабельну) частину і праву кнопку-стрілочку
                     div.innerHTML = `
-                        <div class="svg-icon icon-map-pin" style="color: var(--text-muted);"></div>
-                        <div>
-                            <div style="font-weight: bold; color: var(--text);">${shortName}</div>
-                            <div style="font-size: 0.85em; color: var(--text-muted);">${contextParts}</div>
+                        <div class="address-main-click" style="display: flex; align-items: center; gap: 12px; flex: 1; cursor: pointer;">
+                            <div class="svg-icon icon-map-pin" style="color: var(--text-muted); flex-shrink: 0;"></div>
+                            <div style="overflow: hidden;">
+                                <div style="font-weight: bold; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${shortName}</div>
+                                <div style="font-size: 0.85em; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${contextParts}</div>
+                            </div>
                         </div>
+                        <div class="address-copy-btn" style="padding: 4px 8px; cursor: pointer; color: var(--text-muted); font-size: 20px; font-weight: bold; flex-shrink: 0;">↖</div>
                     `;
                     
-                    div.addEventListener('click', () => {
+                    // 1. Клік по самій адресі (як і було - вибирає адресу і ховає список)
+                    div.querySelector('.address-main-click').addEventListener('click', () => {
                         input.value = shortName; 
                         suggestionsBox.innerHTML = '';
                         suggestionsBox.style.display = 'none';
-                        
-                        // Примусово показуємо хрестик
                         if (clearBtn) clearBtn.style.display = 'flex';
                         
-                        // ВАЖЛИВО: MapTiler віддає координати у форматі [довгота, широта]
-                        const routeObj = { 
-                            name: shortName, 
-                            lat: feature.center[1], 
-                            lon: feature.center[0] 
-                        };
-                        
-                        if (isFrom) routeFromStop = routeObj;
-                        else routeToStop = routeObj;
-                   // ДОДАНО: Зберігаємо адресу в історію
+                        const routeObj = { name: shortName, lat: feature.center[1], lon: feature.center[0] };
+                        if (isFrom) routeFromStop = routeObj; else routeToStop = routeObj;
                         saveRecentRouteStop(routeObj);
                     });
+
+                    // 2. Клік по стрілочці (тільки підставляє текст в інпут, щоб дописати номер)
+                    div.querySelector('.address-copy-btn').addEventListener('click', (e) => {
+                        e.stopPropagation(); // Блокуємо клік по основному блоку
+                        input.value = shortName + ' '; // Додаємо пробіл для зручності
+                        input.focus(); // Повертаємо курсор у поле вводу
+                    });
+
                     suggestionsBox.appendChild(div);
                 });
             }
@@ -1653,23 +1653,41 @@ function updateTrasaCountdowns() {
     const now = new Date();
     const currentMin = now.getHours() * 60 + now.getMinutes();
 
+    // Правильні польські закінчення
+    function getMinLabel(m) {
+        if (m === 1) return 'minuta';
+        const mod10 = m % 10;
+        const mod100 = m % 100;
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'minuty';
+        return 'minut';
+    }
+
     cards.forEach(el => {
         const depMin = parseInt(el.dataset.dep, 10);
         if (isNaN(depMin)) return;
 
         let countdown = depMin - currentMin;
-        if (countdown < -60) countdown += 24 * 60; // перехід через північ
+        if (countdown < -60) countdown += 24 * 60; 
 
-        if (countdown <= 0) {
-            el.textContent = '< 1 min';
-            el.className = 'trasa-dep-min time-live';
-        } else if (countdown <= 30) {
-            el.textContent = `${countdown} min`;
-            el.className = 'trasa-dep-min time-live';
-        } else {
-            el.textContent = formatTime(depMin);
-            el.className = 'trasa-dep-min highlight';
+        if (countdown < 60) {
+            let numStr = countdown <= 0 ? '<1' : countdown;
+            let labelStr = countdown <= 0 ? 'minuta' : getMinLabel(countdown);
+            let colorStr = countdown <= 30 ? '#10b981' : 'var(--text)';
+            
+            // ВЕЛИЧЕЗНА цифра зверху, маленьке слово знизу
+            el.innerHTML = `
+            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
+                <span style="font-size:26px; font-weight:800; color:${colorStr}; letter-spacing:-1px;">${numStr}</span>
+                <span style="font-size:10px; font-weight:700; color:${colorStr}; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; opacity:0.8;">${labelStr}</span>
+            </div>`;
+                } else {
+            const h = Math.floor(countdown / 60);
+            const m = countdown % 60;
+            const hStr = String(h).padStart(2, '0');
+            const mStr = String(m).padStart(2, '0');
+            el.innerHTML = `<div style="font-size:18px; font-weight:700; color:var(--text); text-align:right;">${hStr}:${mStr}</div>`;
         }
+
     });
 }
 
@@ -1688,6 +1706,146 @@ function splitStopName(fullName) {
     
     // Якщо це адреса ("Biłgorajska 24") або системна мітка - повертаємо як є
     return { name: fullName, code: '' };
+}
+
+
+// --- ЄДИНА ФУНКЦІЯ ДЛЯ СТВОРЕННЯ КАРТКИ МАРШРУТУ ---
+function buildJourneyCard(journey) {
+    const legs = journey.legs;
+    if (!legs || legs.length === 0) return null;
+
+    const transitLegs = legs.filter(l => l.route !== "Пішки" && l.route);
+    if (transitLegs.length === 0) return null;
+
+    const firstLeg = legs[0];
+    const lastLeg = legs[legs.length - 1];
+    const firstTransitLeg = transitLegs[0];
+    const lastTransitLeg = transitLegs[transitLegs.length - 1];
+
+    const initialWalkLeg = (firstLeg.route === "Пішки" || !firstLeg.route) ? firstLeg : null;
+    const walkMin = initialWalkLeg ? Math.max(0, initialWalkLeg.arrivalMin - initialWalkLeg.departureMin) : 0;
+    
+    const finalWalkLeg = (lastLeg.route === "Пішки" || !lastLeg.route) ? lastLeg : null;
+    const finalWalkMin = finalWalkLeg ? Math.max(0, finalWalkLeg.arrivalMin - finalWalkLeg.departureMin) : 0;
+    
+    const depTime = formatTime(firstTransitLeg.departureMin);
+    const arrTime = formatTime(lastTransitLeg.arrivalMin);
+    const duration = journey.totalMinutes;
+
+    const now = new Date();
+    const currentMin = now.getHours() * 60 + now.getMinutes();
+    let countdown = firstTransitLeg.departureMin - currentMin;
+    if (countdown < 0) countdown = 0;
+
+    function getMinLabel(m) {
+        if (m === 1) return 'minuta';
+        const mod10 = m % 10;
+        const mod100 = m % 100;
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'minuty';
+        return 'minut';
+    }
+
+    let timerHtml = '';
+    if (countdown < 60) {
+        let numStr = countdown === 0 ? '<1' : countdown;
+        let labelStr = countdown === 0 ? 'minuta' : getMinLabel(countdown);
+        let colorStr = countdown <= 30 ? '#10b981' : 'var(--text)';
+        
+        timerHtml = `
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
+            <span style="font-size:26px; font-weight:800; color:${colorStr}; letter-spacing:-1px;">${numStr}</span>
+            <span style="font-size:10px; font-weight:700; color:${colorStr}; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; opacity:0.8;">${labelStr}</span>
+        </div>`;
+    } else {
+        const h = Math.floor(countdown / 60);
+        const m = countdown % 60;
+        const hStr = String(h).padStart(2, '0');
+        const mStr = String(m).padStart(2, '0');
+        timerHtml = `<div style="font-size:18px; font-weight:700; color:var(--text); text-align:right;">za ${hStr}:${mStr}</div>`;
+    }
+
+    const startName = firstTransitLeg.fromStopName;
+    const endName = lastTransitLeg.toStopName;
+    const fromStop = splitStopName(startName);
+    const toStop = splitStopName(endName);
+
+    let timelineHtml = '<div class="trasa-timeline" style="position:relative; margin: 4px 0 8px;">';
+    timelineHtml += '<div style="position:absolute; left: 55px; top: 12px; bottom: 12px; border-left: 2px dotted var(--border); z-index: 1;"></div>';
+
+    const rowStyle = 'position:relative; padding:5px 0; display: flex; align-items: center;';
+    const timeStyle = 'width: 44px; text-align: right; font-size: 15px; font-weight: 600; color: var(--text); flex-shrink: 0;';
+    const dotWrapperStyle = 'width: 24px; display: flex; justify-content: center; z-index: 2; flex-shrink: 0;';
+
+    // 1. ПЕРША ЗУПИНКА (Таймера тут більше немає!)
+    timelineHtml += `<div class="trasa-row" style="${rowStyle}">
+        <div class="time" style="${timeStyle}">${depTime}</div>
+        <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
+        <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">${fromStop.name} ${fromStop.code ? `<span class="stop-code" style="color:var(--text-muted); font-size:13px; font-weight:500;">(${fromStop.code})</span>` : ''}</div>
+    </div>`;
+
+    // 2. ПРОМІЖНІ ЗУПИНКИ
+    for (let i = 0; i < transitLegs.length - 1; i++) {
+        const tStop = splitStopName(transitLegs[i].toStopName);
+        timelineHtml += `<div class="trasa-row" style="${rowStyle} opacity: 0.8;">
+            <div class="time" style="${timeStyle} font-size: 14px; font-weight: 500; color: var(--text-muted);">${formatTime(transitLegs[i].arrivalMin)}</div>
+            <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--border); box-shadow: 0 0 0 3px var(--card);"></div></div>
+            <div class="stop-name" style="flex: 1; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">➔ ${tStop.name} ${tStop.code ? `<span class="stop-code" style="font-size:12px;">(${tStop.code})</span>` : ''}</div>
+        </div>`;
+    }
+
+    // 3. ОСТАННЯ ЗУПИНКА
+    timelineHtml += `<div class="trasa-row" style="${rowStyle}">
+        <div class="time" style="${timeStyle}">${arrTime}</div>
+        <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
+        <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">${toStop.name} ${toStop.code ? `<span class="stop-code" style="color:var(--text-muted); font-size:13px; font-weight:500;">(${toStop.code})</span>` : ''}</div>
+    </div>`;
+    
+    // 4. ТАЙМЕР АБСОЛЮТНИЙ (відцентрований відносно всього таймлайну!)
+    timelineHtml += `<div class="trasa-dep-min" data-dep="${firstTransitLeg.departureMin}" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 5;">${timerHtml}</div>`;
+
+    timelineHtml += '</div>';
+
+    let busesHtml = '';
+    transitLegs.forEach(leg => {
+        const isTrolley = parseInt(leg.route, 10) >= 150 ? ' trolleybus' : '';
+        busesHtml += `<div class="dep-route-box route-size-3${isTrolley}" style="width: 28px; height: 28px; font-size: 13px; border-width: 1.5px; background: var(--bg); border-color: var(--blue); color: var(--blue); display: flex; align-items: center; justify-content: center; border-radius: 6px; position: relative;">${leg.route}</div>`;
+    });
+
+    let compactHeaderHtml = `
+    <div class="trasa-compact-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+            ${busesHtml}
+        </div>
+        <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); display: flex; gap: 6px; align-items: center;">
+            ${walkMin > 0 ? `<div style="display:flex; align-items:center; gap:3px;"><div class="svg-icon icon-walk" style="width:14px;height:14px;"></div>${walkMin} min</div> <span style="opacity:0.4">•</span>` : ''}
+            <div style="display:flex; align-items:center; gap:4px; color: var(--text);"><div class="svg-icon icon-clock" style="width:13px;height:13px; color:var(--text-muted);"></div>${duration} min</div>
+            ${finalWalkMin > 0 ? `<span style="opacity:0.4">•</span> <div style="display:flex; align-items:center; gap:3px;"><div class="svg-icon icon-walk" style="width:14px;height:14px;"></div>${finalWalkMin} min</div>` : ''}
+        </div>
+    </div>`;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'trasa-wrapper';
+    const card = document.createElement('div');
+    card.className = 'trasa-card expandable';
+    card.style.cursor = 'pointer';
+    
+    card.innerHTML = `
+        <button class="close-trasa-btn" title="Zamknij">✕</button>
+        ${compactHeaderHtml}
+        <div class="trasa-middle-scroll" style="display: none;"></div>
+        <div class="trasa-details">
+            ${timelineHtml}
+        </div>
+    `;
+    
+    card.addEventListener('click', (e) => {
+        if (e.target.closest('.dep-expand-map-btn')) return;
+        toggleTrasaExpand(card, legs, transitLegs);
+    });
+    
+    wrapper.appendChild(card);
+    
+    return wrapper;
 }
 
 // ==================== Розгортання картки маршруту: проміжні зупинки, пересадки, показ на мапі ====================
@@ -1843,28 +2001,164 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
         scrollPanel.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--danger);">Błąd serwera</div>';
     }
 }
+// --- ЄДИНА ФУНКЦІЯ ДЛЯ СТВОРЕННЯ КАРТКИ МАРШРУТУ ---
+function buildJourneyCard(journey) {
+    const legs = journey.legs;
+    if (!legs || legs.length === 0) return null;
+
+    const transitLegs = legs.filter(l => l.route !== "Пішки" && l.route);
+    if (transitLegs.length === 0) return null;
+
+    const firstLeg = legs[0];
+    const lastLeg = legs[legs.length - 1];
+    const firstTransitLeg = transitLegs[0];
+    const lastTransitLeg = transitLegs[transitLegs.length - 1];
+
+    const initialWalkLeg = (firstLeg.route === "Пішки" || !firstLeg.route) ? firstLeg : null;
+    const walkMin = initialWalkLeg ? Math.max(0, initialWalkLeg.arrivalMin - initialWalkLeg.departureMin) : 0;
+    
+    const finalWalkLeg = (lastLeg.route === "Пішки" || !lastLeg.route) ? lastLeg : null;
+    const finalWalkMin = finalWalkLeg ? Math.max(0, finalWalkLeg.arrivalMin - finalWalkLeg.departureMin) : 0;
+    
+    const depTime = formatTime(firstTransitLeg.departureMin);
+    const arrTime = formatTime(lastTransitLeg.arrivalMin);
+    const duration = journey.totalMinutes;
+
+    const now = new Date();
+    const currentMin = now.getHours() * 60 + now.getMinutes();
+    let countdown = firstTransitLeg.departureMin - currentMin;
+    if (countdown < 0) countdown = 0;
+
+    function getMinLabel(m) {
+        if (m === 1) return 'minuta';
+        const mod10 = m % 10;
+        const mod100 = m % 100;
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'minuty';
+        return 'minut';
+    }
+
+    let timerHtml = '';
+    if (countdown < 60) {
+        let numStr = countdown === 0 ? '<1' : countdown;
+        let labelStr = countdown === 0 ? 'minuta' : getMinLabel(countdown);
+        let colorStr = countdown <= 30 ? '#10b981' : 'var(--text)';
+        
+        timerHtml = `
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
+            <span style="font-size:26px; font-weight:800; color:${colorStr}; letter-spacing:-1px;">${numStr}</span>
+            <span style="font-size:10px; font-weight:700; color:${colorStr}; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; opacity:0.8;">${labelStr}</span>
+        </div>`;
+    } else {
+        const h = Math.floor(countdown / 60);
+        const m = countdown % 60;
+        const hStr = String(h).padStart(2, '0');
+        const mStr = String(m).padStart(2, '0');
+        timerHtml = `<div style="font-size:18px; font-weight:700; color:var(--text); text-align:right;">za ${hStr}:${mStr}</div>`;
+    }
+
+    const startName = firstTransitLeg.fromStopName;
+    const endName = lastTransitLeg.toStopName;
+    const fromStop = splitStopName(startName);
+    const toStop = splitStopName(endName);
+
+   // СТВОРЮЄМО FLEX-КОНТЕЙНЕР ДЛЯ ІДЕАЛЬНОГО ЦЕНТРУВАННЯ
+    let timelineHtml = '<div style="display: flex; align-items: center; justify-content: space-between; margin: 4px 0 8px;">';
+    
+    // === ЛІВА КОЛОНКА (Зупинки) ===
+    timelineHtml += '<div class="trasa-timeline" style="position:relative; flex: 1;">';
+    timelineHtml += '<div style="position:absolute; left: 55px; top: 12px; bottom: 12px; border-left: 2px dotted var(--border); z-index: 1;"></div>';
+
+    const rowStyle = 'position:relative; padding:5px 0; display: flex; align-items: center;';
+    const timeStyle = 'width: 44px; text-align: right; font-size: 15px; font-weight: 600; color: var(--text); flex-shrink: 0;';
+    const dotWrapperStyle = 'width: 24px; display: flex; justify-content: center; z-index: 2; flex-shrink: 0;';
+
+    timelineHtml += `<div class="trasa-row" style="${rowStyle}">
+        <div class="time" style="${timeStyle}">${depTime}</div>
+        <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
+        <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 12px;">${fromStop.name} ${fromStop.code ? `<span class="stop-code" style="color:var(--text-muted); font-size:13px; font-weight:500;">(${fromStop.code})</span>` : ''}</div>
+    </div>`;
+
+    for (let i = 0; i < transitLegs.length - 1; i++) {
+        const tStop = splitStopName(transitLegs[i].toStopName);
+        timelineHtml += `<div class="trasa-row" style="${rowStyle} opacity: 0.8;">
+            <div class="time" style="${timeStyle} font-size: 14px; font-weight: 500; color: var(--text-muted);">${formatTime(transitLegs[i].arrivalMin)}</div>
+            <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--border); box-shadow: 0 0 0 3px var(--card);"></div></div>
+            <div class="stop-name" style="flex: 1; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 12px;">➔ ${tStop.name} ${tStop.code ? `<span class="stop-code" style="font-size:12px;">(${tStop.code})</span>` : ''}</div>
+        </div>`;
+    }
+
+    timelineHtml += `<div class="trasa-row" style="${rowStyle}">
+        <div class="time" style="${timeStyle}">${arrTime}</div>
+        <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
+        <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 12px;">${toStop.name} ${toStop.code ? `<span class="stop-code" style="color:var(--text-muted); font-size:13px; font-weight:500;">(${toStop.code})</span>` : ''}</div>
+    </div>`;
+    
+    timelineHtml += '</div>'; // Закриваємо ліву колонку
+    
+    // === ПРАВА КОЛОНКА (Таймер) ===
+    timelineHtml += `<div class="trasa-dep-min" data-dep="${firstTransitLeg.departureMin}" style="flex-shrink: 0; margin-left: 8px;">${timerHtml}</div>`;
+
+    timelineHtml += '</div>'; // Закриваємо загальний flex-контейнер
+
+    let busesHtml = '';
+    transitLegs.forEach(leg => {
+        const isTrolley = parseInt(leg.route, 10) >= 150 ? ' trolleybus' : '';
+        busesHtml += `<div class="dep-route-box route-size-3${isTrolley}" style="width: 28px; height: 28px; font-size: 13px; border-width: 1.5px; background: var(--bg); border-color: var(--blue); color: var(--blue); display: flex; align-items: center; justify-content: center; border-radius: 6px; position: relative;">${leg.route}</div>`;
+    });
+
+    let compactHeaderHtml = `
+    <div class="trasa-compact-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+            ${busesHtml}
+        </div>
+        <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); display: flex; gap: 6px; align-items: center;">
+            ${walkMin > 0 ? `<div style="display:flex; align-items:center; gap:3px;"><div class="svg-icon icon-walk" style="width:14px;height:14px;"></div>${walkMin} min</div> <span style="opacity:0.4">•</span>` : ''}
+            <div style="display:flex; align-items:center; gap:4px; color: var(--text);"><div class="svg-icon icon-clock" style="width:13px;height:13px; color:var(--text-muted);"></div>${duration} min</div>
+            ${finalWalkMin > 0 ? `<span style="opacity:0.4">•</span> <div style="display:flex; align-items:center; gap:3px;"><div class="svg-icon icon-walk" style="width:14px;height:14px;"></div>${finalWalkMin} min</div>` : ''}
+        </div>
+    </div>`;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'trasa-wrapper';
+    const card = document.createElement('div');
+    card.className = 'trasa-card expandable';
+    card.style.cursor = 'pointer';
+    
+    card.innerHTML = `
+        <button class="close-trasa-btn" title="Zamknij">✕</button>
+        ${compactHeaderHtml}
+        <div class="trasa-middle-scroll" style="display: none;"></div>
+        <div class="trasa-details">
+            ${timelineHtml}
+        </div>
+    `;
+    
+    card.addEventListener('click', (e) => {
+        if (e.target.closest('.dep-expand-map-btn')) return;
+        toggleTrasaExpand(card, legs, transitLegs);
+    });
+    wrapper.appendChild(card);
+    
+    return wrapper;
+}
+
 // Використовуємо твої реальні ID з HTML
 const searchRouteBtn = document.getElementById('route-search-btn');
 const routeResultsBox = document.getElementById('route-results-list');
 
 if (searchRouteBtn && routeResultsBox) {
     searchRouteBtn.addEventListener('click', async () => {
-        // 1. Перевіряємо, чи юзер обрав обидві зупинки
         if (!routeFromStop || !routeToStop) {
             showToast('Wybierz przystanek początkowy i końcowy z listy!');
             return;
         }
 
-        // Зберігаємо маршрут в історію
         saveRecentRoute(routeFromStop, routeToStop); 
         const recentRoutesContainer = document.getElementById('recent-routes-list');
         if (recentRoutesContainer) recentRoutesContainer.style.display = 'none';
 
-        // Показуємо завантаження
-        // Показуємо завантаження
         routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Szukam połączeń... <div class="svg-icon icon-hourglass"></div></div>';
         
-        // --- ДИНАМІЧНИЙ ЗБІР ПАРАМЕТРІВ (Зупинки або Координати) ---
         let fromParams = '';
         if (routeFromStop.ids) {
             fromParams = `from=${routeFromStop.ids.join(',')}`;
@@ -1880,7 +2174,6 @@ if (searchRouteBtn && routeResultsBox) {
         }
 
         try {
-            // 2. ВІДПРАВЛЯЄМО ЗАПИТ НА COMPLEX-ЕНДПОІНТ
             const res = await fetch(`${API_BASE_URL}/route/complex?${fromParams}&${toParams}&limit=10`);
             if (!res.ok) throw new Error('Помилка сервера');
             
@@ -1893,129 +2186,14 @@ if (searchRouteBtn && routeResultsBox) {
             }
 
             journeys.forEach(journey => {
-                const legs = journey.legs;
-                if (!legs || legs.length === 0) return;
+                const cardElement = buildJourneyCard(journey);
+                if (cardElement) routeResultsBox.appendChild(cardElement);
+            });
 
-                const firstLeg = legs[0];
-                const lastLeg = legs[legs.length - 1];
-
-                // Реальні поїздки транспортом (без пішохідних відрізків)
-                const transitLegs = legs.filter(l => l.route !== "Пішки" && l.route);
-                if (transitLegs.length === 0) return; // Суто пішохідний варіант — не показуємо картку
-
-                const firstTransitLeg = transitLegs[0];
-                // Якщо маршрут починається пішки — рахуємо від зупинки посадки, а не від точки виходу з дому
-                const initialWalkLeg = (firstLeg.route === "Пішки" || !firstLeg.route) ? firstLeg : null;
-                const walkMin = initialWalkLeg ? Math.max(0, initialWalkLeg.arrivalMin - initialWalkLeg.departureMin) : 0;
-
-                const depTime = formatTime(firstTransitLeg.departureMin);
-                const arrTime = formatTime(lastLeg.arrivalMin);
-                const duration = journey.totalMinutes;
-
-                // Стартовий текст таймера — далі його "живо" оновлює updateTrasaCountdowns()
-                const now = new Date();
-                const currentMin = now.getHours() * 60 + now.getMinutes();
-                let countdown = firstTransitLeg.departureMin - currentMin;
-                if (countdown < 0) countdown = 0;
-                let timeText = countdown === 0 ? '< 1 min' : (countdown <= 30 ? `za ${countdown} min` : depTime);
-                const minClass = countdown <= 30 ? 'trasa-dep-min time-live' : 'trasa-dep-min highlight';
-
-                // Компактна легенда — тільки реальний транспорт (піша хода позначена окремо нижче)
-                let legendHtml = '<div class="trasa-legend" style="background: transparent; box-shadow: none; overflow: visible; gap: 6px; top: -14px;">';
-                transitLegs.forEach(leg => {
-                    const routeNum = parseInt(leg.route, 10);
-                    const isTrolley = (routeNum >= 150) ? ' trolleybus' : '';
-                    legendHtml += `<div class="dep-route-box route-size-3${isTrolley}">${leg.route}</div>`;
-                });
-                legendHtml += '</div>';
-
-                // Визначаємо правильні назви для початку і кінця (з урахуванням адрес)
-                const startName = firstLeg.route === 'Пішки' ? routeFromStop.name : firstTransitLeg.fromStopName;
-                const endName = lastLeg.route === 'Пішки' ? routeToStop.name : lastLeg.toStopName;
-                
-                const fromStop = splitStopName(startName);
-                const toStop = splitStopName(endName);
-
-                // Нотатка про пішу ходу до зупинки посадки (якщо вона є)
-                const walkNoteHtml = initialWalkLeg
-                    ? `<div class="trasa-walk-note" style="display:flex; align-items:center; gap:6px; font-size:12px; color: var(--text-muted); margin-bottom: 4px;"><div class="svg-icon icon-walk" style="width: 12px; height: 12px;"></div>${walkMin} min do przystanku</div>`
-                    : '';
-
-                // Таймлайн: посадка → (пересадки) → прибуття
-                let timelineHtml = '<div class="trasa-timeline" style="position:relative; padding-left:14px; border-left:2px dotted var(--text-muted); margin: 2px 0 6px;">';
-                const dot = (color) => `<div style="position:absolute; left:-19px; top:6px; width:8px; height:8px; border-radius:50%; background:${color};"></div>`;
-
-                // Початкова точка (червона, якщо адреса, синя, якщо зупинка)
-                const startColor = firstLeg.route === 'Пішки' ? 'var(--danger)' : 'var(--blue)';
-                timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0;">${dot(startColor)}
-                    <span class="stop-name">${fromStop.name} ${fromStop.code ? `<span class="stop-code">(${fromStop.code})</span>` : ''}</span>
-                    <span class="time">${depTime}</span>
-                </div>`;
-
-                for (let i = 0; i < transitLegs.length - 1; i++) {
-                    const tStop = splitStopName(transitLegs[i].toStopName);
-                    timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0; opacity:0.8;">${dot('var(--text-muted)')}
-                        <span class="stop-name">➔ ${tStop.name} <span class="stop-code">(${tStop.code})</span></span>
-                        <span class="time">${formatTime(transitLegs[i].arrivalMin)}</span>
-                    </div>`;
-                }
-
-                // Кінцева точка (червона, якщо адреса, синя, якщо зупинка)
-                const endColor = lastLeg.route === 'Пішки' ? 'var(--danger)' : 'var(--blue)';
-                timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0;">${dot(endColor)}
-                    <span class="stop-name">${toStop.name} ${toStop.code ? `<span class="stop-code">(${toStop.code})</span>` : ''}</span>
-                    <span class="time">${arrTime}</span>
-                </div>`;
-                timelineHtml += '</div>';
-
-                // Збираємо фінальну картку (тепер розгортувана — як картки на вкладці przystanek)
-                // ... (все до card.innerHTML залишається без змін) ...
-
-const wrapper = document.createElement('div');
-wrapper.className = 'trasa-wrapper';
-
-const card = document.createElement('div');
-card.className = 'trasa-card expandable';
-card.style.cursor = 'pointer';
-
-// Вбудовуємо хрестик та trasa-middle-scroll
-card.innerHTML = `
-    <button class="close-trasa-btn" title="Zamknij">✕</button>
-    ${legendHtml}
-    
-    <!-- Ось він, наш список, який буде тягнутися! -->
-    <div class="trasa-middle-scroll" style="display: none;"></div>
-    
-    <div class="trasa-details">
-        ${walkNoteHtml}
-        ${timelineHtml}
-        <div class="trasa-footer">
-            <span class="departure-in">Odjazd: <span class="${minClass}" data-dep="${firstTransitLeg.departureMin}">${timeText}</span></span>
-            <span class="duration">czas <span class="highlight">${duration} min</span></span>
-        </div>
-    </div>
-`;
-
-// Видаляємо expandPanel, бо він тепер всередині картки
-card.addEventListener('click', (e) => {
-    // Не згортаємо картку, якщо випадково клікнули на щось специфічне
-    if (e.target.closest('.dep-expand-map-btn')) return;
-    toggleTrasaExpand(card, legs, transitLegs);
-});
-
-wrapper.appendChild(card);
-routeResultsBox.appendChild(wrapper);
-
-// ... (далі йде updateTrasaCountdowns() як і було) ...            
-});
-
-// ЗАПАМ'ЯТОВУЄМО ЧАС ОСТАННЬОГО МАРШРУТУ ДЛЯ СВАЙПУ
             if (journeys.length > 0) {
                 const lastJourney = journeys[journeys.length - 1];
-                // Беремо саме транспорт, ігноруємо пішу ходу
                 const transitLegs = lastJourney.legs.filter(l => l.route !== "Пішки" && l.route);
                 if (transitLegs.length > 0) {
-                    // Зберігаємо час відправлення САМЕ АВТОБУСА
                     lastJourneyDepartureMin = transitLegs[0].departureMin;
                 }
             }
@@ -2034,7 +2212,6 @@ routeResultsBox.appendChild(wrapper);
 
 // ==================== СВАЙПИ ДЛЯ МАРШРУТІВ (TRASA) ====================
 
-// Створюємо індикатор "завантаження майбутнього"
 const trasaBottomIndicator = document.createElement('div');
 trasaBottomIndicator.innerHTML = '↻ Szukam późniejszych...';
 trasaBottomIndicator.style.textAlign = 'center';
@@ -2042,7 +2219,6 @@ trasaBottomIndicator.style.color = 'var(--text-muted)';
 trasaBottomIndicator.style.height = '0';
 trasaBottomIndicator.style.overflow = 'hidden';
 trasaBottomIndicator.style.transition = 'height 0.2s ease-out';
-// Вставляємо під списком результатів
 routeResultsBox.parentNode.insertBefore(trasaBottomIndicator, routeResultsBox.nextSibling);
 
 let trasaStartY = 0;
@@ -2051,15 +2227,12 @@ let trasaIsRefreshing = false;
 
 routeResultsBox.addEventListener('touchstart', (e) => {
     trasaStartY = e.touches[0].clientY;
-    // Перевіряємо, чи доскролили до низу результатів
     trasaIsAtBottom = Math.ceil(routeResultsBox.scrollTop + routeResultsBox.clientHeight) >= routeResultsBox.scrollHeight - 2;
 }, { passive: true });
 
 routeResultsBox.addEventListener('touchmove', (e) => {
     if (!trasaStartY || trasaIsRefreshing) return;
     const dy = e.touches[0].clientY - trasaStartY;
-
-    // Тягнемо ВВЕРХ, будучи на дні
     if (dy < 0 && trasaIsAtBottom) {
         trasaBottomIndicator.style.height = Math.min(-dy, 50) + 'px';
     }
@@ -2069,13 +2242,11 @@ routeResultsBox.addEventListener('touchend', async (e) => {
     if (!trasaStartY || trasaIsRefreshing) return;
     const dy = e.changedTouches[0].clientY - trasaStartY;
 
-    // ДОДАНО: Перевіряємо, чи є збережений час (lastJourneyDepartureMin !== null)
     if (dy < -60 && trasaIsAtBottom && lastJourneyDepartureMin !== null) {
         trasaIsRefreshing = true;
         trasaBottomIndicator.style.height = '40px';
 
         try {
-            // 1. Формуємо параметри (звідки/куди), так само як в основному пошуку
             let fromParams = '';
             if (routeFromStop.ids) fromParams = `from=${routeFromStop.ids.join(',')}`;
             else if (routeFromStop.lat && routeFromStop.lon) fromParams = `fromLat=${routeFromStop.lat}&fromLon=${routeFromStop.lon}`;
@@ -2084,7 +2255,6 @@ routeResultsBox.addEventListener('touchend', async (e) => {
             if (routeToStop.ids) toParams = `to=${routeToStop.ids.join(',')}`;
             else if (routeToStop.lat && routeToStop.lon) toParams = `toLat=${routeToStop.lat}&toLon=${routeToStop.lon}`;
 
-            // 2. Робимо запит до сервера зі ЗСУВОМ ЧАСУ (+1 хвилина від останнього на екрані)
             const nextSearchMin = lastJourneyDepartureMin + 1;
             const res = await fetch(`${API_BASE_URL}/route/complex?${fromParams}&${toParams}&limit=3&time=${nextSearchMin}`);
             if (!res.ok) throw new Error('Помилка сервера');
@@ -2092,80 +2262,15 @@ routeResultsBox.addEventListener('touchend', async (e) => {
             const newJourneys = await res.json();
 
             if (newJourneys.length > 0) {
-               // Оновлюємо час для наступного свайпу!
                 const lastJourney = newJourneys[newJourneys.length - 1];
                 const transitLegs = lastJourney.legs.filter(l => l.route !== "Пішки" && l.route);
                 if (transitLegs.length > 0) {
                     lastJourneyDepartureMin = transitLegs[0].departureMin;
                 }
 
-                // 3. Відмальовуємо нові картки (Це копія твоєї логіки малювання з головного пошуку)
                 newJourneys.forEach(journey => {
-                    const legs = journey.legs;
-                    if (!legs || legs.length === 0) return;
-                    const firstLeg = legs[0];
-                    const lastLeg = legs[legs.length - 1];
-                    const transitLegs = legs.filter(l => l.route !== "Пішки" && l.route);
-                    if (transitLegs.length === 0) return;
-
-                    const firstTransitLeg = transitLegs[0];
-                    const initialWalkLeg = (firstLeg.route === "Пішки" || !firstLeg.route) ? firstLeg : null;
-                    const walkMin = initialWalkLeg ? Math.max(0, initialWalkLeg.arrivalMin - initialWalkLeg.departureMin) : 0;
-                    const depTime = formatTime(firstTransitLeg.departureMin);
-                    const arrTime = formatTime(lastLeg.arrivalMin);
-                    const duration = journey.totalMinutes;
-
-                    const now = new Date();
-                    const currentMin = now.getHours() * 60 + now.getMinutes();
-                    let countdown = firstTransitLeg.departureMin - currentMin;
-                    if (countdown < 0) countdown = 0;
-                    let timeText = countdown === 0 ? '< 1 min' : (countdown <= 30 ? `za ${countdown} min` : depTime);
-                    const minClass = countdown <= 30 ? 'trasa-dep-min time-live' : 'trasa-dep-min highlight';
-
-                    let legendHtml = '<div class="trasa-legend" style="background: transparent; box-shadow: none; overflow: visible; gap: 6px; top: -14px;">';
-                    transitLegs.forEach(leg => {
-                        const routeNum = parseInt(leg.route, 10);
-                        const isTrolley = (routeNum >= 150) ? ' trolleybus' : '';
-                        legendHtml += `<div class="dep-route-box route-size-3${isTrolley}">${leg.route}</div>`;
-                    });
-                    legendHtml += '</div>';
-
-                    const startName = firstLeg.route === 'Пішки' ? routeFromStop.name : firstTransitLeg.fromStopName;
-                    const endName = lastLeg.route === 'Пішки' ? routeToStop.name : lastLeg.toStopName;
-                    const fromStop = splitStopName(startName);
-                    const toStop = splitStopName(endName);
-
-                    const walkNoteHtml = initialWalkLeg ? `<div class="trasa-walk-note" style="display:flex; align-items:center; gap:6px; font-size:12px; color: var(--text-muted); margin-bottom: 4px;"><div class="svg-icon icon-walk" style="width: 12px; height: 12px;"></div>${walkMin} min do przystanku</div>` : '';
-
-                    let timelineHtml = '<div class="trasa-timeline" style="position:relative; padding-left:14px; border-left:2px dotted var(--text-muted); margin: 2px 0 6px;">';
-                    const dot = (color) => `<div style="position:absolute; left:-19px; top:6px; width:8px; height:8px; border-radius:50%; background:${color};"></div>`;
-                    
-                    const startColor = firstLeg.route === 'Пішки' ? 'var(--danger)' : 'var(--blue)';
-                    timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0;">${dot(startColor)}<span class="stop-name">${fromStop.name} ${fromStop.code ? `<span class="stop-code">(${fromStop.code})</span>` : ''}</span><span class="time">${depTime}</span></div>`;
-                    
-                    for (let i = 0; i < transitLegs.length - 1; i++) {
-                        const tStop = splitStopName(transitLegs[i].toStopName);
-                        timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0; opacity:0.8;">${dot('var(--text-muted)')}<span class="stop-name">➔ ${tStop.name} <span class="stop-code">(${tStop.code})</span></span><span class="time">${formatTime(transitLegs[i].arrivalMin)}</span></div>`;
-                    }
-                    
-                    const endColor = lastLeg.route === 'Пішки' ? 'var(--danger)' : 'var(--blue)';
-                    timelineHtml += `<div class="trasa-row" style="position:relative; padding:3px 0;">${dot(endColor)}<span class="stop-name">${toStop.name} ${toStop.code ? `<span class="stop-code">(${toStop.code})</span>` : ''}</span><span class="time">${arrTime}</span></div></div>`;
-
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'trasa-wrapper';
-                    const card = document.createElement('div');
-                    card.className = 'trasa-card expandable';
-                    card.style.cursor = 'pointer';
-                    card.innerHTML = `<button class="close-trasa-btn" title="Zamknij">✕</button>${legendHtml}<div class="trasa-middle-scroll" style="display: none;"></div><div class="trasa-details">${walkNoteHtml}${timelineHtml}<div class="trasa-footer"><span class="departure-in">Odjazd: <span class="${minClass}" data-dep="${firstTransitLeg.departureMin}">${timeText}</span></span><span class="duration">czas <span class="highlight">${duration} min</span></span></div></div>`;
-                    
-                    card.addEventListener('click', (e) => {
-                        if (e.target.closest('.dep-expand-map-btn')) return;
-                        toggleTrasaExpand(card, legs, transitLegs);
-                    });
-                    
-                    wrapper.appendChild(card);
-                    // ВАЖЛИВО: Додаємо нові картки в кінець існуючого списку
-                    routeResultsBox.appendChild(wrapper);
+                    const cardElement = buildJourneyCard(journey);
+                    if (cardElement) routeResultsBox.appendChild(cardElement);
                 });
 
                 updateTrasaCountdowns();
@@ -2188,6 +2293,7 @@ routeResultsBox.addEventListener('touchend', async (e) => {
 document.addEventListener('DOMContentLoaded', () => {
     renderRecentRoutes();
 });
+
 // ==================== Вкладка "Przystanek" (Розклад) ====================
 
 const stopSearchInput = document.getElementById('stop-screen-search');

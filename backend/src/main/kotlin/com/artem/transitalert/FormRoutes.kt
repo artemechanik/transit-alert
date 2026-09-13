@@ -12,10 +12,9 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime // <-- Додали цей імпорт
 
-// Вікно, в якому шукаємо "актуальні зараз" напрямки лінії. Ширше за risk-window (10хв)
-// і за вікно резолву при сабміті (45хв) — тут просто пропонуємо варіанти на вибір,
-// не намагаємось точно прив'язати конкретний рейс.
+// Вікно, в якому шукаємо "актуальні зараз" напрямки лінії.
 private const val DIRECTIONS_WINDOW_MINUTES = 90
 
 fun String.normalizePL(): String {
@@ -25,11 +24,8 @@ fun String.normalizePL(): String {
         .replace("ś", "s").replace("ź", "z").replace("ż", "z")
 }
 
-// Оголошуємо кеш прямо всередині formRoutes, перед routing { ... }
 var cachedStops: List<StopSuggestion>? = null
 
-/** Скидає кеш зупинок — викликати з GtfsStaticSync одразу після успішного реімпорту,
- *  інакше нові/змінені зупинки не з'являться в автокомпліті аж до перезапуску застосунку. */
 fun invalidateStopsCache() {
     cachedStops = null
 }
@@ -37,22 +33,18 @@ fun invalidateStopsCache() {
 fun Application.formRoutes() {
     routing {
 
-        // Віддаємо всі активні на сьогодні лінії для автокомпліту
         get("/routes") {
             val routes = ActiveRoutesCache.getTodayRoutes()
             call.respond(routes)
         }
 
-        // Пошук зупинок для автокомпліту (з підтримкою польських літер і розумним сортуванням)
         get("/stops/search") {
             val queryParam = call.parameters["q"]?.trim()?.lowercase() ?: return@get call.respond(emptyList<StopSuggestion>())
             if (queryParam.length < 2) return@get call.respond(emptyList<StopSuggestion>())
             
-            // Нормалізуємо те, що ввів користувач (mel -> mel)
             val searchQ = queryParam.normalizePL()
 
             val results = transaction {
-                // 1. Кешуємо всі зупинки при першому запиті
                 if (cachedStops == null) {
                     cachedStops = Stops.selectAll().map {
                         StopSuggestion(
@@ -65,7 +57,6 @@ fun Application.formRoutes() {
                     }
                 }
 
-                // 2. Блискавичний пошук з розумним сортуванням
                 val baseStops = cachedStops!!.filter {
                     it.name.normalizePL().contains(searchQ) || 
                     it.code.normalizePL().contains(searchQ)
@@ -74,26 +65,17 @@ fun Application.formRoutes() {
                     val normCode = stop.code.normalizePL()
                     
                     when {
-                        // Найвищий пріоритет: назва прямо починається з цих літер ("Lotnicza")
                         normName.startsWith(searchQ) -> 1
-                        
-                        // Другий пріоритет: якесь слово всередині назви починається з цього ("Park Bronowice")
                         normName.contains(" $searchQ") || normName.contains("-$searchQ") -> 2
-                        
-                        // Третій пріоритет: пошук чітко по номеру платформи
                         normCode.startsWith(searchQ) -> 3
-                        
-                        // Найнижчий пріоритет: просто збіг десь усередині слова ("Młodej")
                         else -> 4
                     }
                 }.take(10)
 
-                // ОСЬ ЦІ ТРИ РЯДКИ ЗАГУБИЛИСЯ МИНУЛОГО РАЗУ:
                 if (baseStops.isEmpty()) return@transaction emptyList<StopSuggestion>()
                 val stopIds = baseStops.map { it.stopId }
                 val activeServices = activeServiceIds(LocalDate.now(LUBLIN_ZONE))
 
-                // 3. Витягуємо маршрути для знайдених зупинок
                 val stopRoutesMap = mutableMapOf<String, MutableSet<StopRouteDto>>()
 
                 if (activeServices.isNotEmpty()) {
@@ -113,7 +95,6 @@ fun Application.formRoutes() {
                         }
                 }
 
-                // 4. З'єднуємо все разом
                 baseStops.map { stop ->
                     val routesList: List<StopRouteDto> = stopRoutesMap[stop.stopId]
                         ?.toList()
@@ -126,7 +107,6 @@ fun Application.formRoutes() {
             call.respond(results)
         }
         
-      // Пошук прямих маршрутів між зупинками
         get("/route/search") {
             val fromParam = call.parameters["from"]
             val toParam = call.parameters["to"]
@@ -139,94 +119,88 @@ fun Application.formRoutes() {
             val fromIds = fromParam.split(",")
             val toIds = toParam.split(",")
 
-            // Час можна дізнаватися і без бази даних
             val now = java.time.LocalTime.now(LUBLIN_ZONE)
             val currentMin = now.hour * 60 + now.minute
             val today = java.time.LocalDate.now(LUBLIN_ZONE)
 
-            // А от усе, що стосується бази, ховаємо сюди:
             val routes = transaction {
-                val activeServices = activeServiceIds(today) // <--- ТЕПЕР ВОНО В БЕЗПЕЦІ
+                val activeServices = activeServiceIds(today) 
                 findDirectTrips(fromIds, toIds, activeServices, currentMin)
             }
             
             call.respond(routes)
         }
         
-     // Новий розумний МУЛЬТИПОШУК з пересадками
         get("/route/complex") {
-            // 1. Зчитуємо ВСІ параметри
             val fromParam = call.request.queryParameters["from"]
             val toParam = call.request.queryParameters["to"]
             val fromLat = call.request.queryParameters["fromLat"]?.toDoubleOrNull()
             val fromLon = call.request.queryParameters["fromLon"]?.toDoubleOrNull()
             val toLat = call.request.queryParameters["toLat"]?.toDoubleOrNull()
             val toLon = call.request.queryParameters["toLon"]?.toDoubleOrNull()
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20 
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 8 
 
-            // 2. Формуємо список СТАРТІВ (зупинка + час пішки)
             val starts: List<Pair<String, Int>> = when {
                 fromLat != null && fromLon != null -> TransitGraph.getNearbyStopsWalkTimes(fromLat, fromLon)
                 !fromParam.isNullOrBlank() -> fromParam.split(",").map { Pair(it.trim(), 0) }
                 else -> return@get call.respond(emptyList<JourneyResponse>())
             }
 
-            // 3. Формуємо словник ФІНІШІВ (зупинка -> час пішки)
             val targets: Map<String, Int> = when {
                 toLat != null && toLon != null -> TransitGraph.getNearbyStopsWalkTimes(toLat, toLon).toMap()
                 !toParam.isNullOrBlank() -> toParam.split(",").associate { it.trim() to 0 }
                 else -> return@get call.respond(emptyList<JourneyResponse>())
             }
 
-            // Якщо юзер ввів координати десь у полі, де немає зупинок
             if (starts.isEmpty() || targets.isEmpty()) {
                 call.respond(emptyList<JourneyResponse>())
                 return@get
             }
 
-            val now = java.time.LocalTime.now(LUBLIN_ZONE)
-            
-            // Читаємо параметр time з фронтенду. Якщо його немає — беремо поточний час
+            val now = LocalDateTime.now(LUBLIN_ZONE)
             val timeParam = call.request.queryParameters["time"]?.toIntOrNull()
+            
+            val baseSearchDate = now.toLocalDate()
             var currentSearchMin = timeParam ?: (now.hour * 60 + now.minute)
             
             val allJourneys = mutableListOf<JourneyResponse>()
-            
-            // ЗАПОБІЖНИК ВІД ЗАВИСАННЯ
             var attempts = 0
             val MAX_ATTEMPTS = 150
 
-            // --- ПОЧАТОК ЦИКЛУ МУЛЬТИПОШУКУ ---
             while (allJourneys.size < limit && attempts < MAX_ATTEMPTS) {
                 attempts++
                 
-                // 4. Питаємо алгоритм Дейкстри (ПЕРЕДАЄМО НОВІ ПАРАМЕТРИ)
-                val path = TransitGraph.findBestRoute(starts, targets, currentSearchMin)
+                val searchTime = baseSearchDate.atStartOfDay().plusMinutes(currentSearchMin.toLong())
+                
+                // ВИПРАВЛЕННЯ 1: Змінили назву змінної з path на foundPath
+                val foundPath = TransitGraph.findBestRoute(starts, targets, searchTime)
 
-                if (path == null || path.isEmpty()) {
+                if (foundPath == null || foundPath.isEmpty()) {
                     break 
                 }
 
-                // ... ТУТ ПОЧИНАЄТЬСЯ ТВІЙ СТАРИЙ КОД (Витягуємо красиві назви зупинок...)
-
-                // 2. Витягуємо красиві назви зупинок
-                val stopIdsToFetch = path.flatMap { listOf(it.fromStopId, it.toStopId) }.distinct()
+                val stopIdsToFetch = foundPath.flatMap { listOf(it.fromStopId, it.toStopId) }.distinct()
                 val stopNames = transaction {
                     Stops.select(Stops.stopId, Stops.name, Stops.code)
                         .where { Stops.stopId inList stopIdsToFetch }
                         .associate { it[Stops.stopId] to "${it[Stops.name]} ${it[Stops.code]}" }
                 }
 
-                // 3. СКЛЕЮЄМО ЗУПИНКИ
                 val legs = mutableListOf<JourneyLeg>()
                 var currentLeg = mutableListOf<RouteEdge>()
 
-                for (edge in path) {
+                for (edge in foundPath) {
                     if (currentLeg.isEmpty() || currentLeg.last().tripId == edge.tripId) {
                         currentLeg.add(edge)
                     } else {
                         val first = currentLeg.first()
                         val last = currentLeg.last()
+                        
+                        // Обертаємо в try-catch на випадок якщо кеш ще порожній
+                        val liveData = try { LiveVehiclesCache.byTripId(first.tripId) } catch (e: Exception) { null }
+                        val delaySec = liveData?.delaySeconds ?: 0
+                        val isRealTime = liveData?.delaySeconds != null
+                        
                         legs.add(JourneyLeg(
                             route = first.route,
                             fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
@@ -235,8 +209,9 @@ fun Application.formRoutes() {
                             arrivalMin = last.arrivalMin,
                             tripId = first.tripId,
                             fromStopId = first.fromStopId,
-                            toStopId = last.toStopId // ← додав: без цього фронтенд не міг надійно
-                                                      //   визначити реальну зупинку висадки
+                            toStopId = last.toStopId,
+                            isRealTime = isRealTime,            
+                            delayMinutes = delaySec / 60 
                         ))
                         currentLeg = mutableListOf(edge)
                     }
@@ -245,6 +220,11 @@ fun Application.formRoutes() {
                 if (currentLeg.isNotEmpty()) {
                     val first = currentLeg.first()
                     val last = currentLeg.last()
+                    
+                    val liveData = try { LiveVehiclesCache.byTripId(first.tripId) } catch (e: Exception) { null }
+                    val delaySec = liveData?.delaySeconds ?: 0
+                    val isRealTime = liveData?.delaySeconds != null
+                    
                     legs.add(JourneyLeg(
                         route = first.route,
                         fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
@@ -253,11 +233,12 @@ fun Application.formRoutes() {
                         arrivalMin = last.arrivalMin,
                         tripId = first.tripId,
                         fromStopId = first.fromStopId,
-                        toStopId = last.toStopId // ← додав, той самий фікс
+                        toStopId = last.toStopId,
+                        isRealTime = isRealTime,            
+                        delayMinutes = delaySec / 60
                     ))
                 }
                 
-                // 4. ЛОГІКА "ВЧАСНОГО ВИХОДУ З ДОМУ" (JUST-IN-TIME WALKING)
                 if (legs.isNotEmpty() && legs.first().route == "Пішки" && legs.size > 1) {
                     val walkLeg = legs[0]
                     val firstBus = legs[1]
@@ -272,16 +253,17 @@ fun Application.formRoutes() {
                     }
                 }
                 
+                if (legs.isEmpty()) {
+                    break
+                }
+                
                 val realTotalMinutes = legs.last().arrivalMin - legs.first().departureMin
 
-                // 5. ФІЛЬТРУЄМО КЛОНІВ ЗА УНІКАЛЬНИМИ АВТОБУСАМИ (Ігноруємо час пішки)
-                // Використовуємо tripId як найнадійніший ідентифікатор рейсу!
-                val currentSignature = legs.filter { it.route != "Пішки" }
-                    .joinToString("|") { it.tripId }
+                // ВИПРАВЛЕННЯ 2: Чітко вказали map { it.tripId } щоб уникнути ambiguity
+                val currentSignature = legs.filter { it.route != "Пішки" }.map { it.tripId }.joinToString("|")
 
                 val isDuplicate = allJourneys.any { journey ->
-                    val existingSignature = journey.legs.filter { it.route != "Пішки" }
-                        .joinToString("|") { it.tripId }
+                    val existingSignature = journey.legs.filter { it.route != "Пішки" }.map { it.tripId }.joinToString("|")
                     existingSignature == currentSignature
                 }
                 
@@ -294,28 +276,25 @@ fun Application.formRoutes() {
                     )
                 }
 
-                // 6. ЗСУВАЄМО ЧАС ДЛЯ НАСТУПНОЇ ІТЕРАЦІЇ
-		// Зсуваємо пошук на 1 хвилину після ЧАСУ ВИХОДУ З ДОМУ попереднього маршруту
-		if (legs.isNotEmpty()) {
-		    currentSearchMin = legs.first().departureMin + 1
-		} else {
-		    break
-		}
+                // ЗСУВАЄМО ЧАС ТАК, ЩОБ ГАРАНТОВАНО ПРОПУСТИТИ ЦЕЙ АВТОБУС
+                val walkDuration = if (legs.first().route == "Пішки") (legs.first().arrivalMin - legs.first().departureMin) else 0
+                val firstBus = legs.find { it.route != "Пішки" }
+                
+                if (firstBus != null) {
+                    currentSearchMin = firstBus.departureMin - walkDuration + 1
+                } else {
+                    currentSearchMin = legs.first().departureMin + 1
+                }
             }
-            // --- КІНЕЦЬ ЦИКЛУ МУЛЬТИПОШУКУ ---
-
-            // Віддаємо фронтенду цілий масив маршрутів!
+            
             call.respond(allJourneys.distinctBy { it.legs })
         }
         
-        // Напрямки для конкретної лінії — тільки ті, якими вона реально їде
-        // біля поточного часу (±90 хв), відсортовані від найближчого рейсу.
         get("/routes/{route}/directions") {
             val routeNum = call.parameters["route"] ?: return@get call.respondText("Missing route", status = HttpStatusCode.BadRequest)
             val now = Instant.now()
 
             val directions = transaction {
-                // headsign -> найменша різниця в хвилинах серед знайдених у вікні рейсів
                 val bestPerDirection = mutableMapOf<String, Int>()
 
                 for ((date, minuteBase) in timeCandidates(now)) {
@@ -351,9 +330,6 @@ fun Application.formRoutes() {
                 return@get
             }
 
-            // Фолбек: рідкісна лінія (напр. раз на 2 год нічний рейс) — у вікні ±90хв
-            // може нічого не бути, хоча лінія реально активна сьогодні. Тоді краще
-            // показати повний список напрямків за день, ніж пустий вибір.
             val fallback = transaction {
                 val activeServices = activeServiceIds(LocalDate.now(LUBLIN_ZONE))
                 if (activeServices.isEmpty()) return@transaction emptyList()

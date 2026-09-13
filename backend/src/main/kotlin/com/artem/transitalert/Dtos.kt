@@ -93,9 +93,11 @@ data class JourneyLeg(
     val toStopName: String,
     val departureMin: Int,
     val arrivalMin: Int,
-    val tripId: String,      // ← нове
-    val fromStopId: String,   // ← нове
-     val toStopId: String   // ← нове: реальна зупинка висадки, для надійного матчингу на фронтенді
+    val tripId: String,     
+    val fromStopId: String,   
+     val toStopId: String,   
+     val isRealTime: Boolean = false,
+    val delayMinutes: Int = 0
 )
 
 // Це весь маршрут цілком (сумарний час і список шматків)
@@ -120,3 +122,20 @@ data class UpcomingStopsResponse(
     val upcomingStops: List<UpcomingStop>,
 )
 
+@Serializable
+data class LiveVehicleResponse(
+    val vehicleLabel: String,
+    val route: String,
+    val tripId: String,
+    val lat: Double,
+    val lon: Double,
+    val bearing: Float,
+    val currentStopSequence: Int,
+    val delaySeconds: Int?,
+)
+
+@Serializable
+data class TripDelayInfo(
+    val delayMinutes: Int,
+    val isRealTime: Boolean
+)

@@ -1645,53 +1645,144 @@ function formatTime(minutes) {
 }
 
 // Оновлює зворотній таймер на всіх картках маршруту, що зараз на екрані.
-// Рахує від реального часу посадки в транспорт (не від початку піших відрізків).
-function updateTrasaCountdowns() {
+// Робить запит на бекенд для отримання АКТУАЛЬНИХ затримок і зсуває весь таймлайн.
+async function updateTrasaCountdowns() {
     const cards = document.querySelectorAll('.trasa-dep-min[data-dep]');
     if (cards.length === 0) return;
 
-    const now = new Date();
-    const currentMin = now.getHours() * 60 + now.getMinutes();
+    // 1. Збираємо всі tripId з карток на екрані
+    const tripIds = new Set();
+    cards.forEach(card => {
+        const tripId = card.getAttribute('data-trip-id');
+        if (tripId && tripId !== 'undefined' && tripId !== 'null') {
+            tripIds.add(tripId);
+        }
+    });
 
-    // Правильні польські закінчення
-    function getMinLabel(m) {
-        if (m === 1) return 'minuta';
-        const mod10 = m % 10;
-        const mod100 = m % 100;
-        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'minuty';
-        return 'minut';
+    // 2. Робимо запит на сервер за новими затримками
+    let liveDelays = {};
+    if (tripIds.size > 0) {
+        try {
+            const res = await fetch(`${API_BASE_URL}/live-vehicles/delays?tripIds=${Array.from(tripIds).join(',')}`);
+            if (res.ok) {
+                liveDelays = await res.json();
+            }
+        } catch (e) {
+            console.warn('Не вдалося оновити LIVE затримки:', e);
+        }
     }
 
-    cards.forEach(el => {
-        const depMin = parseInt(el.dataset.dep, 10);
-        if (isNaN(depMin)) return;
+    const now = new Date();
+    
+    cards.forEach(card => {
+        const depMin = parseInt(card.getAttribute('data-dep'), 10);
+        const tripId = card.getAttribute('data-trip-id');
+        
+        let oldDelay = parseInt(card.getAttribute('data-delay') || '0', 10);
+        let newDelay = oldDelay;
+        let isLive = card.getAttribute('data-live') === 'true';
 
-        let countdown = depMin - currentMin;
-        if (countdown < -60) countdown += 24 * 60; 
+        // 3. Якщо прийшли нові дані - рахуємо дельту
+        if (tripId && liveDelays[tripId]) {
+            newDelay = liveDelays[tripId].delayMinutes;
+            isLive = liveDelays[tripId].isRealTime;
+            
+            // Записуємо нові дані в пам'ять картки
+            card.setAttribute('data-delay', newDelay);
+            card.setAttribute('data-live', isLive ? 'true' : 'false');
+        }
+        
+        const delayDelta = newDelay - oldDelay;
+        let expectedDepartureMin = depMin + newDelay;
+        
+        // --- ЧИСТА МАТЕМАТИКА ТАЙМЕРА (БЕЗ 1440) ---
+        // JS Date сам перемкне день вперед, якщо expectedDepartureMin >= 1440
+        const depDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(expectedDepartureMin / 60), expectedDepartureMin % 60, 0);
+        const diffMs = depDate - now;
+        let countdown = Math.max(0, Math.floor(diffMs / 60000));
 
+        function getMinLabel(m) {
+            if (m === 1) return 'minuta';
+            const mod10 = m % 10;
+            const mod100 = m % 100;
+            if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'minuty';
+            return 'minut';
+        }
+
+        const liveBadgeHtml = isLive 
+            ? `<span style="color: #ef4444; font-size: 9px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 2px; animation: trasaLiveBlink 1.5s infinite;">LIVE</span>` 
+            : '';
+
+        let timerHtml = '';
         if (countdown < 60) {
-            let numStr = countdown <= 0 ? '<1' : countdown;
-            let labelStr = countdown <= 0 ? 'minuta' : getMinLabel(countdown);
+            let numStr = countdown === 0 ? '<1' : countdown;
+            let labelStr = countdown === 0 ? 'minuta' : getMinLabel(countdown);
             let colorStr = countdown <= 30 ? '#10b981' : 'var(--text)';
             
-            // ВЕЛИЧЕЗНА цифра зверху, маленьке слово знизу
-            el.innerHTML = `
+            timerHtml = `
             <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
+                ${liveBadgeHtml}
                 <span style="font-size:26px; font-weight:800; color:${colorStr}; letter-spacing:-1px;">${numStr}</span>
                 <span style="font-size:10px; font-weight:700; color:${colorStr}; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; opacity:0.8;">${labelStr}</span>
             </div>`;
-                } else {
+        } else {
             const h = Math.floor(countdown / 60);
             const m = countdown % 60;
             const hStr = String(h).padStart(2, '0');
             const mStr = String(m).padStart(2, '0');
-            el.innerHTML = `<div style="font-size:18px; font-weight:700; color:var(--text); text-align:right;">${hStr}:${mStr}</div>`;
+            timerHtml = `
+            <div style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center; line-height:1.2;">
+                ${liveBadgeHtml}
+                <div style="font-size:18px; font-weight:700; color:var(--text); text-align:right;">${hStr}:${mStr}</div>
+            </div>`;
+        }
+        
+        card.innerHTML = timerHtml;
+
+        // --- ДИНАМІЧНЕ ОНОВЛЕННЯ ІКОНКИ СТАТУСУ ---
+        const trasaCard = card.closest('.trasa-card');
+        if (trasaCard) {
+            const statusWrap = trasaCard.querySelector('.trasa-header-status-wrap');
+            if (statusWrap) {
+                // Викликаємо нашого помічника з новими даними
+                statusWrap.innerHTML = getLiveStatusBadge(isLive, newDelay);
+            }
         }
 
+        // 4. Зсуваємо ВСІ години в картці, якщо затримка змінилася
+        if (delayDelta !== 0) {
+            const detailsContainer = card.closest('.trasa-details');
+            if (detailsContainer) {
+                // Знаходимо абсолютно всі години в цій картці
+                const timeElements = detailsContainer.querySelectorAll('.trasa-row .time');
+                
+                timeElements.forEach(timeEl => {
+                    // textContent дістає чистий текст (напр. "16:44"), ігноруючи HTML-теги
+                    const timeText = timeEl.textContent.trim();
+                    if (!timeText.includes(':')) return;
+                    
+                    const [h, m] = timeText.split(':').map(Number);
+                    const currentTotalMins = h * 60 + m;
+                    const newTotalMins = currentTotalMins + delayDelta;
+                    
+                    // Тут спрацює наш оновлений formatTime з % 24
+                    const newTimeStr = formatTime(newTotalMins);
+                    
+                    // Записуємо новий час і фарбуємо його
+                    if (newDelay > 0) {
+                        timeEl.innerHTML = `<span style="color: #ef4444; font-weight: 700;">${newTimeStr}</span>`;
+                    } else if (newDelay < 0) {
+                        timeEl.innerHTML = `<span style="color: #10b981; font-weight: 700;">${newTimeStr}</span>`;
+                    } else {
+                        // Якщо затримка повернулася в 0 (автобус нагнав розклад)
+                        timeEl.innerHTML = newTimeStr;
+                    }
+                });
+            }
+        }
     });
 }
 
-// Розділяємо імена зупинок і коди платформ (напр. "Lipowa 03" -> {name:"Lipowa", code:"03"})
 // Розділяємо імена зупинок і коди платформ (напр. "Lipowa 03" -> {name:"Lipowa", code:"03"})
 function splitStopName(fullName) {
     if (!fullName) return { name: '', code: '' };
@@ -1708,6 +1799,23 @@ function splitStopName(fullName) {
     return { name: fullName, code: '' };
 }
 
+// Помічник для генерації іконки статусу в шапці
+function getLiveStatusBadge(isLive, delayMinutes) {
+    if (!isLive) return ''; // Якщо немає GPS-даних, нічого не показуємо
+    
+    const iconStyle = "width:22px; height:22px; flex-shrink:0; display:inline-block; transform: translateY(2px);";
+    
+    if (delayMinutes > 0) {
+        // Запізнюється (червоний + іконка slow)
+        return `<div style="display:flex; align-items:center; gap:3px; color: var(--danger);"><div class="svg-icon icon-slow" style="${iconStyle}"></div>+${delayMinutes}m</div> <span style="opacity:0.4">•</span> `;
+    } else if (delayMinutes < 0) {
+        // Поспішає (синій + іконка fast)
+        return `<div style="display:flex; align-items:center; gap:3px; color: var(--blue);"><div class="svg-icon icon-fast" style="${iconStyle}"></div>${Math.abs(delayMinutes)}m</div> <span style="opacity:0.4">•</span> `;
+    } else {
+        // Чітко за розкладом (зелений + іконка ok)
+        return `<div style="display:flex; align-items:center; color: #10b981;"><div class="svg-icon icon-ok" style="${iconStyle}"></div></div> <span style="opacity:0.4">•</span> `;
+    }
+}
 
 // --- ЄДИНА ФУНКЦІЯ ДЛЯ СТВОРЕННЯ КАРТКИ МАРШРУТУ ---
 function buildJourneyCard(journey) {
@@ -1723,19 +1831,44 @@ function buildJourneyCard(journey) {
     const lastTransitLeg = transitLegs[transitLegs.length - 1];
 
     const initialWalkLeg = (firstLeg.route === "Пішки" || !firstLeg.route) ? firstLeg : null;
-    const walkMin = initialWalkLeg ? Math.max(0, initialWalkLeg.arrivalMin - initialWalkLeg.departureMin) : 0;
+    const walkMinRaw = initialWalkLeg ? Math.max(0, initialWalkLeg.arrivalMin - initialWalkLeg.departureMin) : 0;
+    const walkMin = Math.round(walkMinRaw * 1.8); // Наш множник для реальності
     
     const finalWalkLeg = (lastLeg.route === "Пішки" || !lastLeg.route) ? lastLeg : null;
-    const finalWalkMin = finalWalkLeg ? Math.max(0, finalWalkLeg.arrivalMin - finalWalkLeg.departureMin) : 0;
+    const finalWalkMinRaw = finalWalkLeg ? Math.max(0, finalWalkLeg.arrivalMin - finalWalkLeg.departureMin) : 0;
+    const finalWalkMin = Math.round(finalWalkMinRaw * 1.8); // Наш множник для реальності
     
-    const depTime = formatTime(firstTransitLeg.departureMin);
-    const arrTime = formatTime(lastTransitLeg.arrivalMin);
-    const duration = journey.totalMinutes;
+    // Коригуємо загальний час у дорозі, щоб математика зійшлася
+    const extraWalkTime = (walkMin - walkMinRaw) + (finalWalkMin - finalWalkMinRaw);
+    
+    // Універсальний помічник для фарбування часу
+    const getColoredTime = (baseMin, delay) => {
+        const timeStr = formatTime(baseMin + delay);
+        if (delay > 0) return `<span style="color: var(--danger); font-weight: 700;">${timeStr}</span>`;
+        if (delay < 0) return `<span style="color: var(--blue); font-weight: 700;">${timeStr}</span>`;
+        return timeStr;
+    };
+
+    const depTime = getColoredTime(firstTransitLeg.departureMin, firstTransitLeg.delayMinutes || 0);
+    const arrTime = getColoredTime(lastTransitLeg.arrivalMin, lastTransitLeg.delayMinutes || 0);
+    // Рахуємо суто час від посадки в перший автобус до висадки з останнього
+    const transitStart = firstTransitLeg.departureMin + (firstTransitLeg.delayMinutes || 0);
+    const transitEnd = lastTransitLeg.arrivalMin + (lastTransitLeg.delayMinutes || 0);
+    const duration = Math.max(0, transitEnd - transitStart);
 
     const now = new Date();
-    const currentMin = now.getHours() * 60 + now.getMinutes();
-    let countdown = firstTransitLeg.departureMin - currentMin;
-    if (countdown < 0) countdown = 0;
+    const delay = firstTransitLeg.delayMinutes || 0;
+    const isLive = firstTransitLeg.isRealTime || false;
+    let expectedDepartureMin = firstTransitLeg.departureMin + delay;
+
+    // ❌ ВСІ ХАКИ З 1440 ВИДАЛЕНО! ❌
+    // Більше не треба перевіряти "нічні" чи "завтрашні" рейси.
+    // Якщо бекенд прислав 1450 хвилин (00:10 ночі наступного дня), 
+    // JS Date сам перекине дату на завтра!
+
+    const depDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(expectedDepartureMin / 60), expectedDepartureMin % 60, 0);
+    const diffMs = depDate - now;
+    let countdown = Math.max(0, Math.floor(diffMs / 60000));
 
     function getMinLabel(m) {
         if (m === 1) return 'minuta';
@@ -1761,7 +1894,7 @@ function buildJourneyCard(journey) {
         const m = countdown % 60;
         const hStr = String(h).padStart(2, '0');
         const mStr = String(m).padStart(2, '0');
-        timerHtml = `<div style="font-size:18px; font-weight:700; color:var(--text); text-align:right;">za ${hStr}:${mStr}</div>`;
+        timerHtml = `<div style="font-size:18px; font-weight:700; color:var(--text); text-align:right;">${hStr}:${mStr}</div>`;
     }
 
     const startName = firstTransitLeg.fromStopName;
@@ -1769,27 +1902,27 @@ function buildJourneyCard(journey) {
     const fromStop = splitStopName(startName);
     const toStop = splitStopName(endName);
 
-    let timelineHtml = '<div class="trasa-timeline" style="position:relative; margin: 4px 0 8px;">';
-    timelineHtml += '<div style="position:absolute; left: 55px; top: 12px; bottom: 12px; border-left: 2px dotted var(--border); z-index: 1;"></div>';
+    let timelineHtml = '<div class="trasa-timeline" style="position:relative; margin: 0px 0 2px;">';
+    timelineHtml += '<div style="position:absolute; left: 55px; top: 8px; bottom: 8px; border-left: 2px dotted var(--border); z-index: 1;"></div>';
 
-    const rowStyle = 'position:relative; padding:5px 0; display: flex; align-items: center;';
+    const rowStyle = 'position:relative; padding:2px 0; display: flex; align-items: center;';
     const timeStyle = 'width: 44px; text-align: right; font-size: 15px; font-weight: 600; color: var(--text); flex-shrink: 0;';
     const dotWrapperStyle = 'width: 24px; display: flex; justify-content: center; z-index: 2; flex-shrink: 0;';
 
-    // 1. ПЕРША ЗУПИНКА (Таймера тут більше немає!)
+    // 1. ПЕРША ЗУПИНКА
     timelineHtml += `<div class="trasa-row" style="${rowStyle}">
         <div class="time" style="${timeStyle}">${depTime}</div>
         <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
-        <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">${fromStop.name} ${fromStop.code ? `<span class="stop-code" style="color:var(--text-muted); font-size:13px; font-weight:500;">(${fromStop.code})</span>` : ''}</div>
+        <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">${fromStop.name} ${fromStop.code ? `<span class="stop-code" style="color:var(--text); font-size:15px; font-weight:600;">(${fromStop.code})</span>` : ''}</div>
     </div>`;
 
     // 2. ПРОМІЖНІ ЗУПИНКИ
     for (let i = 0; i < transitLegs.length - 1; i++) {
         const tStop = splitStopName(transitLegs[i].toStopName);
         timelineHtml += `<div class="trasa-row" style="${rowStyle} opacity: 0.8;">
-            <div class="time" style="${timeStyle} font-size: 14px; font-weight: 500; color: var(--text-muted);">${formatTime(transitLegs[i].arrivalMin)}</div>
+            <div class="time" style="${timeStyle} font-size: 14px; font-weight: 500; color: var(--text-muted);">${getColoredTime(transitLegs[i].arrivalMin, transitLegs[i].delayMinutes || 0)}</div>
             <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--border); box-shadow: 0 0 0 3px var(--card);"></div></div>
-            <div class="stop-name" style="flex: 1; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">➔ ${tStop.name} ${tStop.code ? `<span class="stop-code" style="font-size:12px;">(${tStop.code})</span>` : ''}</div>
+            <div class="stop-name" style="flex: 1; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">➔ ${tStop.name} ${tStop.code ? `<span class="stop-code" style="font-size: 14px; font-weight: 500; color: var(--text-muted);">(${tStop.code})</span>` : ''}</div>
         </div>`;
     }
 
@@ -1797,11 +1930,11 @@ function buildJourneyCard(journey) {
     timelineHtml += `<div class="trasa-row" style="${rowStyle}">
         <div class="time" style="${timeStyle}">${arrTime}</div>
         <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
-        <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">${toStop.name} ${toStop.code ? `<span class="stop-code" style="color:var(--text-muted); font-size:13px; font-weight:500;">(${toStop.code})</span>` : ''}</div>
+        <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">${toStop.name} ${toStop.code ? `<span class="stop-code" style="color:var(--text); font-size:15px; font-weight:600;">(${toStop.code})</span>` : ''}</div>
     </div>`;
     
     // 4. ТАЙМЕР АБСОЛЮТНИЙ (відцентрований відносно всього таймлайну!)
-    timelineHtml += `<div class="trasa-dep-min" data-dep="${firstTransitLeg.departureMin}" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 5;">${timerHtml}</div>`;
+    timelineHtml += `<div class="trasa-dep-min" data-dep="${firstTransitLeg.departureMin}" data-delay="${delay}" data-live="${isLive}" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 5;">${timerHtml}</div>`;
 
     timelineHtml += '</div>';
 
@@ -1812,17 +1945,22 @@ function buildJourneyCard(journey) {
     });
 
     let compactHeaderHtml = `
-    <div class="trasa-compact-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    <div class="trasa-compact-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
         <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
             ${busesHtml}
         </div>
         <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); display: flex; gap: 6px; align-items: center;">
+            <!-- НОВИЙ БЛОК: Динамічний статус -->
+            <div class="trasa-header-status-wrap" style="display:flex; align-items:center; gap:6px;">
+                ${getLiveStatusBadge(isLive, delay)}
+            </div>
+            <!-- Далі твій старий код пішоходів і годинника -->
             ${walkMin > 0 ? `<div style="display:flex; align-items:center; gap:3px;"><div class="svg-icon icon-walk" style="width:14px;height:14px;"></div>${walkMin} min</div> <span style="opacity:0.4">•</span>` : ''}
             <div style="display:flex; align-items:center; gap:4px; color: var(--text);"><div class="svg-icon icon-clock" style="width:13px;height:13px; color:var(--text-muted);"></div>${duration} min</div>
             ${finalWalkMin > 0 ? `<span style="opacity:0.4">•</span> <div style="display:flex; align-items:center; gap:3px;"><div class="svg-icon icon-walk" style="width:14px;height:14px;"></div>${finalWalkMin} min</div>` : ''}
         </div>
     </div>`;
-
+    
     const wrapper = document.createElement('div');
     wrapper.className = 'trasa-wrapper';
     const card = document.createElement('div');
@@ -1898,7 +2036,8 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
             
             // БЛОК 1: Пішохідний перехід
             if (isWalk) {
-                const walkMin = Math.max(0, leg.arrivalMin - leg.departureMin);
+                const walkMinRaw = Math.max(0, leg.arrivalMin - leg.departureMin);
+                const walkMin = Math.round(walkMinRaw * 1.8);
                 
                 // Якщо це найперший крок (старт з адреси)
                 if (i === 0) {
@@ -1949,11 +2088,9 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
             </div>`;
 
             // БЛОК 3: Список зупинок з лінією (Таймлайн)
+            const delay = leg.delayMinutes || 0; // ВИЛУЧАЄМО ЗАТРИМКУ З ПОТОЧНОГО РЕЙСУ
+            
             const stopsHtml = stops.length ? stops.map((s, index) => {
-                // Номер платформи беремо з бекенду (join зі Stops.code).
-                // splitStopName(s.name) тут НЕ використовуємо: s.name — чиста назва без
-                // вбудованого коду, а функція відрізає останнє слово наосліп — на однослівних
-                // назвах ("Lotnicza") це стирає всю назву, залишаючи саме "код".
                 const stopName = s.name || '';
                 const platformCode = s.platformCode || '';
                 
@@ -1961,12 +2098,17 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
                 const isLast = index === stops.length - 1;
                 const isImportant = isFirst || isLast;
                 
-                // Налаштування точок таймлайну
                 const fontWeight = isImportant ? '700' : '500';
                 const textColor = isImportant ? 'var(--text)' : 'var(--text-muted)';
                 const dotColor = isImportant ? 'var(--blue)' : 'var(--border)';
                 const dotSize = isImportant ? '12px' : '8px';
-                const dotLeft = isImportant ? '21px' : '23px'; // Центруємо крапки на одній осі
+                const dotLeft = isImportant ? '21px' : '23px'; 
+
+                // МАГІЯ: коригуємо ETA за допомогою твоєї готової функції!
+                let realEta = s.eta;
+                if (delay !== 0 && s.eta.includes(':')) {
+                    realEta = addMinutesToTime(s.eta, delay);
+                }
 
                 return `
                 <div style="position: relative; padding: 10px 14px 10px 42px; display: flex; justify-content: space-between; align-items: center;">
@@ -1980,10 +2122,10 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
                         ${stopName} 
                         <span class="stop-code" style="color:${textColor}; font-size:13px; font-weight: 500;">${platformCode}</span>
                     </span>
-                    <span style="font-weight: ${fontWeight}; color: ${textColor}; font-size: 15px;">${s.eta}</span>
+                    <!-- Виводимо вже скоригований реальний час -->
+                    <span style="font-weight: ${fontWeight}; color: ${textColor}; font-size: 15px;">${realEta}</span>
                 </div>`;
             }).join('') : '<div style="padding: 10px; text-align: center; color: var(--text-muted);">Brak danych</div>';
-                
             html += `<div style="padding-bottom: 4px;">${stopsHtml}</div>`;
             transitIdx++;
         });
@@ -2000,146 +2142,6 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
     } catch (e) {
         scrollPanel.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--danger);">Błąd serwera</div>';
     }
-}
-// --- ЄДИНА ФУНКЦІЯ ДЛЯ СТВОРЕННЯ КАРТКИ МАРШРУТУ ---
-function buildJourneyCard(journey) {
-    const legs = journey.legs;
-    if (!legs || legs.length === 0) return null;
-
-    const transitLegs = legs.filter(l => l.route !== "Пішки" && l.route);
-    if (transitLegs.length === 0) return null;
-
-    const firstLeg = legs[0];
-    const lastLeg = legs[legs.length - 1];
-    const firstTransitLeg = transitLegs[0];
-    const lastTransitLeg = transitLegs[transitLegs.length - 1];
-
-    const initialWalkLeg = (firstLeg.route === "Пішки" || !firstLeg.route) ? firstLeg : null;
-    const walkMin = initialWalkLeg ? Math.max(0, initialWalkLeg.arrivalMin - initialWalkLeg.departureMin) : 0;
-    
-    const finalWalkLeg = (lastLeg.route === "Пішки" || !lastLeg.route) ? lastLeg : null;
-    const finalWalkMin = finalWalkLeg ? Math.max(0, finalWalkLeg.arrivalMin - finalWalkLeg.departureMin) : 0;
-    
-    const depTime = formatTime(firstTransitLeg.departureMin);
-    const arrTime = formatTime(lastTransitLeg.arrivalMin);
-    const duration = journey.totalMinutes;
-
-    const now = new Date();
-    const currentMin = now.getHours() * 60 + now.getMinutes();
-    let countdown = firstTransitLeg.departureMin - currentMin;
-    if (countdown < 0) countdown = 0;
-
-    function getMinLabel(m) {
-        if (m === 1) return 'minuta';
-        const mod10 = m % 10;
-        const mod100 = m % 100;
-        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'minuty';
-        return 'minut';
-    }
-
-    let timerHtml = '';
-    if (countdown < 60) {
-        let numStr = countdown === 0 ? '<1' : countdown;
-        let labelStr = countdown === 0 ? 'minuta' : getMinLabel(countdown);
-        let colorStr = countdown <= 30 ? '#10b981' : 'var(--text)';
-        
-        timerHtml = `
-        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
-            <span style="font-size:26px; font-weight:800; color:${colorStr}; letter-spacing:-1px;">${numStr}</span>
-            <span style="font-size:10px; font-weight:700; color:${colorStr}; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; opacity:0.8;">${labelStr}</span>
-        </div>`;
-    } else {
-        const h = Math.floor(countdown / 60);
-        const m = countdown % 60;
-        const hStr = String(h).padStart(2, '0');
-        const mStr = String(m).padStart(2, '0');
-        timerHtml = `<div style="font-size:18px; font-weight:700; color:var(--text); text-align:right;">za ${hStr}:${mStr}</div>`;
-    }
-
-    const startName = firstTransitLeg.fromStopName;
-    const endName = lastTransitLeg.toStopName;
-    const fromStop = splitStopName(startName);
-    const toStop = splitStopName(endName);
-
-   // СТВОРЮЄМО FLEX-КОНТЕЙНЕР ДЛЯ ІДЕАЛЬНОГО ЦЕНТРУВАННЯ
-    let timelineHtml = '<div style="display: flex; align-items: center; justify-content: space-between; margin: 4px 0 8px;">';
-    
-    // === ЛІВА КОЛОНКА (Зупинки) ===
-    timelineHtml += '<div class="trasa-timeline" style="position:relative; flex: 1;">';
-    timelineHtml += '<div style="position:absolute; left: 55px; top: 12px; bottom: 12px; border-left: 2px dotted var(--border); z-index: 1;"></div>';
-
-    const rowStyle = 'position:relative; padding:5px 0; display: flex; align-items: center;';
-    const timeStyle = 'width: 44px; text-align: right; font-size: 15px; font-weight: 600; color: var(--text); flex-shrink: 0;';
-    const dotWrapperStyle = 'width: 24px; display: flex; justify-content: center; z-index: 2; flex-shrink: 0;';
-
-    timelineHtml += `<div class="trasa-row" style="${rowStyle}">
-        <div class="time" style="${timeStyle}">${depTime}</div>
-        <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
-        <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 12px;">${fromStop.name} ${fromStop.code ? `<span class="stop-code" style="color:var(--text-muted); font-size:13px; font-weight:500;">(${fromStop.code})</span>` : ''}</div>
-    </div>`;
-
-    for (let i = 0; i < transitLegs.length - 1; i++) {
-        const tStop = splitStopName(transitLegs[i].toStopName);
-        timelineHtml += `<div class="trasa-row" style="${rowStyle} opacity: 0.8;">
-            <div class="time" style="${timeStyle} font-size: 14px; font-weight: 500; color: var(--text-muted);">${formatTime(transitLegs[i].arrivalMin)}</div>
-            <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--border); box-shadow: 0 0 0 3px var(--card);"></div></div>
-            <div class="stop-name" style="flex: 1; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 12px;">➔ ${tStop.name} ${tStop.code ? `<span class="stop-code" style="font-size:12px;">(${tStop.code})</span>` : ''}</div>
-        </div>`;
-    }
-
-    timelineHtml += `<div class="trasa-row" style="${rowStyle}">
-        <div class="time" style="${timeStyle}">${arrTime}</div>
-        <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
-        <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 12px;">${toStop.name} ${toStop.code ? `<span class="stop-code" style="color:var(--text-muted); font-size:13px; font-weight:500;">(${toStop.code})</span>` : ''}</div>
-    </div>`;
-    
-    timelineHtml += '</div>'; // Закриваємо ліву колонку
-    
-    // === ПРАВА КОЛОНКА (Таймер) ===
-    timelineHtml += `<div class="trasa-dep-min" data-dep="${firstTransitLeg.departureMin}" style="flex-shrink: 0; margin-left: 8px;">${timerHtml}</div>`;
-
-    timelineHtml += '</div>'; // Закриваємо загальний flex-контейнер
-
-    let busesHtml = '';
-    transitLegs.forEach(leg => {
-        const isTrolley = parseInt(leg.route, 10) >= 150 ? ' trolleybus' : '';
-        busesHtml += `<div class="dep-route-box route-size-3${isTrolley}" style="width: 28px; height: 28px; font-size: 13px; border-width: 1.5px; background: var(--bg); border-color: var(--blue); color: var(--blue); display: flex; align-items: center; justify-content: center; border-radius: 6px; position: relative;">${leg.route}</div>`;
-    });
-
-    let compactHeaderHtml = `
-    <div class="trasa-compact-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
-            ${busesHtml}
-        </div>
-        <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); display: flex; gap: 6px; align-items: center;">
-            ${walkMin > 0 ? `<div style="display:flex; align-items:center; gap:3px;"><div class="svg-icon icon-walk" style="width:14px;height:14px;"></div>${walkMin} min</div> <span style="opacity:0.4">•</span>` : ''}
-            <div style="display:flex; align-items:center; gap:4px; color: var(--text);"><div class="svg-icon icon-clock" style="width:13px;height:13px; color:var(--text-muted);"></div>${duration} min</div>
-            ${finalWalkMin > 0 ? `<span style="opacity:0.4">•</span> <div style="display:flex; align-items:center; gap:3px;"><div class="svg-icon icon-walk" style="width:14px;height:14px;"></div>${finalWalkMin} min</div>` : ''}
-        </div>
-    </div>`;
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'trasa-wrapper';
-    const card = document.createElement('div');
-    card.className = 'trasa-card expandable';
-    card.style.cursor = 'pointer';
-    
-    card.innerHTML = `
-        <button class="close-trasa-btn" title="Zamknij">✕</button>
-        ${compactHeaderHtml}
-        <div class="trasa-middle-scroll" style="display: none;"></div>
-        <div class="trasa-details">
-            ${timelineHtml}
-        </div>
-    `;
-    
-    card.addEventListener('click', (e) => {
-        if (e.target.closest('.dep-expand-map-btn')) return;
-        toggleTrasaExpand(card, legs, transitLegs);
-    });
-    wrapper.appendChild(card);
-    
-    return wrapper;
 }
 
 // Використовуємо твої реальні ID з HTML
@@ -2174,7 +2176,7 @@ if (searchRouteBtn && routeResultsBox) {
         }
 
         try {
-            const res = await fetch(`${API_BASE_URL}/route/complex?${fromParams}&${toParams}&limit=10`);
+            const res = await fetch(`${API_BASE_URL}/route/complex?${fromParams}&${toParams}&limit=8`);
             if (!res.ok) throw new Error('Помилка сервера');
             
             const journeys = await res.json();

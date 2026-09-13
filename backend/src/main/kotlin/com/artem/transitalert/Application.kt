@@ -22,7 +22,7 @@ fun Application.module() {
     // 1. База даних
     DatabaseFactory.init()
 	// БУДУЄМО ГРАФ МАРШРУТІВ ДЛЯ ПОШУКУ З ПЕРЕСАДКАМИ
-  	  TransitGraph.buildGraphForToday()
+  	  TransitGraph.buildGraph()
   	  // ДОДАЄМО ЦЕ: Запускаємо фоновий таймер
    		 TransitGraph.startNightlyRebuild()
     // 2. Встановлюємо наш новий потужний CORS (один раз!)

@@ -807,6 +807,19 @@
 .icon-hourglass {
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 22h16v-6l-4-4 4-4V2H4v6l4 4-4 4v6z'/%3E%3C/svg%3E");
 }
+
+/* 9. Індикатори статусу LIVE (Trasa) */
+.icon-fast {
+  -webkit-mask-image: url('fast.svg');
+}
+
+.icon-slow {
+  -webkit-mask-image: url('slow.svg');
+}
+
+.icon-ok {
+  -webkit-mask-image: url('ok.svg');
+}
 /*=====================*/
 /*=====================*/
 /*=====================*/
@@ -1032,7 +1045,10 @@
   height: 16px !important;
 }
 
-
+@keyframes trasaLiveBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
 /*=====================*/
 /*=====================*/
 /*=====================*/

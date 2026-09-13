@@ -135,7 +135,7 @@ object GtfsStaticSync {
         ActiveRoutesCache.invalidate() 
         invalidateStopsCache()
         // ДОДАЄМО ЦЕ:
-        com.artem.transitalert.TransitGraph.buildGraphForToday()
+        com.artem.transitalert.TransitGraph.buildGraph()
         saveMeta(feedVersion, newEtag, newLastModified)
         logger.info("GTFS static: імпорт завершено, версія $feedVersion")
     }

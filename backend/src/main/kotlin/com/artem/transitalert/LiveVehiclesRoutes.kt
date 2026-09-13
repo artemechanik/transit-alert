@@ -10,24 +10,10 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.Instant
 import kotlin.math.max
 
-// Цей DTO можна поки залишити тут, бо він специфічний саме для карти, 
-// або за бажанням теж перенести в Dtos.kt
-@Serializable
-data class LiveVehicleResponse(
-    val vehicleLabel: String,
-    val route: String,
-    val tripId: String,
-    val lat: Double,
-    val lon: Double,
-    val bearing: Float,
-    val currentStopSequence: Int,
-    val delaySeconds: Int?,
-)
-
 fun Application.liveVehiclesRoutes() {
     routing {
         
-      // 1. Маршрут для всіх машин на карті
+      // 1а. Маршрут для всіх машин на карті
         get("/live-vehicles") {
             val routeFilter = call.request.queryParameters["route"]
 
@@ -106,6 +92,30 @@ fun Application.liveVehiclesRoutes() {
                     delaySeconds = pos.delaySeconds,
                 )
             )
+        }
+
+	// 1в. МАСОВИЙ запит затримок для Живих Карток (Trasa)
+        get("/live-vehicles/delays") {
+            val tripIdsParam = call.request.queryParameters["tripIds"] ?: ""
+            if (tripIdsParam.isBlank()) {
+                call.respond(emptyMap<String, TripDelayInfo>())
+                return@get
+            }
+
+            // Розбиваємо рядок "trip1,trip2,trip3" на список
+            val tripIds = tripIdsParam.split(",")
+            
+            // Формуємо словник { "trip1": { delayMinutes: 5, isRealTime: true } }
+            val result = tripIds.associateWith { tripId ->
+                val liveData = LiveVehiclesCache.byTripId(tripId)
+                if (liveData != null && liveData.delaySeconds != null) {
+                    TripDelayInfo(delayMinutes = liveData.delaySeconds / 60, isRealTime = true)
+                } else {
+                    TripDelayInfo(delayMinutes = 0, isRealTime = false)
+                }
+            }
+
+            call.respond(result)
         }
 
         // 2. Розклад (відправлення) для конкретної платформи з урахуванням Real-Time

@@ -186,6 +186,11 @@ fun Application.formRoutes() {
                         .associate { it[Stops.stopId] to "${it[Stops.name]} ${it[Stops.code]}" }
                 }
 
+                // --- РАХУЄМО ЗМІЩЕННЯ ДНІВ ---
+                val daysOffset = (searchTime.toLocalDate().toEpochDay() - baseSearchDate.toEpochDay()).toInt()
+                val offsetMins = daysOffset * 1440
+                // -----------------------------
+
                 val legs = mutableListOf<JourneyLeg>()
                 var currentLeg = mutableListOf<RouteEdge>()
 
@@ -205,8 +210,8 @@ fun Application.formRoutes() {
                             route = first.route,
                             fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
                             toStopName = stopNames[last.toStopId] ?: last.toStopId,
-                            departureMin = first.departureMin,
-                            arrivalMin = last.arrivalMin,
+                            departureMin = first.departureMin + offsetMins,
+                            arrivalMin = last.arrivalMin + offsetMins,
                             tripId = first.tripId,
                             fromStopId = first.fromStopId,
                             toStopId = last.toStopId,
@@ -229,8 +234,8 @@ fun Application.formRoutes() {
                         route = first.route,
                         fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
                         toStopName = stopNames[last.toStopId] ?: last.toStopId,
-                        departureMin = first.departureMin,
-                        arrivalMin = last.arrivalMin,
+                        departureMin = first.departureMin + offsetMins,
+                        arrivalMin = last.arrivalMin + offsetMins,
                         tripId = first.tripId,
                         fromStopId = first.fromStopId,
                         toStopId = last.toStopId,
@@ -276,7 +281,7 @@ fun Application.formRoutes() {
                     )
                 }
 
-                // ЗСУВАЄМО ЧАС ТАК, ЩОБ ГАРАНТОВАНО ПРОПУСТИТИ ЦЕЙ АВТОБУС
+                /// ЗСУВАЄМО ЧАС ТАК, ЩОБ ГАРАНТОВАНО ПРОПУСТИТИ ЦЕЙ АВТОБУС
                 val walkDuration = if (legs.first().route == "Пішки") (legs.first().arrivalMin - legs.first().departureMin) else 0
                 val firstBus = legs.find { it.route != "Пішки" }
                 

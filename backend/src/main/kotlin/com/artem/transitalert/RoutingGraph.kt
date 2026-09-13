@@ -41,10 +41,16 @@ data class RoutingState(
     val lastTransferMin: Int
 ) : Comparable<RoutingState> {
     override fun compareTo(other: RoutingState): Int {
-        val thisCost = this.currentMin + this.accumulatedPenalty
-        val otherCost = other.currentMin + other.accumulatedPenalty
+        // Спочатку завжди порівнюємо за часом досягнення зупинки (хронологія понад усе)
+        if (this.currentMin != other.currentMin) {
+            return this.currentMin.compareTo(other.currentMin)
+        }
         
+        // Якщо час однаковий, порівнюємо за загальною вартістю (штрафами)
+        val thisCost = this.accumulatedPenalty
+        val otherCost = other.accumulatedPenalty
         if (thisCost != otherCost) return thisCost.compareTo(otherCost)
+        
         return this.lastTransferMin.compareTo(other.lastTransferMin)
     }
 }
@@ -190,9 +196,12 @@ object TransitGraph {
         
         val searchDate = searchTime.toLocalDate()
         val startMin = searchTime.hour * 60 + searchTime.minute
-        val yesterdayServices = dailyServices[searchDate.minusDays(1)] ?: emptySet()
+        
+        // ОПТИМІЗАЦІЯ: завантажуємо сусідні дні ТІЛЬКИ тоді, коли це реально потрібно за часом доби
+        val yesterdayServices = if (startMin < 240) (dailyServices[searchDate.minusDays(1)] ?: emptySet()) else emptySet()
         val todayServices = dailyServices[searchDate] ?: emptySet()
-        val tomorrowServices = dailyServices[searchDate.plusDays(1)] ?: emptySet()
+        val tomorrowServices = if (startMin > 1260) (dailyServices[searchDate.plusDays(1)] ?: emptySet()) else emptySet()
+        
         val pq = java.util.PriorityQueue<RoutingState>()
         val visited = mutableSetOf<String>()
 
@@ -236,33 +245,34 @@ object TransitGraph {
                 var absArrMin = edge.arrivalMin
 
                 if (!isWalk) {
-                    val isValidYesterday = yesterdayServices.contains(edge.serviceId)
-                    val isValidToday = todayServices.contains(edge.serviceId)
-                    val isValidTomorrow = tomorrowServices.contains(edge.serviceId)
-
                     var foundValidTime = false
+                    var absDepMin = edge.departureMin
+                    var absArrMin = edge.arrivalMin
 
-                    if (isValidYesterday) {
+                    // 1. Вчорашній день перевіряємо лише вночі/вранці (< 04:00)
+                    if (startMin < 240 && yesterdayServices.contains(edge.serviceId)) {
                         val candidateDep = edge.departureMin - 1440 
-                        if (candidateDep >= state.currentMin) {
+                        if (candidateDep >= startMin) {
                             absDepMin = candidateDep
                             absArrMin = edge.arrivalMin - 1440
                             foundValidTime = true
                         }
                     }
                     
-                    if (!foundValidTime && isValidToday) {
+                    // 2. Сьогоднішній день перевіряємо завжди
+                    if (!foundValidTime && todayServices.contains(edge.serviceId)) {
                         val candidateDep = edge.departureMin 
-                        if (candidateDep >= state.currentMin) {
+                        if (candidateDep >= startMin) {
                             absDepMin = candidateDep
                             absArrMin = edge.arrivalMin
                             foundValidTime = true
                         }
                     }
                     
-                    if (!foundValidTime && isValidTomorrow) {
+                    // 3. Завтрашній день перевіряємо лише пізно ввечері (> 21:00)
+                    if (!foundValidTime && startMin > 1260 && tomorrowServices.contains(edge.serviceId)) {
                         val candidateDep = edge.departureMin + 1440 
-                        if (candidateDep >= state.currentMin) {
+                        if (candidateDep >= startMin) {
                             absDepMin = candidateDep
                             absArrMin = edge.arrivalMin + 1440
                             foundValidTime = true
@@ -275,6 +285,7 @@ object TransitGraph {
                 val isSameTrip = state.tripId == edge.tripId
                 val newLastTransferMin = if (!isSameTrip && state.tripId != null) state.currentMin else state.lastTransferMin
                 val newTransfers = if (state.tripId == null || isSameTrip) state.transfers else state.transfers + 1
+                if (newTransfers > 2) continue
                 val hasUsedBus = state.path.any { it.tripId != "WALK" && it.tripId != "START_COORD" }
 
                 if (isWalk) {
@@ -291,7 +302,7 @@ object TransitGraph {
                     
                 } else {
                     if (absDepMin >= state.currentMin) {
-                        val maxWaitTime = if (hasUsedBus) 60 else 600
+                        val maxWaitTime = if (hasUsedBus) 60 else 120
                         if (absDepMin - state.currentMin > maxWaitTime) continue
 
                         var stepPenalty = 0.0

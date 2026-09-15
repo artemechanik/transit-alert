@@ -1726,16 +1726,21 @@ async function updateTrasaCountdowns() {
                 <span style="font-size:10px; font-weight:700; color:${colorStr}; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; opacity:0.8;">${labelStr}</span>
             </div>`;
         } else {
-            const h = Math.floor(countdown / 60);
-            const m = countdown % 60;
-            const hStr = String(h).padStart(2, '0');
-            const mStr = String(m).padStart(2, '0');
-            timerHtml = `
-            <div style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center; line-height:1.2;">
-                ${liveBadgeHtml}
-                <div style="font-size:18px; font-weight:700; color:var(--text); text-align:right;">${hStr}:${mStr}</div>
-            </div>`;
-        }
+    const h = Math.floor(countdown / 60);
+    const m = countdown % 60;
+    const hStr = String(h).padStart(1, '0');
+    const mStr = String(m).padStart(2, '0');
+
+    timerHtml = `
+    <div style="display:flex; flex-direction:column; align-items:center; line-height:1;">
+        <span style="font-size:10px; font-weight:600; color:var(--text); opacity:0.8; margin-bottom:3px;">
+            odjazd za:
+        </span>
+        <span style="font-size:16px; font-weight:700; color:var(--text);">
+            ${hStr}h ${mStr}m
+        </span>
+    </div>`;
+}
         
         card.innerHTML = timerHtml;
 
@@ -1890,12 +1895,21 @@ function buildJourneyCard(journey) {
             <span style="font-size:10px; font-weight:700; color:${colorStr}; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; opacity:0.8;">${labelStr}</span>
         </div>`;
     } else {
-        const h = Math.floor(countdown / 60);
-        const m = countdown % 60;
-        const hStr = String(h).padStart(2, '0');
-        const mStr = String(m).padStart(2, '0');
-        timerHtml = `<div style="font-size:18px; font-weight:700; color:var(--text); text-align:right;">${hStr}:${mStr}</div>`;
-    }
+    const h = Math.floor(countdown / 60);
+    const m = countdown % 60;
+    const hStr = String(h).padStart(1, '0');
+    const mStr = String(m).padStart(2, '0');
+
+    timerHtml = `
+    <div style="display:flex; flex-direction:column; align-items:center; line-height:1;">
+        <span style="font-size:10px; font-weight:600; color:var(--text); opacity:0.8; margin-bottom:3px;">
+            odjazd za:
+        </span>
+        <span style="font-size:16px; font-weight:700; color:var(--text);">
+            ${hStr}h ${mStr}m
+        </span>
+    </div>`;
+}
 
     const startName = firstTransitLeg.fromStopName;
     const endName = lastTransitLeg.toStopName;
@@ -1906,7 +1920,7 @@ function buildJourneyCard(journey) {
     timelineHtml += '<div style="position:absolute; left: 55px; top: 8px; bottom: 8px; border-left: 2px dotted var(--border); z-index: 1;"></div>';
 
     const rowStyle = 'position:relative; padding:2px 0; display: flex; align-items: center;';
-    const timeStyle = 'width: 44px; text-align: right; font-size: 15px; font-weight: 600; color: var(--text); flex-shrink: 0;';
+    const timeStyle = 'width: 44px; text-align: center; font-size: 15px; font-weight: 600; color: var(--text); flex-shrink: 0;';
     const dotWrapperStyle = 'width: 24px; display: flex; justify-content: center; z-index: 2; flex-shrink: 0;';
 
     // 1. ПЕРША ЗУПИНКА
@@ -2202,7 +2216,7 @@ if (searchRouteBtn && routeResultsBox) {
 
             updateTrasaCountdowns();
             if (!window.trasaCountdownInterval) {
-                window.trasaCountdownInterval = setInterval(updateTrasaCountdowns, 20000);
+                window.trasaCountdownInterval = setInterval(updateTrasaCountdowns, 15000);
             }
 
         } catch (error) {

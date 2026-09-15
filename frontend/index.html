@@ -19,11 +19,11 @@
     --danger: #e53935;
     --danger-dark: #b71c1c;
     --confirm: #43a047;
-    --bg: #f0f2f5;
-    --card: #ffffff;
+    --bg: #eef2f6;       /* <--- Зробили загальний фон трохи темнішим (було #f0f2f5) */
+    --card: #ffffff;     /* Картки залишаються білими і тепер сильніше виділяються */
     --text: #1c2530;
     --text-muted: #6b7684;
-    --border: #e1e4e8;
+    --border: #d8e1ed;   /* Бордюр теж трохи темніший для гарного контуру */
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -36,10 +36,10 @@
       --danger-dark: #d32f2f;
       --confirm: #5cc363;
       --bg: #14161a;
-      --card: #1e2126;
+      --card: #272c35;     /* <--- Змінили з #1e2126 на світліший відтінок */
       --text: #e8eaed;
       --text-muted: #8b95a1;
-      --border: #2e3239;
+      --border: #363d47;   /* Можна трохи підсвітити і бордюр, щоб він гарно обрамлював картку */
     }
     .rc-vote-btn.confirm { background: #1b3a1e; }
     .rc-vote-btn.deny { background: #3a1f1e; }
@@ -688,14 +688,17 @@
   
   /* --- Візуал для "привидів" (рейси, що вже від'їхали) --- */
   .dep-card.ghost {
-    opacity: 0.6;
-    background: var(--bg);
+    opacity: 0.6; /* Робимо трохи помітнішою (було 0.6) */
+    background: var(--card); /* Зберігаємо нормальний фон картки замість --bg */
   }
+  
   .dep-card.ghost .dep-route,
   .dep-card.ghost .dep-dir,
   .dep-card.ghost .dep-min,
-  .dep-card.ghost .dep-status {
+  .dep-card.ghost .dep-status,
+  .dep-card.ghost .dep-route-box {
     color: var(--text-muted) !important; 
+    border-color: var(--text-muted) !important;
   }
 
   /* Індикатори для свайпів (Вниз - Історія, Вверх - Майбутнє) */
@@ -1179,22 +1182,42 @@
 
 <!-- --- Екран "Trasa" (Планувальник A-to-B) --- -->
 <div id="screen-route" class="screen-container" style="display: none;">
-  <div class="stop-search-header" style="display: flex; flex-direction: column; gap: 10px;">
+  <div class="stop-search-header" style="display: flex; flex-direction: column; gap: 6px;">
+    
     <!-- Поле "Звідки" -->
     <div style="position: relative;">
-      <input type="text" id="route-input-from" style="width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 12px 40px 12px 16px; font-size: 16px; background: var(--bg); color: var(--text);" placeholder="Skąd (np. Plac Litewski)..." autocomplete="off">
-      <button id="route-clear-from" style="position: absolute; right: 12px; top: 12px; width: 24px; height: 24px; background: none; border: none; font-size: 18px; color: var(--text-muted); cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0;">✕</button>
+      <input type="text" id="route-input-from"
+        style="width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 9px; padding: 9px 36px 9px 12px; font-size: 15px; background: var(--bg); color: var(--text);"
+        placeholder="Skąd (np. Plac Litewski)..." autocomplete="off">
+      
+      <button id="route-clear-from"
+        style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; background: none; border: none; font-size: 16px; color: var(--text-muted); cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0;">
+        ✕
+      </button>
+      
       <div id="route-suggestions-from" class="autocomplete-list"></div>
     </div>
+
     <!-- Поле "Куди" -->
     <div style="position: relative;">
-      <input type="text" id="route-input-to" style="width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 12px 40px 12px 16px; font-size: 16px; background: var(--bg); color: var(--text);" placeholder="Dokąd (np. Lotnicza)..." autocomplete="off">
-      <button id="route-clear-to" style="position: absolute; right: 12px; top: 12px; width: 24px; height: 24px; background: none; border: none; font-size: 18px; color: var(--text-muted); cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0;">✕</button>
+      <input type="text" id="route-input-to"
+        style="width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 9px; padding: 9px 36px 9px 12px; font-size: 15px; background: var(--bg); color: var(--text);"
+        placeholder="Dokąd (np. Lotnicza)..." autocomplete="off">
+      
+      <button id="route-clear-to"
+        style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; background: none; border: none; font-size: 16px; color: var(--text-muted); cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0;">
+        ✕
+      </button>
+      
       <div id="route-suggestions-to" class="autocomplete-list"></div>
     </div>
-    
-    <button id="route-search-btn" style="width: 100%; background: var(--blue); color: #fff; border: none; border-radius: 12px; padding: 14px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 4px;">Szukaj połączenia</button>
-  </div>
+
+    <button id="route-search-btn"
+      style="width: 100%; background: var(--blue); color: #fff; border: none; border-radius: 9px; padding: 10px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 2px;">
+      Szukaj połączenia
+    </button>
+
+</div>
 <!-- Контейнер для останніх маршрутів (буде показуватися до пошуку) -->
 <div id="recent-routes-list" style="margin-top: 15px;"></div>
 

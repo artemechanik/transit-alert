@@ -631,24 +631,25 @@
 .dep-route-box.trolleybus::after {
     content: '';
     position: absolute;
-    top: -10px; /* Виступають вгору за межі рамки */
-    width: 3px; /* Товщина ріжок (трохи товщі за рамку) */
-    height: 10px; /* Довжина */
-    background-color: currentColor; /* Той самий колір, що й рамка! */
+    top: -9px;
+    width: 3px;
+    height: 9px;
+    background-color: currentColor;
     border-radius: 2px;
 }
 
 /* Лівий ріжок */
 .dep-route-box.trolleybus::before {
-    left: 12px;
-    transform: rotate(30deg);
+    left: 23%;
+    transform: rotate(35deg);
 }
 
 /* Правий ріжок */
 .dep-route-box.trolleybus::after {
-    right: 10px;
-    transform: rotate(30deg);
+    right: 28%;
+    transform: rotate(35deg);
 }
+
   .dep-vehicle-id {
     font-size: 11px;
     color: var(--text-muted);
@@ -825,21 +826,21 @@
 /*=====================*/
 /*=====================*/
 /* --- СТИЛІ ДЛЯ НОВИХ КАРТОК TRASA (ПЛАВАЮЧА ЛЕГЕНДА) --- */
-.trasa-wrapper {
+..trasa-wrapper {
   position: relative;
-  margin-top: 18px; 
-  padding-top: 10px;
+  margin-top: 0px; 
+  padding-top: 0px;
 }
 
-/* Оновлений базовий клас (додано transition) */
 .trasa-card {
   position: relative;
   background-color: var(--card);
   border-radius: 12px;
-  padding: 18px 16px 14px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  padding: 12px 14px; /* Компактні внутрішні відступи */
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08); /* М'якша тінь */
   transition: all 0.25s ease-in-out;
 }
+
 
 /* ========================================= */
 /* МАГІЯ ПОВНОЕКРАННОГО РОЗГОРТАННЯ          */
@@ -954,19 +955,20 @@
   border-width: 2px !important;
 }
 
-/* Калібруємо ріжки тролейбуса під цей розмір */
-.trasa-detail-box.trolleybus::before {
-  height: 7px !important;
-  top: -7px !important;
+/* Калібруємо ріжки тролейбуса під розмір 32px (розгорнута картка) */
+.trasa-detail-box.trolleybus::before,
+.trasa-detail-box.trolleybus::after {
+  height: 6px !important;
+  top: -6px !important;
   width: 2px !important;
-  left: 7px !important;
 }
 
-.trasa-detail-box.trolleybus::after {
-  height: 7px !important;
-  top: -7px !important;
+/* Калібруємо ріжки для розміру 28px (згорнута картка в шапці) */
+.trasa-compact-header .dep-route-box.trolleybus::before,
+.trasa-compact-header .dep-route-box.trolleybus::after {
+  height: 5px !important;
+  top: -5px !important;
   width: 2px !important;
-  right: 6px !important;
 }
 
 .trasa-details {
@@ -1023,21 +1025,21 @@
   background-color: var(--card) !important;
 }
 
-/* Зменшуємо та розсовуємо ріжки тролейбуса по краях */
-.trasa-legend .dep-route-box.trolleybus::before {
+/* Калібруємо ріжки тролейбуса під розмір 32px (розгорнута картка) */
+.trasa-detail-box.trolleybus::before,
+.trasa-detail-box.trolleybus::after {
+  height: 6px !important;
+  top: -6px !important;
+  width: 2px !important;
+}
+
+/* Калібруємо ріжки для розміру 28px (згорнута картка в шапці) */
+.trasa-compact-header .dep-route-box.trolleybus::before,
+.trasa-compact-header .dep-route-box.trolleybus::after {
   height: 5px !important;
   top: -5px !important;
   width: 2px !important;
-  left: 5px !important; /* Відсуваємо лівий ріжок ближче до краю */
 }
-
-.trasa-legend .dep-route-box.trolleybus::after {
-  height: 5px !important;
-  top: -5px !important;
-  width: 2px !important;
-  right: 5px !important; /* Відсуваємо правий ріжок ближче до краю */
-}
-
 
 /* Трохи зменшуємо пішохода, щоб красиво вліз у 28px рамку */
 .trasa-legend .icon-walk {

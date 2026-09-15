@@ -41,15 +41,20 @@ data class RoutingState(
     val lastTransferMin: Int
 ) : Comparable<RoutingState> {
     override fun compareTo(other: RoutingState): Int {
-        // Спочатку завжди порівнюємо за часом досягнення зупинки (хронологія понад усе)
-        if (this.currentMin != other.currentMin) {
-            return this.currentMin.compareTo(other.currentMin)
+        // Віртуальний час прибуття: +1 хвилина за кожну пересадку.
+        // Пересадка виграє ТІЛЬКИ якщо економить реальні 2+ хвилини.
+        // Якщо економія лише 1 хвилина — нічия, і прямий рейс перемагає.
+        val thisScore = this.currentMin + this.transfers
+        val otherScore = other.currentMin + other.transfers
+        
+        if (thisScore != otherScore) {
+            return thisScore.compareTo(otherScore)
         }
         
-        // Якщо час однаковий, порівнюємо за загальною вартістю (штрафами)
-        val thisCost = this.accumulatedPenalty
-        val otherCost = other.accumulatedPenalty
-        if (thisCost != otherCost) return thisCost.compareTo(otherCost)
+        // Тай-брейк: якщо час однаковий, перемагає комфортніший маршрут
+        if (this.accumulatedPenalty != other.accumulatedPenalty) {
+            return this.accumulatedPenalty.compareTo(other.accumulatedPenalty)
+        }
         
         return this.lastTransferMin.compareTo(other.lastTransferMin)
     }
@@ -58,7 +63,8 @@ data class RoutingState(
 object TransitGraph {
     private val logger = LoggerFactory.getLogger("TransitGraph")
 
-    @Volatile var edges: Map<String, List<RouteEdge>> = emptyMap() // <-- ПОВЕРНУЛИ!
+    // НОВА АРХІТЕКТУРА: Окремий підготовлений граф для кожної дати
+    @Volatile var edgesByDate: Map<LocalDate, Map<String, List<RouteEdge>>> = emptyMap()
     @Volatile var dailyServices: Map<LocalDate, Set<String>> = emptyMap()
     @Volatile var isLoaded = false
     @Volatile var activeStops: List<StopCoords> = emptyList()
@@ -80,7 +86,7 @@ object TransitGraph {
                 
                 try {
                     logger.info("🔄 Починаємо нічне оновлення графа...")
-                    buildGraph() // <-- ВИПРАВЛЕНО
+                    buildGraph()
                 } catch (e: Exception) {
                     logger.error("❌ Помилка нічного оновлення графа: ${e.message}")
                 }
@@ -90,16 +96,14 @@ object TransitGraph {
 
    fun buildGraph() {
         transaction {
-            val newDailyServices = mutableMapOf<LocalDate, MutableSet<String>>()
-            // Твій старий механізм отримання сервісів:
-            val today = LocalDate.now(LUBLIN_ZONE)
-            // Завантажимо вікно дат (наприклад, від вчора до +7 днів), 
-            // щоб алгоритм мав з чим працювати.
-            for (i in -1..7L) {
-                val d = today.plusDays(i)
-                newDailyServices[d] = activeServiceIds(d).toMutableSet()
+            val baseToday = LocalDate.now(LUBLIN_ZONE)
+            val servicesCache = mutableMapOf<LocalDate, Set<String>>()
+            
+            // Кешуємо сервіси з запасом (від -2 до +8 днів) для безпечної вибірки
+            for (i in -2L..8L) {
+                servicesCache[baseToday.plusDays(i)] = activeServiceIds(baseToday.plusDays(i)).toSet()
             }
-            dailyServices = newDailyServices 
+            dailyServices = servicesCache
 
             val tripsData = mutableMapOf<String, MutableList<TripStopRecord>>()
             val validTrips = mutableMapOf<String, Pair<String, String>>() 
@@ -128,62 +132,90 @@ object TransitGraph {
                     }
             }
 
-            val newEdges = mutableMapOf<String, MutableList<RouteEdge>>()
-            for ((tripId, stops) in tripsData) {
-                stops.sortBy { it.seq }
-                val routeInfo = validTrips[tripId] ?: continue 
-                
-                for (i in 0 until stops.size - 1) {
-                    val current = stops[i]
-                    val next = stops[i + 1]
-                    
-                    val edge = RouteEdge(
-                        fromStopId = current.stopId,
-                        toStopId = next.stopId,
-                        route = routeInfo.first,
-                        tripId = tripId,
-                        serviceId = routeInfo.second, 
-                        departureMin = current.min,
-                        arrivalMin = next.min,
-                        stopSequence = current.seq
-                    )
-                    newEdges.getOrPut(current.stopId) { mutableListOf() }.add(edge)
-                }
-            }
-
             val allStops = Stops.selectAll().map { 
                 Triple(it[Stops.stopId], it[Stops.lat], it[Stops.lon]) 
             }
-            
             activeStops = allStops.map { StopCoords(it.first, it.second, it.third) }
-            
-            for (s1 in allStops) {
-                for (s2 in allStops) {
-                    if (s1.first == s2.first) continue 
-                    if (abs(s1.second - s2.second) > 0.006) continue
-                    if (abs(s1.third - s2.third) > 0.010) continue 
 
-                    val dist = calculateDistance(s1.second, s1.third, s2.second, s2.third)
-                    if (dist <= 600.0) { 
-                        val walkMinutes = (dist / 60.0).toInt().coerceAtLeast(1)
-                        val walkEdge = RouteEdge(
-                            fromStopId = s1.first,
-                            toStopId = s2.first,
-                            route = "Пішки",
-                            tripId = "WALK",
-                            serviceId = "WALK",
-                            departureMin = 0,
-                            arrivalMin = walkMinutes,
-                            stopSequence = 0
-                        )
-                        newEdges.getOrPut(s1.first) { mutableListOf() }.add(walkEdge)
+            val newEdgesByDate = mutableMapOf<LocalDate, MutableMap<String, MutableList<RouteEdge>>>()
+
+            // БУДУЄМО ГРАФИ ПО ДАТАХ (від вчора до +7 днів)
+            for (i in -1L..7L) {
+                val targetDate = baseToday.plusDays(i)
+                val prevServices = servicesCache[targetDate.minusDays(1)] ?: emptySet()
+                val currentServices = servicesCache[targetDate] ?: emptySet()
+                val nextServices = servicesCache[targetDate.plusDays(1)] ?: emptySet()
+                
+                val dailyEdges = mutableMapOf<String, MutableList<RouteEdge>>()
+                
+                // 1. Піші ребра (однакові для всіх днів)
+                for (s1 in allStops) {
+                    for (s2 in allStops) {
+                        if (s1.first == s2.first) continue 
+                        if (abs(s1.second - s2.second) > 0.006) continue
+                        if (abs(s1.third - s2.third) > 0.010) continue 
+
+                        val dist = calculateDistance(s1.second, s1.third, s2.second, s2.third)
+                        if (dist <= 600.0) { 
+                            val walkMinutes = (dist / 60.0).toInt().coerceAtLeast(1)
+                            val walkEdge = RouteEdge(
+                                fromStopId = s1.first, toStopId = s2.first,
+                                route = "Пішки", tripId = "WALK", serviceId = "WALK",
+                                departureMin = 0, arrivalMin = walkMinutes, stopSequence = 0
+                            )
+                            dailyEdges.getOrPut(s1.first) { mutableListOf() }.add(walkEdge)
+                        }
                     }
                 }
+
+                // 2. Автобусні ребра з нарізаними часовими зсувами
+                for ((tripId, stops) in tripsData) {
+                    stops.sortBy { it.seq }
+                    val routeInfo = validTrips[tripId] ?: continue 
+                    val serviceId = routeInfo.second
+                    
+                    val isPrev = prevServices.contains(serviceId)
+                    val isCurrent = currentServices.contains(serviceId)
+                    val isNext = nextServices.contains(serviceId)
+                    
+                    if (!isPrev && !isCurrent && !isNext) continue
+                    
+                    for (j in 0 until stops.size - 1) {
+                        val current = stops[j]
+                        val next = stops[j + 1]
+                        
+                        val baseEdge = RouteEdge(
+                            fromStopId = current.stopId, toStopId = next.stopId,
+                            route = routeInfo.first, tripId = tripId, serviceId = serviceId, 
+                            departureMin = current.min, arrivalMin = next.min, stopSequence = current.seq
+                        )
+
+                        // А) Нічний хвіст з учора (-1440 хв)
+                        if (isPrev && current.min >= 1440) {
+                            dailyEdges.getOrPut(current.stopId) { mutableListOf() }.add(
+                                baseEdge.copy(departureMin = current.min - 1440, arrivalMin = next.min - 1440)
+                            )
+                        }
+                        
+                        // Б) Сьогоднішній розклад (як є)
+                        if (isCurrent) {
+                            dailyEdges.getOrPut(current.stopId) { mutableListOf() }.add(baseEdge)
+                        }
+                        
+                        // В) Ранок завтра (+1440 хв, до 5:00)
+                        if (isNext && current.min < 720) {
+                            dailyEdges.getOrPut(current.stopId) { mutableListOf() }.add(
+                                baseEdge.copy(departureMin = current.min + 1440, arrivalMin = next.min + 1440)
+                            )
+                        }
+                    }
+                }
+                newEdgesByDate[targetDate] = dailyEdges
             }
             
-            edges = newEdges
+            edgesByDate = newEdgesByDate
             isLoaded = true
-            logger.info("Граф побудовано! Вузлів: ${edges.size}, Зв'язків: ${edges.values.sumOf { it.size }}")
+            logger.info("Графи по днях побудовано! Кеш тримає ${edgesByDate.size} днів.")
         }
     }
 
@@ -197,10 +229,8 @@ object TransitGraph {
         val searchDate = searchTime.toLocalDate()
         val startMin = searchTime.hour * 60 + searchTime.minute
         
-        // ОПТИМІЗАЦІЯ: завантажуємо сусідні дні ТІЛЬКИ тоді, коли це реально потрібно за часом доби
-        val yesterdayServices = if (startMin < 240) (dailyServices[searchDate.minusDays(1)] ?: emptySet()) else emptySet()
-        val todayServices = dailyServices[searchDate] ?: emptySet()
-        val tomorrowServices = if (startMin > 1260) (dailyServices[searchDate.plusDays(1)] ?: emptySet()) else emptySet()
+        // БЕРЕМО ГОТОВИЙ ГРАФ САМЕ НА ПОТРІБНУ ДАТУ
+        val currentEdges = edgesByDate[searchDate] ?: return null
         
         val pq = java.util.PriorityQueue<RoutingState>()
         val visited = mutableSetOf<String>()
@@ -215,7 +245,6 @@ object TransitGraph {
             pq.add(RoutingState(startId, arrivalTime, if (walkMins > 0) "WALK" else null, initialPath, 0, initialPenalty, arrivalTime)) 
         }
 
-        // ПОВЕРНУЛИ ОСНОВНИЙ ЦИКЛ!
         while (pq.isNotEmpty()) {
             val state = pq.poll()
 
@@ -236,52 +265,17 @@ object TransitGraph {
                 pq.add(RoutingState("FINISH_COORD", finalArrivalTime, "WALK", state.path + finalEdge, state.transfers, newPenalty, state.lastTransferMin))
             }
 
-            val outgoingEdges = edges[state.stopId] ?: emptyList()
+            val outgoingEdges = currentEdges[state.stopId] ?: emptyList()
             
             for (edge in outgoingEdges) {
                 val isWalk = edge.tripId == "WALK"
                 
-                var absDepMin = edge.departureMin
-                var absArrMin = edge.arrivalMin
+                // ШВИДКІСНИЙ ФІЛЬТР: якщо автобус відправився в минулому — одразу відкидаємо
+                if (!isWalk && edge.departureMin < state.currentMin) continue
 
-                if (!isWalk) {
-                    var foundValidTime = false
-                    var absDepMin = edge.departureMin
-                    var absArrMin = edge.arrivalMin
+                val absDepMin = if (isWalk) state.currentMin else edge.departureMin
+                val absArrMin = if (isWalk) state.currentMin + edge.arrivalMin else edge.arrivalMin
 
-                    // 1. Вчорашній день перевіряємо лише вночі/вранці (< 04:00)
-                    if (startMin < 240 && yesterdayServices.contains(edge.serviceId)) {
-                        val candidateDep = edge.departureMin - 1440 
-                        if (candidateDep >= startMin) {
-                            absDepMin = candidateDep
-                            absArrMin = edge.arrivalMin - 1440
-                            foundValidTime = true
-                        }
-                    }
-                    
-                    // 2. Сьогоднішній день перевіряємо завжди
-                    if (!foundValidTime && todayServices.contains(edge.serviceId)) {
-                        val candidateDep = edge.departureMin 
-                        if (candidateDep >= startMin) {
-                            absDepMin = candidateDep
-                            absArrMin = edge.arrivalMin
-                            foundValidTime = true
-                        }
-                    }
-                    
-                    // 3. Завтрашній день перевіряємо лише пізно ввечері (> 21:00)
-                    if (!foundValidTime && startMin > 1260 && tomorrowServices.contains(edge.serviceId)) {
-                        val candidateDep = edge.departureMin + 1440 
-                        if (candidateDep >= startMin) {
-                            absDepMin = candidateDep
-                            absArrMin = edge.arrivalMin + 1440
-                            foundValidTime = true
-                        }
-                    }
-
-                    if (!foundValidTime) continue
-                }
-                
                 val isSameTrip = state.tripId == edge.tripId
                 val newLastTransferMin = if (!isSameTrip && state.tripId != null) state.currentMin else state.lastTransferMin
                 val newTransfers = if (state.tripId == null || isSameTrip) state.transfers else state.transfers + 1
@@ -290,47 +284,43 @@ object TransitGraph {
 
                 if (isWalk) {
                     if (state.tripId == "WALK") continue 
-                    val arrivalTime = state.currentMin + absArrMin 
-                    val walkLeg = edge.copy(departureMin = state.currentMin, arrivalMin = arrivalTime)
+                    val walkLeg = edge.copy(departureMin = absDepMin, arrivalMin = absArrMin)
                     val newPath = state.path + walkLeg
                     
                     var stepPenalty = 0.0
                     if (hasUsedBus) stepPenalty += edge.arrivalMin * 1.5 else stepPenalty += edge.arrivalMin * 1.0 
                     
                     val newPenalty = state.accumulatedPenalty + stepPenalty
-                    pq.add(RoutingState(edge.toStopId, arrivalTime, "WALK", newPath, newTransfers, newPenalty, newLastTransferMin))
+                    pq.add(RoutingState(edge.toStopId, absArrMin, "WALK", newPath, newTransfers, newPenalty, newLastTransferMin))
                     
                 } else {
-                    if (absDepMin >= state.currentMin) {
-                        val maxWaitTime = if (hasUsedBus) 60 else 120
-                        if (absDepMin - state.currentMin > maxWaitTime) continue
+                    val maxWaitTime = if (hasUsedBus) 60 else 600
+                    if (absDepMin - state.currentMin > maxWaitTime) continue
 
-                        var stepPenalty = 0.0
-                        val isRealTransfer = !isSameTrip && hasUsedBus
+                    var stepPenalty = 0.0
+                    val isRealTransfer = !isSameTrip && hasUsedBus
+                    
+                    if (isRealTransfer) {
+                        val lastBusRoute = state.path.lastOrNull { it.tripId != "WALK" && it.tripId != "START_COORD" }?.route
+                        val isSameRouteName = (lastBusRoute == edge.route)
                         
-                        if (isRealTransfer) {
-                            val lastBusRoute = state.path.lastOrNull { it.tripId != "WALK" && it.tripId != "START_COORD" }?.route
-                            val isSameRouteName = (lastBusRoute == edge.route)
-                            
-                            stepPenalty += if (isSameRouteName) 1.5 else 5.0 
-                            val waitTime = absDepMin - state.currentMin
-                            if (waitTime > 10) {
-                                stepPenalty += ((waitTime - 10) * 1.0).coerceAtMost(15.0)
-                            }
-                        } else if (!hasUsedBus) {
-                            val initialWait = absDepMin - state.currentMin
-                            stepPenalty += (initialWait * 0.3).coerceAtMost(12.0)
+                        stepPenalty += if (isSameRouteName) 1.5 else 5.0 
+                        val waitTime = absDepMin - state.currentMin
+                        if (waitTime > 10) {
+                            stepPenalty += ((waitTime - 10) * 1.0).coerceAtMost(15.0)
                         }
-                        
-                        val travelTime = absArrMin - absDepMin
-                        stepPenalty += travelTime * 0.3
-                        
-                        val newPenalty = state.accumulatedPenalty + stepPenalty
-                        val adjustedEdge = edge.copy(departureMin = absDepMin, arrivalMin = absArrMin)
-                        val newPath = state.path + adjustedEdge
-                        
-                        pq.add(RoutingState(edge.toStopId, absArrMin, edge.tripId, newPath, newTransfers, newPenalty, newLastTransferMin))
+                    } else if (!hasUsedBus) {
+                        // Перший автобус у поїздці — не штрафуємо за очікування
+                        stepPenalty += 0.0
                     }
+                    
+                    val travelTime = absArrMin - absDepMin
+                    stepPenalty += travelTime * 0.3
+                    
+                    val newPenalty = state.accumulatedPenalty + stepPenalty
+                    val newPath = state.path + edge // Ребро вже має готові, зміщені departureMin/arrivalMin
+                    
+                    pq.add(RoutingState(edge.toStopId, absArrMin, edge.tripId, newPath, newTransfers, newPenalty, newLastTransferMin))
                 }
             }
         }

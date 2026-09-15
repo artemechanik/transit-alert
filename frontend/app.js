@@ -1803,14 +1803,14 @@ function splitStopName(fullName) {
 function getLiveStatusBadge(isLive, delayMinutes) {
     if (!isLive) return ''; // Якщо немає GPS-даних, нічого не показуємо
     
-    const iconStyle = "width:22px; height:22px; flex-shrink:0; display:inline-block; transform: translateY(2px);";
+    const iconStyle = "width:20px; height:20px; flex-shrink:0; display:inline-block; transform: translateY(0px);";
     
     if (delayMinutes > 0) {
         // Запізнюється (червоний + іконка slow)
         return `<div style="display:flex; align-items:center; gap:3px; color: var(--danger);"><div class="svg-icon icon-slow" style="${iconStyle}"></div>+${delayMinutes}m</div> <span style="opacity:0.4">•</span> `;
     } else if (delayMinutes < 0) {
         // Поспішає (синій + іконка fast)
-        return `<div style="display:flex; align-items:center; gap:3px; color: var(--blue);"><div class="svg-icon icon-fast" style="${iconStyle}"></div>${Math.abs(delayMinutes)}m</div> <span style="opacity:0.4">•</span> `;
+        return `<div style="display:flex; align-items:center; gap:3px; color: var(--blue);"><div class="svg-icon icon-fast" style="${iconStyle}"></div>-${Math.abs(delayMinutes)}m</div> <span style="opacity:0.4">•</span> `;
     } else {
         // Чітко за розкладом (зелений + іконка ok)
         return `<div style="display:flex; align-items:center; color: #10b981;"><div class="svg-icon icon-ok" style="${iconStyle}"></div></div> <span style="opacity:0.4">•</span> `;

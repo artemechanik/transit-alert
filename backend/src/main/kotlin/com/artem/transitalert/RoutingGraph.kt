@@ -139,6 +139,28 @@ object TransitGraph {
 
             val newEdgesByDate = mutableMapOf<LocalDate, MutableMap<String, MutableList<RouteEdge>>>()
 
+            // === ОПТИМІЗАЦІЯ 1: Рахуємо піші ребра ОДИН РАЗ поза циклом дат (O(n²) -> O(n)/9) ===
+            val sharedWalkEdges = mutableMapOf<String, MutableList<RouteEdge>>()
+            for (s1 in allStops) {
+                for (s2 in allStops) {
+                    if (s1.first == s2.first) continue 
+                    if (abs(s1.second - s2.second) > 0.006) continue
+                    if (abs(s1.third - s2.third) > 0.010) continue 
+
+                    val dist = calculateDistance(s1.second, s1.third, s2.second, s2.third)
+                    if (dist <= 600.0) { 
+                        val walkMinutes = (dist / 60.0).toInt().coerceAtLeast(1)
+                        val walkEdge = RouteEdge(
+                            fromStopId = s1.first, toStopId = s2.first,
+                            route = "Пішки", tripId = "WALK", serviceId = "WALK",
+                            departureMin = 0, arrivalMin = walkMinutes, stopSequence = 0
+                        )
+                        sharedWalkEdges.getOrPut(s1.first) { mutableListOf() }.add(walkEdge)
+                    }
+                }
+            }
+            // =========================================================================
+
             // БУДУЄМО ГРАФИ ПО ДАТАХ (від вчора до +7 днів)
             for (i in -1L..7L) {
                 val targetDate = baseToday.plusDays(i)
@@ -146,28 +168,9 @@ object TransitGraph {
                 val currentServices = servicesCache[targetDate] ?: emptySet()
                 val nextServices = servicesCache[targetDate.plusDays(1)] ?: emptySet()
                 
-                val dailyEdges = mutableMapOf<String, MutableList<RouteEdge>>()
+                // Швидко копіюємо вже розраховані піші ребра для поточної дати
+                val dailyEdges = sharedWalkEdges.mapValues { it.value.toMutableList() }.toMutableMap()
                 
-                // 1. Піші ребра (однакові для всіх днів)
-                for (s1 in allStops) {
-                    for (s2 in allStops) {
-                        if (s1.first == s2.first) continue 
-                        if (abs(s1.second - s2.second) > 0.006) continue
-                        if (abs(s1.third - s2.third) > 0.010) continue 
-
-                        val dist = calculateDistance(s1.second, s1.third, s2.second, s2.third)
-                        if (dist <= 600.0) { 
-                            val walkMinutes = (dist / 60.0).toInt().coerceAtLeast(1)
-                            val walkEdge = RouteEdge(
-                                fromStopId = s1.first, toStopId = s2.first,
-                                route = "Пішки", tripId = "WALK", serviceId = "WALK",
-                                departureMin = 0, arrivalMin = walkMinutes, stopSequence = 0
-                            )
-                            dailyEdges.getOrPut(s1.first) { mutableListOf() }.add(walkEdge)
-                        }
-                    }
-                }
-
                 // 2. Автобусні ребра з нарізаними часовими зсувами
                 for ((tripId, stops) in tripsData) {
                     stops.sortBy { it.seq }
@@ -202,8 +205,8 @@ object TransitGraph {
                             dailyEdges.getOrPut(current.stopId) { mutableListOf() }.add(baseEdge)
                         }
                         
-                        // В) Ранок завтра (+1440 хв, до 5:00)
-                        if (isNext && current.min < 720) {
+                        // === ОПТИМІЗАЦІЯ 2: Ранок завтра (до 4:00, поріг 240 замість 720) ===
+                        if (isNext && stops[0].min < 480) {
                             dailyEdges.getOrPut(current.stopId) { mutableListOf() }.add(
                                 baseEdge.copy(departureMin = current.min + 1440, arrivalMin = next.min + 1440)
                             )

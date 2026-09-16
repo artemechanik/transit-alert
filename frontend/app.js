@@ -1808,14 +1808,15 @@ function splitStopName(fullName) {
 function getLiveStatusBadge(isLive, delayMinutes) {
     if (!isLive) return ''; // Якщо немає GPS-даних, нічого не показуємо
     
-    const iconStyle = "width:20px; height:20px; flex-shrink:0; display:inline-block; transform: translateY(0px);";
+    // Зменшили іконки з 20px до 18px, щоб вони пасували до компактного тексту
+    const iconStyle = "width:18px; height:18px; flex-shrink:0; display:inline-block; transform: translateY(0px);";
     
     if (delayMinutes > 0) {
         // Запізнюється (червоний + іконка slow)
-        return `<div style="display:flex; align-items:center; gap:3px; color: var(--danger);"><div class="svg-icon icon-slow" style="${iconStyle}"></div>+${delayMinutes}m</div> <span style="opacity:0.4">•</span> `;
+        return `<div style="display:flex; align-items:center; gap:2px; color: var(--danger);"><div class="svg-icon icon-slow" style="${iconStyle}"></div>+${delayMinutes}m</div> <span style="opacity:0.4">•</span> `;
     } else if (delayMinutes < 0) {
         // Поспішає (синій + іконка fast)
-        return `<div style="display:flex; align-items:center; gap:3px; color: var(--blue);"><div class="svg-icon icon-fast" style="${iconStyle}"></div>-${Math.abs(delayMinutes)}m</div> <span style="opacity:0.4">•</span> `;
+        return `<div style="display:flex; align-items:center; gap:2px; color: var(--blue);"><div class="svg-icon icon-fast" style="${iconStyle}"></div>-${Math.abs(delayMinutes)}m</div> <span style="opacity:0.4">•</span> `;
     } else {
         // Чітко за розкладом (зелений + іконка ok)
         return `<div style="display:flex; align-items:center; color: #10b981;"><div class="svg-icon icon-ok" style="${iconStyle}"></div></div> <span style="opacity:0.4">•</span> `;
@@ -1958,22 +1959,25 @@ function buildJourneyCard(journey) {
         busesHtml += `<div class="dep-route-box route-size-3${isTrolley}" style="width: 28px; height: 28px; font-size: 13px; border-width: 1.5px; background: var(--bg); border-color: var(--blue); color: var(--blue); display: flex; align-items: center; justify-content: center; border-radius: 6px; position: relative;">${leg.route}</div>`;
     });
 
-    let compactHeaderHtml = `
+        let compactHeaderHtml = `
     <div class="trasa-compact-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
         <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
             ${busesHtml}
         </div>
-        <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); display: flex; gap: 6px; align-items: center;">
+        <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
             <!-- НОВИЙ БЛОК: Динамічний статус -->
-            <div class="trasa-header-status-wrap" style="display:flex; align-items:center; gap:6px;">
+            <div class="trasa-header-status-wrap" style="display:flex; align-items:center; gap:4px;">
                 ${getLiveStatusBadge(isLive, delay)}
             </div>
             <!-- Далі твій старий код пішоходів і годинника -->
-            ${walkMin > 0 ? `<div style="display:flex; align-items:center; gap:3px;"><div class="svg-icon icon-walk" style="width:14px;height:14px;"></div>${walkMin} min</div> <span style="opacity:0.4">•</span>` : ''}
-            <div style="display:flex; align-items:center; gap:4px; color: var(--text);"><div class="svg-icon icon-clock" style="width:13px;height:13px; color:var(--text-muted);"></div>${duration} min</div>
-            ${finalWalkMin > 0 ? `<span style="opacity:0.4">•</span> <div style="display:flex; align-items:center; gap:3px;"><div class="svg-icon icon-walk" style="width:14px;height:14px;"></div>${finalWalkMin} min</div>` : ''}
+            ${walkMin > 0 ? `<div style="display:flex; align-items:center; gap:2px;"><div class="svg-icon icon-walk" style="width:13px;height:13px;"></div>${walkMin}m</div> <span style="opacity:0.4">•</span>` : ''}
+            <div style="display:flex; align-items:center; gap:3px; color: var(--text-muted);">
+                <div class="svg-icon icon-bus-ride" style="width:20px;height:16px; color:var(--text-muted);"></div>${duration}m
+            </div>
+            ${finalWalkMin > 0 ? `<span style="opacity:0.4">•</span> <div style="display:flex; align-items:center; gap:2px;"><div class="svg-icon icon-walk" style="width:13px;height:13px;"></div>${finalWalkMin}m</div>` : ''}
         </div>
     </div>`;
+
     
     const wrapper = document.createElement('div');
     wrapper.className = 'trasa-wrapper';
@@ -2291,7 +2295,9 @@ routeResultsBox.addEventListener('touchend', async (e) => {
 
                 updateTrasaCountdowns();
             } else {
-                showToast('Brak późniejszych połączeń');
+                // ФІКС: Перестрибуємо "мертву зону" розкладу (додаємо 3 години)
+                lastJourneyDepartureMin += 180;
+                showToast('Szukam dalej...');
             }
         } catch (err) {
             showToast('Błąd sieci');

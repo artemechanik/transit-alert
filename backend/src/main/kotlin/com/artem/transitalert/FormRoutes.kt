@@ -176,8 +176,11 @@ fun Application.formRoutes() {
                 val foundPath = TransitGraph.findBestRoute(starts, targets, searchTime)
 
                 if (foundPath == null || foundPath.isEmpty()) {
-                    break 
-                }
+		    // Перестрибуємо нічну дірку на 3 години вперед і шукаємо далі.
+		    // Запобіжник MAX_ATTEMPTS не дасть циклу зависнути.
+		    currentSearchMin += 180
+		    continue
+		}
 
                 val stopIdsToFetch = foundPath.flatMap { listOf(it.fromStopId, it.toStopId) }.distinct()
                 val stopNames = transaction {

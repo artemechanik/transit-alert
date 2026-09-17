@@ -41,11 +41,10 @@ data class RoutingState(
     val lastTransferMin: Int
 ) : Comparable<RoutingState> {
     override fun compareTo(other: RoutingState): Int {
-        // Віртуальний час прибуття: +1 хвилина за кожну пересадку.
-        // Пересадка виграє ТІЛЬКИ якщо економить реальні 2+ хвилини.
-        // Якщо економія лише 1 хвилина — нічия, і прямий рейс перемагає.
-        val thisScore = this.currentMin + this.transfers
-        val otherScore = other.currentMin + other.transfers
+        // Віртуальний час прибуття: +12 хвилин штрафу за кожну пересадку.
+        // Прямий рейс переможе, якщо пересадка економить менше 2 хвилин.
+        val thisScore = this.currentMin + (this.transfers * 2)
+        val otherScore = other.currentMin + (other.transfers * 2)
         
         if (thisScore != otherScore) {
             return thisScore.compareTo(otherScore)
@@ -206,7 +205,7 @@ object TransitGraph {
                         }
                         
                         // === ОПТИМІЗАЦІЯ 2: Ранок завтра (до 4:00, поріг 240 замість 720) ===
-                        if (isNext && stops[0].min < 480) {
+                        if (isNext && stops[0].min < 240) {
                             dailyEdges.getOrPut(current.stopId) { mutableListOf() }.add(
                                 baseEdge.copy(departureMin = current.min + 1440, arrivalMin = next.min + 1440)
                             )

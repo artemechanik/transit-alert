@@ -41,7 +41,7 @@ data class RoutingState(
     val lastTransferMin: Int
 ) : Comparable<RoutingState> {
     override fun compareTo(other: RoutingState): Int {
-        // Віртуальний час прибуття: +12 хвилин штрафу за кожну пересадку.
+        // Віртуальний час прибуття: +2 хвилин штрафу за кожну пересадку.
         // Прямий рейс переможе, якщо пересадка економить менше 2 хвилин.
         val thisScore = this.currentMin + (this.transfers * 2)
         val otherScore = other.currentMin + (other.transfers * 2)
@@ -56,7 +56,7 @@ data class RoutingState(
         }
         
         return this.lastTransferMin.compareTo(other.lastTransferMin)
-    }
+    }    
 }
 
 object TransitGraph {
@@ -224,7 +224,8 @@ object TransitGraph {
     fun findBestRoute(
         starts: List<Pair<String, Int>>, 
         targets: Map<String, Int>,       
-        searchTime: LocalDateTime 
+        searchTime: LocalDateTime,
+        maxTransfers: Int = 2
     ): List<RouteEdge>? {
         if (!isLoaded) return null
         
@@ -243,7 +244,7 @@ object TransitGraph {
                 listOf(RouteEdge("START_COORD", startId, "Пішки", "WALK", "WALK", startMin, arrivalTime, 0))
             } else emptyList()
             
-            val initialPenalty = if (walkMins <= 8) walkMins * 1.0 else 8.0 + (walkMins - 8) * 5.0 
+            val initialPenalty = if (walkMins <= 10) walkMins * 1.0 else 10.0 + (walkMins - 10) * 5.0 
             pq.add(RoutingState(startId, arrivalTime, if (walkMins > 0) "WALK" else null, initialPath, 0, initialPenalty, arrivalTime)) 
         }
 
@@ -281,7 +282,7 @@ object TransitGraph {
                 val isSameTrip = state.tripId == edge.tripId
                 val newLastTransferMin = if (!isSameTrip && state.tripId != null) state.currentMin else state.lastTransferMin
                 val newTransfers = if (state.tripId == null || isSameTrip) state.transfers else state.transfers + 1
-                if (newTransfers > 2) continue
+                if (newTransfers > maxTransfers) continue
                 val hasUsedBus = state.path.any { it.tripId != "WALK" && it.tripId != "START_COORD" }
 
                 if (isWalk) {
@@ -295,38 +296,80 @@ object TransitGraph {
                     val newPenalty = state.accumulatedPenalty + stepPenalty
                     pq.add(RoutingState(edge.toStopId, absArrMin, "WALK", newPath, newTransfers, newPenalty, newLastTransferMin))
                     
-                } else {
-                    val maxWaitTime = if (hasUsedBus) 60 else 600
-                    if (absDepMin - state.currentMin > maxWaitTime) continue
+                                              } else {
+                    // 1. Рахуємо час на фізичну пересадку (2 хв, якщо це зміна автобуса)
+                    val physicalTransferMins = if (!isSameTrip && hasUsedBus) 2 else 0
 
-                    var stepPenalty = 0.0
-                    val isRealTransfer = !isSameTrip && hasUsedBus
-                    
-                    if (isRealTransfer) {
-                        val lastBusRoute = state.path.lastOrNull { it.tripId != "WALK" && it.tripId != "START_COORD" }?.route
-                        val isSameRouteName = (lastBusRoute == edge.route)
+                    // 2. Перевірка часу з урахуванням пересадки
+                    if (absDepMin >= state.currentMin + physicalTransferMins) {
                         
-                        stepPenalty += if (isSameRouteName) 1.5 else 5.0 
-                        val waitTime = absDepMin - state.currentMin
-                        if (waitTime > 10) {
-                            stepPenalty += ((waitTime - 10) * 1.0).coerceAtMost(15.0)
+                        val maxWaitTime = if (hasUsedBus) 60 else 600
+                        if (absDepMin - state.currentMin > maxWaitTime) continue
+
+                        var stepPenalty = 0.0
+                        val isRealTransfer = !isSameTrip && hasUsedBus
+                        
+                        if (isRealTransfer) {
+                            val lastBusRoute = state.path.lastOrNull { it.tripId != "WALK" && it.tripId != "START_COORD" }?.route
+                            val isSameRouteName = (lastBusRoute == edge.route)
+                            
+                            stepPenalty += if (isSameRouteName) 1.5 else 5.0 
+                            val waitTime = absDepMin - state.currentMin
+                            if (waitTime > 10) {
+                                stepPenalty += ((waitTime - 10) * 1.0).coerceAtMost(15.0)
+                            }
+                        } else if (!hasUsedBus) {
+                            val initialWait = absDepMin - state.currentMin
+                            stepPenalty += (initialWait * 0.3).coerceAtMost(12.0)
                         }
-                    } else if (!hasUsedBus) {
-                        // Перший автобус у поїздці — не штрафуємо за очікування
-                        stepPenalty += 0.0
-                    }
-                    
-                    val travelTime = absArrMin - absDepMin
-                    stepPenalty += travelTime * 0.3
-                    
-                    val newPenalty = state.accumulatedPenalty + stepPenalty
-                    val newPath = state.path + edge // Ребро вже має готові, зміщені departureMin/arrivalMin
-                    
-                    pq.add(RoutingState(edge.toStopId, absArrMin, edge.tripId, newPath, newTransfers, newPenalty, newLastTransferMin))
+                        
+                        val travelTime = absArrMin - absDepMin
+                        stepPenalty += travelTime * 0.3
+                        
+                        val newPenalty = state.accumulatedPenalty + stepPenalty
+                        val adjustedEdge = edge.copy(departureMin = absDepMin, arrivalMin = absArrMin)
+                        val newPath = state.path + adjustedEdge
+                        
+                        pq.add(RoutingState(edge.toStopId, absArrMin, edge.tripId, newPath, newTransfers, newPenalty, newLastTransferMin))
+                    } // <--- ОСЬ ЦЯ ДУЖКА ЗАКРИВАЄ НАШ НОВИЙ IF
                 }
             }
         }
         return null
+    }
+
+    /**
+     * Повертає до 2 окремих карток маршруту замість одного "переможця":
+     * 1) оптимальний (дозволені пересадки, як є зараз)
+     * 2) прямий (maxTransfers = 0), АЛЕ тільки якщо він реально відрізняється
+     *    від оптимального і не програє йому надто сильно за часом.
+     *
+     * Це навмисно НЕ Pareto-пошук: два окремі однокритеріальні виклики
+     * findBestRoute дешевші й простіші в підтримці, а різниця в вартості
+     * порівняно з повноцінним multi-label на цьому графі несуттєва.
+     */
+    fun findRouteAlternatives(
+        starts: List<Pair<String, Int>>,
+        targets: Map<String, Int>,
+        searchTime: LocalDateTime,
+        maxAcceptableDelayMin: Int = 15
+    ): List<List<RouteEdge>> {
+        val optimal = findBestRoute(starts, targets, searchTime, maxTransfers = 2) ?: return emptyList()
+
+        val optimalTripCount = optimal.map { it.tripId }.filter { it != "WALK" }.distinct().size
+        if (optimalTripCount <= 1) return listOf(optimal) // оптимальний і так прямий
+
+        val direct = findBestRoute(starts, targets, searchTime, maxTransfers = 0)
+            ?: return listOf(optimal) // прямого варіанта не існує
+
+        val optimalArrival = optimal.last().arrivalMin
+        val directArrival = direct.last().arrivalMin
+
+        return if (directArrival - optimalArrival <= maxAcceptableDelayMin) {
+            listOf(optimal, direct)
+        } else {
+            listOf(optimal) // прямий занадто повільний, щоб бути релевантним
+        }
     }
 
     fun getNearbyStopsWalkTimes(lat: Double, lon: Double, maxRadiusMeters: Double = 800.0): List<Pair<String, Int>> {

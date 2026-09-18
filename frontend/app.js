@@ -2200,6 +2200,12 @@ if (searchRouteBtn && routeResultsBox) {
             const journeys = await res.json();
             routeResultsBox.innerHTML = '';
 
+            journeys.sort((a, b) => {
+    const aBus = a.legs.find(l => l.route !== "Пішки") || a.legs[0];
+    const bBus = b.legs.find(l => l.route !== "Пішки") || b.legs[0];
+    return aBus.departureMin - bBus.departureMin;
+});
+            
             if (journeys.length === 0) {
                 routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Brak połączeń dla tej trasy</div>';
                 return;
@@ -2281,6 +2287,12 @@ routeResultsBox.addEventListener('touchend', async (e) => {
 
             const newJourneys = await res.json();
 
+            newJourneys.sort((a, b) => {
+    const aBus = a.legs.find(l => l.route !== "Пішки") || a.legs[0];
+    const bBus = b.legs.find(l => l.route !== "Пішки") || b.legs[0];
+    return aBus.departureMin - bBus.departureMin;
+});
+            
             if (newJourneys.length > 0) {
                 const lastJourney = newJourneys[newJourneys.length - 1];
                 const transitLegs = lastJourney.legs.filter(l => l.route !== "Пішки" && l.route);

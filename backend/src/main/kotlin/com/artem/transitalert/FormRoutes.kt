@@ -167,47 +167,65 @@ fun Application.formRoutes() {
             var attempts = 0
             val MAX_ATTEMPTS = 150
 
-            while (allJourneys.size < limit && attempts < MAX_ATTEMPTS) {
+                        while (allJourneys.size < limit && attempts < MAX_ATTEMPTS) {
                 attempts++
                 
                 val searchTime = baseSearchDate.atStartOfDay().plusMinutes(currentSearchMin.toLong())
                 
-                // ВИПРАВЛЕННЯ 1: Змінили назву змінної з path на foundPath
-                val foundPath = TransitGraph.findBestRoute(starts, targets, searchTime)
+                // 1. Викликаємо нову функцію, яка може повернути до 2 варіантів
+                val alternatives = TransitGraph.findRouteAlternatives(starts, targets, searchTime, 15)
 
-                if (foundPath == null || foundPath.isEmpty()) {
-		    // Перестрибуємо нічну дірку на 3 години вперед і шукаємо далі.
-		    // Запобіжник MAX_ATTEMPTS не дасть циклу зависнути.
-		    currentSearchMin += 180
-		    continue
-		}
-
-                val stopIdsToFetch = foundPath.flatMap { listOf(it.fromStopId, it.toStopId) }.distinct()
-                val stopNames = transaction {
-                    Stops.select(Stops.stopId, Stops.name, Stops.code)
-                        .where { Stops.stopId inList stopIdsToFetch }
-                        .associate { it[Stops.stopId] to "${it[Stops.name]} ${it[Stops.code]}" }
+                if (alternatives.isEmpty()) {
+                    currentSearchMin += 180
+                    continue
                 }
 
-                // --- РАХУЄМО ЗМІЩЕННЯ ДНІВ ---
-                val daysOffset = (searchTime.toLocalDate().toEpochDay() - baseSearchDate.toEpochDay()).toInt()
-                val offsetMins = daysOffset * 1440
-                // -----------------------------
+                var nextSearchMin = currentSearchMin // Змінна для збереження зсуву часу
 
-                val legs = mutableListOf<JourneyLeg>()
-                var currentLeg = mutableListOf<RouteEdge>()
+                // 2. Обробляємо кожен знайдений варіант (і оптимальний, і прямий)
+                for ((index, foundPath) in alternatives.withIndex()) {
+                    val stopIdsToFetch = foundPath.flatMap { listOf(it.fromStopId, it.toStopId) }.distinct()
+                    val stopNames = transaction {
+                        Stops.select(Stops.stopId, Stops.name, Stops.code)
+                            .where { Stops.stopId inList stopIdsToFetch }
+                            .associate { it[Stops.stopId] to "${it[Stops.name]} ${it[Stops.code]}" }
+                    }
 
-                for (edge in foundPath) {
-                    if (currentLeg.isEmpty() || currentLeg.last().tripId == edge.tripId) {
-                        currentLeg.add(edge)
-                    } else {
+                    val daysOffset = (searchTime.toLocalDate().toEpochDay() - baseSearchDate.toEpochDay()).toInt()
+                    val offsetMins = daysOffset * 1440
+
+                    val legs = mutableListOf<JourneyLeg>()
+                    var currentLeg = mutableListOf<RouteEdge>()
+
+                    for (edge in foundPath) {
+                        if (currentLeg.isEmpty() || currentLeg.last().tripId == edge.tripId) {
+                            currentLeg.add(edge)
+                        } else {
+                            val first = currentLeg.first()
+                            val last = currentLeg.last()
+                            
+                            val liveData = try { LiveVehiclesCache.byTripId(first.tripId) } catch (e: Exception) { null }
+                            
+                            legs.add(JourneyLeg(
+                                route = first.route,
+                                fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
+                                toStopName = stopNames[last.toStopId] ?: last.toStopId,
+                                departureMin = first.departureMin + offsetMins,
+                                arrivalMin = last.arrivalMin + offsetMins,
+                                tripId = first.tripId,
+                                fromStopId = first.fromStopId,
+                                toStopId = last.toStopId,
+                                isRealTime = liveData?.delaySeconds != null,            
+                                delayMinutes = (liveData?.delaySeconds ?: 0) / 60 
+                            ))
+                            currentLeg = mutableListOf(edge)
+                        }
+                    }
+                    
+                    if (currentLeg.isNotEmpty()) {
                         val first = currentLeg.first()
                         val last = currentLeg.last()
-                        
-                        // Обертаємо в try-catch на випадок якщо кеш ще порожній
                         val liveData = try { LiveVehiclesCache.byTripId(first.tripId) } catch (e: Exception) { null }
-                        val delaySec = liveData?.delaySeconds ?: 0
-                        val isRealTime = liveData?.delaySeconds != null
                         
                         legs.add(JourneyLeg(
                             route = first.route,
@@ -218,82 +236,58 @@ fun Application.formRoutes() {
                             tripId = first.tripId,
                             fromStopId = first.fromStopId,
                             toStopId = last.toStopId,
-                            isRealTime = isRealTime,            
-                            delayMinutes = delaySec / 60 
+                            isRealTime = liveData?.delaySeconds != null,            
+                            delayMinutes = (liveData?.delaySeconds ?: 0) / 60
                         ))
-                        currentLeg = mutableListOf(edge)
+                    }
+                    
+                    if (legs.isNotEmpty() && legs.first().route == "Пішки" && legs.size > 1) {
+                        val walkLeg = legs[0]
+                        val firstBus = legs[1]
+                        val walkDuration = walkLeg.arrivalMin - walkLeg.departureMin
+                        val perfectDeparture = firstBus.departureMin - walkDuration - 2
+                        
+                        if (perfectDeparture > walkLeg.departureMin) {
+                            legs[0] = walkLeg.copy(
+                                departureMin = perfectDeparture,
+                                arrivalMin = firstBus.departureMin - 2
+                            )
+                        }
+                    }
+                    
+                    if (legs.isEmpty()) continue
+                    
+                    val realTotalMinutes = legs.last().arrivalMin - legs.first().departureMin
+                    val currentSignature = legs.filter { it.route != "Пішки" }.map { it.tripId }.joinToString("|")
+
+                    val isDuplicate = allJourneys.any { journey ->
+                        val existingSignature = journey.legs.filter { it.route != "Пішки" }.map { it.tripId }.joinToString("|")
+                        existingSignature == currentSignature
+                    }
+                    
+                    if (!isDuplicate) {
+                        allJourneys.add(
+                            JourneyResponse(totalMinutes = realTotalMinutes, legs = legs)
+                        )
+                    }
+
+                    // 3. Зсуваємо час пошуку ТІЛЬКИ на основі першого (оптимального) маршруту
+                    if (index == 0) {
+                        val walkDuration = if (legs.first().route == "Пішки") (legs.first().arrivalMin - legs.first().departureMin) else 0
+                        val firstBus = legs.find { it.route != "Пішки" }
+                        
+                        nextSearchMin = if (firstBus != null) {
+                            firstBus.departureMin - walkDuration + 1
+                        } else {
+                            legs.first().departureMin + 1
+                        }
                     }
                 }
                 
-                if (currentLeg.isNotEmpty()) {
-                    val first = currentLeg.first()
-                    val last = currentLeg.last()
-                    
-                    val liveData = try { LiveVehiclesCache.byTripId(first.tripId) } catch (e: Exception) { null }
-                    val delaySec = liveData?.delaySeconds ?: 0
-                    val isRealTime = liveData?.delaySeconds != null
-                    
-                    legs.add(JourneyLeg(
-                        route = first.route,
-                        fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
-                        toStopName = stopNames[last.toStopId] ?: last.toStopId,
-                        departureMin = first.departureMin + offsetMins,
-                        arrivalMin = last.arrivalMin + offsetMins,
-                        tripId = first.tripId,
-                        fromStopId = first.fromStopId,
-                        toStopId = last.toStopId,
-                        isRealTime = isRealTime,            
-                        delayMinutes = delaySec / 60
-                    ))
-                }
-                
-                if (legs.isNotEmpty() && legs.first().route == "Пішки" && legs.size > 1) {
-                    val walkLeg = legs[0]
-                    val firstBus = legs[1]
-                    val walkDuration = walkLeg.arrivalMin - walkLeg.departureMin
-                    val perfectDeparture = firstBus.departureMin - walkDuration - 2
-                    
-                    if (perfectDeparture > walkLeg.departureMin) {
-                        legs[0] = walkLeg.copy(
-                            departureMin = perfectDeparture,
-                            arrivalMin = firstBus.departureMin - 2
-                        )
-                    }
-                }
-                
-                if (legs.isEmpty()) {
-                    break
-                }
-                
-                val realTotalMinutes = legs.last().arrivalMin - legs.first().departureMin
-
-                // ВИПРАВЛЕННЯ 2: Чітко вказали map { it.tripId } щоб уникнути ambiguity
-                val currentSignature = legs.filter { it.route != "Пішки" }.map { it.tripId }.joinToString("|")
-
-                val isDuplicate = allJourneys.any { journey ->
-                    val existingSignature = journey.legs.filter { it.route != "Пішки" }.map { it.tripId }.joinToString("|")
-                    existingSignature == currentSignature
-                }
-                
-                if (!isDuplicate) {
-                    allJourneys.add(
-                        JourneyResponse(
-                            totalMinutes = realTotalMinutes,
-                            legs = legs
-                        )
-                    )
-                }
-
-                /// ЗСУВАЄМО ЧАС ТАК, ЩОБ ГАРАНТОВАНО ПРОПУСТИТИ ЦЕЙ АВТОБУС
-                val walkDuration = if (legs.first().route == "Пішки") (legs.first().arrivalMin - legs.first().departureMin) else 0
-                val firstBus = legs.find { it.route != "Пішки" }
-                
-                if (firstBus != null) {
-                    currentSearchMin = firstBus.departureMin - walkDuration + 1
-                } else {
-                    currentSearchMin = legs.first().departureMin + 1
-                }
+                // Застосовуємо розрахований зсув для наступної ітерації while
+                currentSearchMin = nextSearchMin
             }
+
             
             call.respond(allJourneys.distinctBy { it.legs })
         }

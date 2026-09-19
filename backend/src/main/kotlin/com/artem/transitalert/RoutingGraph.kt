@@ -40,9 +40,7 @@ data class RoutingState(
     val accumulatedPenalty: Double = 0.0, 
     val lastTransferMin: Int
 ) : Comparable<RoutingState> {
-    override fun compareTo(other: RoutingState): Int {
-        // Віртуальний час прибуття: +2 хвилин штрафу за кожну пересадку.
-        // Прямий рейс переможе, якщо пересадка економить менше 2 хвилин.
+	 override fun compareTo(other: RoutingState): Int {
         val thisScore = this.currentMin + (this.transfers * 2)
         val otherScore = other.currentMin + (other.transfers * 2)
         
@@ -50,13 +48,18 @@ data class RoutingState(
             return thisScore.compareTo(otherScore)
         }
         
-        // Тай-брейк: якщо час однаковий, перемагає комфортніший маршрут
-        if (this.accumulatedPenalty != other.accumulatedPenalty) {
-            return this.accumulatedPenalty.compareTo(other.accumulatedPenalty)
+        // КВАНТУВАННЯ (Кошики по 1.5 бала): безпечний аналог толерантності для PriorityQueue.
+        // Значення в одному "кошику" вважаються рівними за комфортом.
+        val thisBucket = (this.accumulatedPenalty / 1.5).toInt()
+        val otherBucket = (other.accumulatedPenalty / 1.5).toInt()
+        
+        if (thisBucket != otherBucket) {
+            return thisBucket.compareTo(otherBucket)
         }
         
+        // Якщо маршрути потрапили в один кошик комфорту — висаджуємо на першій спільній зупинці
         return this.lastTransferMin.compareTo(other.lastTransferMin)
-    }    
+    }
 }
 
 object TransitGraph {
@@ -67,6 +70,8 @@ object TransitGraph {
     @Volatile var dailyServices: Map<LocalDate, Set<String>> = emptyMap()
     @Volatile var isLoaded = false
     @Volatile var activeStops: List<StopCoords> = emptyList()
+    @Volatile var stopAlternativesCount: Map<String, Int> = emptyMap()
+    @Volatile var reachableStopsFromRoute: Map<String, Set<String>> = emptyMap()
 
     fun startNightlyRebuild() {
         CoroutineScope(Dispatchers.IO).launch {
@@ -135,6 +140,50 @@ object TransitGraph {
                 Triple(it[Stops.stopId], it[Stops.lat], it[Stops.lon]) 
             }
             activeStops = allStops.map { StopCoords(it.first, it.second, it.third) }
+
+            // Кількість різних маршрутів на зупинці — для пріоритезації "надійних" вузлів пересадки.
+            // Рахуємо один раз по всіх trips, без прив'язки до конкретної дати/сервісу (MVP-спрощення).
+            val stopRoutes = mutableMapOf<String, MutableSet<String>>()
+            val routeStops = mutableMapOf<String, MutableSet<String>>()
+            for ((tripId, stops) in tripsData) {
+                val routeName = validTrips[tripId]?.first ?: continue
+                val routeStopSet = routeStops.getOrPut(routeName) { mutableSetOf() }
+                for (stop in stops) {
+                    stopRoutes.getOrPut(stop.stopId) { mutableSetOf() }.add(routeName)
+                    routeStopSet.add(stop.stopId)
+                }
+            }
+            stopAlternativesCount = stopRoutes.mapValues { it.value.size }
+
+            // Напрямлена досяжність по МАРШРУТАХ (не зупинках і не часі — це і робить це дешевим):
+            // два маршрути суміжні, якщо мають спільну зупинку; BFS на глибину REACH_DEPTH
+            // (= стандартний maxTransfers) дає "куди звідси взагалі можна доїхати за N пересадок".
+            // Розклад тут ігнорується навмисно — це підказка для пошуку, а не заміна Dijkstra з реальним часом.
+            val REACH_DEPTH = 2
+            val routeAdjacency = mutableMapOf<String, MutableSet<String>>()
+            for (routes in stopRoutes.values) {
+                for (r1 in routes) {
+                    for (r2 in routes) {
+                        if (r1 != r2) routeAdjacency.getOrPut(r1) { mutableSetOf() }.add(r2)
+                    }
+                }
+            }
+            val newReachableStopsFromRoute = mutableMapOf<String, Set<String>>()
+            for (startRoute in routeStops.keys) {
+                val visitedRoutes = mutableSetOf(startRoute)
+                var frontier: Set<String> = setOf(startRoute)
+                repeat(REACH_DEPTH) {
+                    val next = mutableSetOf<String>()
+                    for (r in frontier) routeAdjacency[r]?.let { next.addAll(it) }
+                    next.removeAll(visitedRoutes)
+                    visitedRoutes.addAll(next)
+                    frontier = next
+                }
+                val stopsUnion = mutableSetOf<String>()
+                for (r in visitedRoutes) routeStops[r]?.let { stopsUnion.addAll(it) }
+                newReachableStopsFromRoute[startRoute] = stopsUnion
+            }
+            reachableStopsFromRoute = newReachableStopsFromRoute
 
             val newEdgesByDate = mutableMapOf<LocalDate, MutableMap<String, MutableList<RouteEdge>>>()
 
@@ -225,7 +274,9 @@ object TransitGraph {
         starts: List<Pair<String, Int>>, 
         targets: Map<String, Int>,       
         searchTime: LocalDateTime,
-        maxTransfers: Int = 2
+        maxTransfers: Int = 2,
+        minTransferAlternatives: Int = 0,
+        requireDirectionalRelevance: Boolean = false
     ): List<RouteEdge>? {
         if (!isLoaded) return null
         
@@ -310,6 +361,14 @@ object TransitGraph {
                         val isRealTransfer = !isSameTrip && hasUsedBus
                         
                         if (isRealTransfer) {
+                            if (requireDirectionalRelevance) {
+                                val reachable = reachableStopsFromRoute[edge.route] ?: emptySet()
+                                if (targets.keys.none { it in reachable }) continue
+                            }
+
+                            val altCount = stopAlternativesCount[state.stopId] ?: 0
+                            if (altCount < minTransferAlternatives) continue
+
                             val lastBusRoute = state.path.lastOrNull { it.tripId != "WALK" && it.tripId != "START_COORD" }?.route
                             val isSameRouteName = (lastBusRoute == edge.route)
                             
@@ -339,12 +398,16 @@ object TransitGraph {
     }
 
     /**
-     * Повертає до 2 окремих карток маршруту замість одного "переможця":
+     * Повертає до 3 окремих карток маршруту замість одного "переможця":
      * 1) оптимальний (дозволені пересадки, як є зараз)
-     * 2) прямий (maxTransfers = 0), АЛЕ тільки якщо він реально відрізняється
-     *    від оптимального і не програє йому надто сильно за часом.
+     * 2) прямий (maxTransfers = 0) — якщо релевантний за часом
+     * 3) "надійний" — той самий пошук, але пересадка дозволена лише на
+     *    зупинці, де є щонайменше minTransferAlternatives різних маршрутів,
+     *    І лише на ті з них, що за precompute-графом маршрутів взагалі
+     *    ведуть у бік цілі (requireDirectionalRelevance) — це відсікає
+     *    саме той випадок, коли "багато ліній", але жодна не туди
      *
-     * Це навмисно НЕ Pareto-пошук: два окремі однокритеріальні виклики
+     * Це навмисно НЕ Pareto-пошук: окремі однокритеріальні виклики
      * findBestRoute дешевші й простіші в підтримці, а різниця в вартості
      * порівняно з повноцінним multi-label на цьому графі несуттєва.
      */
@@ -352,24 +415,35 @@ object TransitGraph {
         starts: List<Pair<String, Int>>,
         targets: Map<String, Int>,
         searchTime: LocalDateTime,
-        maxAcceptableDelayMin: Int = 15
+        maxAcceptableDelayMin: Int = 15,
+        minTransferAlternatives: Int = 3
     ): List<List<RouteEdge>> {
         val optimal = findBestRoute(starts, targets, searchTime, maxTransfers = 2) ?: return emptyList()
+        val results = mutableListOf(optimal)
 
         val optimalTripCount = optimal.map { it.tripId }.filter { it != "WALK" }.distinct().size
-        if (optimalTripCount <= 1) return listOf(optimal) // оптимальний і так прямий
-
-        val direct = findBestRoute(starts, targets, searchTime, maxTransfers = 0)
-            ?: return listOf(optimal) // прямого варіанта не існує
+        if (optimalTripCount <= 1) return results // оптимальний і так прямий, решта неактуальна
 
         val optimalArrival = optimal.last().arrivalMin
-        val directArrival = direct.last().arrivalMin
 
-        return if (directArrival - optimalArrival <= maxAcceptableDelayMin) {
-            listOf(optimal, direct)
-        } else {
-            listOf(optimal) // прямий занадто повільний, щоб бути релевантним
+        val direct = findBestRoute(starts, targets, searchTime, maxTransfers = 0)
+        if (direct != null && direct.last().arrivalMin - optimalArrival <= maxAcceptableDelayMin) {
+            results.add(direct)
         }
+
+        val reliable = findBestRoute(
+            starts, targets, searchTime,
+            maxTransfers = 2,
+            minTransferAlternatives = minTransferAlternatives,
+            requireDirectionalRelevance = true
+        )
+        if (reliable != null && reliable !in results &&
+            reliable.last().arrivalMin - optimalArrival <= maxAcceptableDelayMin
+        ) {
+            results.add(reliable)
+        }
+
+        return results
     }
 
     fun getNearbyStopsWalkTimes(lat: Double, lon: Double, maxRadiusMeters: Double = 800.0): List<Pair<String, Int>> {

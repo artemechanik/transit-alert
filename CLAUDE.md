@@ -12,7 +12,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Архітектура
 
 - **Backend**: Kotlin + Ktor, PostgreSQL через Exposed ORM + HikariCP
-- **Frontend**: PWA, Leaflet-карта (Thunderforest Transport Dark tiles)
+- **Frontend**: PWA, Leaflet-карта. Тайли — MapTiler (`streets-v4`/`streets-v4-dark`,
+  перемикання по темі), ключ захардкоджений у `frontend/app.js` (`MAPTILER_KEY`,
+  клієнтський, тож публічно видимий — це очікувано для MapTiler free-tier)
+- **Геокодинг адрес**: робиться напряму з фронтенду через MapTiler Geocoding API
+  (`app.js`, автокомпліт полів "звідки/куди"), НЕ через бекенд-проксі. При вводі
+  паралельно (`Promise.all`) летять запит до свого `/stops/search` (зупинки) і
+  запит до `api.maptiler.com/geocoding/...` (адреси, обмежено bbox Любліна
+  `22.35,51.11,22.75,51.36`). Результати показуються в одному дропдауні:
+  зупинки → `{name, ids}` (масив stopId), адреси → `{name, lat, lon}`
+  (з `feature.center`).
 - **GTFS дані**: реальний час через zbiorkom.live (`lublin.pb`, ~80–190 позицій
   кожні 15с, MIT-ліцензія, легально). Статичні дані GTFS синхронізуються
   через `GtfsStaticSync.kt` (idempotent, 304-aware, FK-safe UPSERT).
@@ -93,10 +102,11 @@ google-genai (`gemini-3.5-flash-lite`), тягне словник зупинок
 
 ## У розробці / наступні кроки
 
-- Address-based routing: geocode proxy (Nominatim, Lublin-bounded, з
-  User-Agent + rate limiting) → `/route/by-address` → ланцюжок
-  geocode → `/stops/nearby` → `/route/complex` (новий routing engine
-  не потрібен)
+- ~~Address-based routing через Nominatim-проксі~~ — вже не актуально: геокодинг
+  адрес реалізований напряму на фронтенді через MapTiler Geocoding API (див.
+  "Архітектура" вище), без бекенд-проксі та без `/route/by-address`. Якщо
+  знову зʼявиться потреба у геокодингу на бекенді — узгодити окремо, а не
+  повертатись до цього старого плану.
 - Позиція користувача як маркер у route accordion (Leaflet,
   geolocation watchPosition)
 - Два відкриті UI-баги: контраст input-полів у темній темі PWA + ще один

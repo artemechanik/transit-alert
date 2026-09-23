@@ -29,6 +29,7 @@ node_modules/
 dist/
 .parcel-cache/
 *.tsbuildinfo
+frontend/config.js
 
 # Database
 *.db
@@ -43,3 +44,8 @@ gtfs-static/
 # OS
 Thumbs.db
 backend/seed_stop_departures.sql
+
+# Scraper
+scraper/
+fb.py
+

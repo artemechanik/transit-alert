@@ -150,7 +150,7 @@ function trackUserLocation() {
     }
 }
 let darkTileLayer, lightTileLayer;
-const MAPTILER_KEY = 'xsLUiIXuG5Vl9tmzUizH';
+const MAPTILER_KEY = window.MAPTILER_KEY;
 
 function initMap() {
   map = L.map('map', { zoomControl: false }).setView(LUBLIN_CENTER, 14);
@@ -1630,7 +1630,7 @@ function loadRouteDefaultSuggestions(isFrom) {
             navigator.geolocation.getCurrentPosition(
                 (pos) => fetchAndShow(pos.coords.latitude, pos.coords.longitude),
                 () => { nearbyContainer.innerHTML = '<div style="padding: 10px; color: red;">Włącz GPS, aby zobaczyć pobliskie przystanki</div>'; },
-                { enableHighAccuracy: false, timeout: 5000, maximumAge: 120000 }
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         }
     }
@@ -2282,7 +2282,7 @@ routeResultsBox.addEventListener('touchend', async (e) => {
             else if (routeToStop.lat && routeToStop.lon) toParams = `toLat=${routeToStop.lat}&toLon=${routeToStop.lon}`;
 
             const nextSearchMin = lastJourneyDepartureMin + 1;
-            const res = await fetch(`${API_BASE_URL}/route/complex?${fromParams}&${toParams}&limit=3&time=${nextSearchMin}`);
+            const res = await fetch(`${API_BASE_URL}/route/complex?${fromParams}&${toParams}&limit=8&time=${nextSearchMin}`);
             if (!res.ok) throw new Error('Помилка сервера');
 
             const newJourneys = await res.json();
@@ -2469,7 +2469,7 @@ function loadNearbyStopsDefault() {
                 console.warn('GPS помилка:', error.message);
                 nearbyContainer.innerHTML = '<div style="padding: 10px; color: red;">Увімкніть GPS для Przystanki w pobliżu</div>';
             }, 
-            { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
     }
 }

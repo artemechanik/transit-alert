@@ -40,7 +40,7 @@ data class RoutingState(
     val accumulatedPenalty: Double = 0.0, 
     val lastTransferMin: Int
 ) : Comparable<RoutingState> {
-	 override fun compareTo(other: RoutingState): Int {
+		override fun compareTo(other: RoutingState): Int {
         val thisScore = this.currentMin + (this.transfers * 2)
         val otherScore = other.currentMin + (other.transfers * 2)
         
@@ -48,18 +48,15 @@ data class RoutingState(
             return thisScore.compareTo(otherScore)
         }
         
-        // КВАНТУВАННЯ (Кошики по 1.5 бала): безпечний аналог толерантності для PriorityQueue.
-        // Значення в одному "кошику" вважаються рівними за комфортом.
-        val thisBucket = (this.accumulatedPenalty / 1.5).toInt()
-        val otherBucket = (other.accumulatedPenalty / 1.5).toInt()
+        // ЄДИНИЙ ТРАНЗИТИВНИЙ ТАЙ-БРЕЙКЕР
+        // Додаємо 0.1 бала штрафу за кожну хвилину "відтягування" пересадки.
+        // Це м'яко, але впевнено тягне алгоритм до ранніх вузлів.
+        val thisAdjusted = this.accumulatedPenalty + (this.lastTransferMin * 0.1)
+        val otherAdjusted = other.accumulatedPenalty + (other.lastTransferMin * 0.1)
         
-        if (thisBucket != otherBucket) {
-            return thisBucket.compareTo(otherBucket)
-        }
-        
-        // Якщо маршрути потрапили в один кошик комфорту — висаджуємо на першій спільній зупинці
-        return this.lastTransferMin.compareTo(other.lastTransferMin)
+        return thisAdjusted.compareTo(otherAdjusted)
     }
+
 }
 
 object TransitGraph {
@@ -348,8 +345,8 @@ object TransitGraph {
                     pq.add(RoutingState(edge.toStopId, absArrMin, "WALK", newPath, newTransfers, newPenalty, newLastTransferMin))
                     
                                               } else {
-                    // 1. Рахуємо час на фізичну пересадку (2 хв, якщо це зміна автобуса)
-                    val physicalTransferMins = if (!isSameTrip && hasUsedBus) 2 else 0
+                    // 1. Рахуємо час на фізичну пересадку (1 хв, якщо це зміна автобуса)
+                    val physicalTransferMins = if (!isSameTrip && hasUsedBus) 1 else 0
 
                     // 2. Перевірка часу з урахуванням пересадки
                     if (absDepMin >= state.currentMin + physicalTransferMins) {

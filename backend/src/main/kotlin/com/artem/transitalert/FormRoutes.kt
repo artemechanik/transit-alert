@@ -138,7 +138,7 @@ fun Application.formRoutes() {
             val fromLon = call.request.queryParameters["fromLon"]?.toDoubleOrNull()
             val toLat = call.request.queryParameters["toLat"]?.toDoubleOrNull()
             val toLon = call.request.queryParameters["toLon"]?.toDoubleOrNull()
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 8 
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 10 
 
             val starts: List<Pair<String, Int>> = when {
                 fromLat != null && fromLon != null -> TransitGraph.getNearbyStopsWalkTimes(fromLat, fromLon)

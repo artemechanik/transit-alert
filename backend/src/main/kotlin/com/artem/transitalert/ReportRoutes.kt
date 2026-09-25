@@ -17,6 +17,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.ZonedDateTime
 
 // Не давати одному пристрою постити частіше ніж раз на N хвилин
 private const val RATE_LIMIT_MINUTES = 5L
@@ -26,16 +27,40 @@ private const val REPORT_TTL_MINUTES = 45L
 
 fun Application.reportRoutes() {
     routing {
+        get("/stops/dictionary") {
+            val dict = transaction {
+                Stops.selectAll().associate {
+                    val code = it[Stops.code]
+                    // Якщо код є (напр. "01"), додаємо його до назви, інакше залишаємо як є
+                    val fullName = if (code.isNotBlank()) "${it[Stops.name]} $code" else it[Stops.name]
+                    fullName to it[Stops.stopId]
+                }
+            }
+            call.respond(dict)
+        }
 
-               // --- Стрічка: нові допис зверху, старі/приховані відфільтровані ---
+        // --- Стрічка: нові допис зверху, старі/приховані відфільтровані ---
         get("/reports") {
-            val cutoff = Instant.now().minus(REPORT_TTL_MINUTES, ChronoUnit.MINUTES)
+            // Встановлюємо часовий пояс для Любліна
+            val zoneId = ZoneId.of("Europe/Warsaw")
+            val now = ZonedDateTime.now(zoneId)
+            
+            // Якщо зараз до 05:00 ранку, беремо 05:00 вчорашнього дня. Інакше - 05:00 сьогоднішнього.
+            val startOfDay = if (now.hour < 5) {
+                now.minusDays(1).withHour(5).withMinute(0).withSecond(0).withNano(0)
+            } else {
+                now.withHour(5).withMinute(0).withSecond(0).withNano(0)
+            }
+            
+            val cutoff = startOfDay.toInstant()
+
             val results = transaction {
                 (Reports innerJoin Stops)
                     .selectAll()
                     .where { (Reports.hidden eq false) and (Reports.createdAt greaterEq cutoff) }
                     .orderBy(Reports.createdAt, SortOrder.DESC)
                     .limit(100)
+// ... решта коду (map { ReportResponse ... ) залишається без змін ...
                     .map {
                         ReportResponse(
                             id = it[Reports.id],
@@ -132,13 +157,14 @@ fun Application.reportRoutes() {
             }
 
             // Валідація: перевіряємо, з якої вкладки прийшли дані
-            val isLiniaTab = req.route != null && req.direction != null && req.stopName != null
+            // НАПРЯМОК (direction) ТЕПЕР НЕОБОВ'ЯЗКОВИЙ
+            val isLiniaTab = req.route != null && req.stopName != null
             val isPrzystanekTab = req.stopId != null && req.route == null && req.direction == null && req.stopName == null
 
             if (!isLiniaTab && !isPrzystanekTab) {
                 call.respond(
                     HttpStatusCode.BadRequest, 
-                    "Помилка валідації: дані мають відповідати або вкладці 'Linia' (route, direction, stopName), або 'Przystanek' (stopId)."
+                    "Помилка валідації: дані мають відповідати або вкладці 'Linia' (route, stopName), або 'Przystanek' (stopId)."
                 )
                 return@post
             }
@@ -151,8 +177,8 @@ fun Application.reportRoutes() {
             val currentMinutes = localNow.hour * 60 + localNow.minute
 
             val created = transaction {
-                // Rate limit: чи постив цей fingerprint нещодавно?
-                if (req.previousReportId == null) {
+                // Rate limit: чи постив цей fingerprint нещодавно? (ВИКЛЮЧЕННЯ ДЛЯ БОТА ТУТ)
+                if (req.previousReportId == null && req.fingerprint != "facebook-scraper-bot") {
                     val recentPost = Reports.selectAll()
                         .where { (Reports.fingerprint eq req.fingerprint) and (Reports.createdAt greaterEq recentCutoff) }
                         .limit(1)
@@ -164,8 +190,8 @@ fun Application.reportRoutes() {
                 var finalStopId: String? = null
                 var finalStopName: String? = null
                 var finalStopCode: String? = null
-                var finalLat: Double? = null // <--- ДОДАНО
-                var finalLon: Double? = null // <--- ДОДАНО
+                var finalLat: Double? = null
+                var finalLon: Double? = null
                 var finalRoute: String? = null
                 var finalDirection: String? = null
                 var finalTripId: String? = null
@@ -181,29 +207,30 @@ fun Application.reportRoutes() {
                     finalLat = stopExists[Stops.lat]
                     finalLon = stopExists[Stops.lon]
                 } else {
-                    // Сценарій "Linia": Знаємо маршрут, напрям і загальну назву зупинки.
-                    // Отримуємо активні сервіси на сьогодні
+                    // Сценарій "Linia": Знаємо маршрут і загальну назву зупинки (напрямок опціональний)
                     val activeServices = ServiceCalendar
                         .select(ServiceCalendar.serviceId)
                         .where { ServiceCalendar.date eq todayString }
                         .map { it[ServiceCalendar.serviceId] }
 
                     if (activeServices.isNotEmpty()) {
-                        // Шукаємо рейс у вікні ±30 хвилин через innerJoin
-                        // ЯВНО ВКАЗУЄМО КОЛОНКИ ДЛЯ З'ЄДНАННЯ:
                         val match = (StopDepartures crossJoin TripHeadsigns crossJoin Stops)
                             .selectAll()
                             .where {
-                                // Тут ми чітко з'єднуємо таблиці
-                                (StopDepartures.tripId eq TripHeadsigns.tripId) and
+                                val baseCondition = (StopDepartures.tripId eq TripHeadsigns.tripId) and
                                 (StopDepartures.stopId eq Stops.stopId) and
-                                // А далі твої звичні умови пошуку
                                 (Stops.name eq req.stopName!!) and
                                 (StopDepartures.route eq req.route!!) and
-                                (TripHeadsigns.headsign eq req.direction!!) and
                                 (StopDepartures.serviceId inList activeServices) and
                                 (StopDepartures.departureMinutes greaterEq (currentMinutes - 30)) and
                                 (StopDepartures.departureMinutes lessEq (currentMinutes + 30))
+                                
+                                // Якщо напрямок є - шукаємо точно, якщо ні - беремо найближчий
+                                if (req.direction != null) {
+                                    baseCondition and (TripHeadsigns.headsign eq req.direction)
+                                } else {
+                                    baseCondition
+                                }
                             }
                             .orderBy(StopDepartures.departureMinutes, SortOrder.ASC)
                             .limit(1)
@@ -216,19 +243,17 @@ fun Application.reportRoutes() {
                             finalLat = match[Stops.lat]
                             finalLon = match[Stops.lon]
                             finalRoute = req.route
-                            finalDirection = req.direction
+                            // Підтягуємо реальний напрямок з розкладу, якщо юзер його не вказав
+                            finalDirection = req.direction ?: match[TripHeadsigns.headsign]
                             finalTripId = match[StopDepartures.tripId]
                         }
                     }
 
-                    // Якщо в 30-хвилинному вікні рейсу нема (розклад рідкий/пізня ніч) —
-                    // пробуємо знайти платформу, де ця route+direction комбінація взагалі трапляється.
                     if (finalStopId == null) {
                         val candidates = Stops.selectAll().where { Stops.name eq req.stopName!! }.map { it[Stops.stopId] to it }
                         var matchedStop: ResultRow? = null
 
                         for ((candidateId, stopRow) in candidates) {
-                            // Шукаємо рейси для цієї лінії на цій платформі
                             val tripsForRouteOnThisStop = StopDepartures
                                 .select(StopDepartures.tripId)
                                 .where { (StopDepartures.stopId eq candidateId) and (StopDepartures.route eq req.route!!) }
@@ -236,9 +261,12 @@ fun Application.reportRoutes() {
                                 .map { it[StopDepartures.tripId] }
 
                             if (tripsForRouteOnThisStop.isNotEmpty()) {
-                                // Перевіряємо, чи є серед них потрібний напрямок
                                 val hasDirection = TripHeadsigns.selectAll()
-                                    .where { (TripHeadsigns.tripId inList tripsForRouteOnThisStop) and (TripHeadsigns.headsign eq req.direction!!) }
+                                    .where { 
+                                        val base = (TripHeadsigns.tripId inList tripsForRouteOnThisStop)
+                                        if (req.direction != null) base and (TripHeadsigns.headsign eq req.direction)
+                                        else base
+                                    }
                                     .limit(1)
                                     .empty().not()
 
@@ -257,10 +285,7 @@ fun Application.reportRoutes() {
                             finalLon = matchedStop[Stops.lon]
                             finalRoute = req.route
                             finalDirection = req.direction
-                            // tripId лишається null
                         } else {
-                            // Справді нема такого route+direction на цій зупинці взагалі —
-                            // берем будь-яку платформу, але БЕЗ route/direction.
                             val fallbackStop = candidates.firstOrNull()?.second ?: return@transaction null
                             finalStopId = fallbackStop[Stops.stopId]
                             finalStopName = fallbackStop[Stops.name]

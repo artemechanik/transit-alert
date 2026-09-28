@@ -1693,7 +1693,10 @@ async function updateTrasaCountdowns() {
         }
         
         const delayDelta = newDelay - oldDelay;
-        let expectedDepartureMin = depMin;
+        // data-dep уже містить затримку на момент пошуку (бекенд віддає live-час),
+        // тож додаємо лише те, наскільки затримка змінилась відтоді
+        const initialDelay = parseInt(card.getAttribute('data-delay-initial') || '0', 10);
+        let expectedDepartureMin = depMin + (newDelay - initialDelay);
         
         // --- ЧИСТА МАТЕМАТИКА ТАЙМЕРА (БЕЗ 1440) ---
         // JS Date сам перемкне день вперед, якщо expectedDepartureMin >= 1440
@@ -1768,7 +1771,8 @@ async function updateTrasaCountdowns() {
                     
                     const [h, m] = timeText.split(':').map(Number);
                     const currentTotalMins = h * 60 + m;
-                    
+                    const newTotalMins = currentTotalMins + delayDelta;
+
                     // Тут спрацює наш оновлений formatTime з % 24
                     const newTimeStr = formatTime(newTotalMins);
                     
@@ -1857,8 +1861,9 @@ function buildJourneyCard(journey) {
     const depTime = getColoredTime(firstTransitLeg.departureMin, firstTransitLeg.delayMinutes || 0);
     const arrTime = getColoredTime(lastTransitLeg.arrivalMin, lastTransitLeg.delayMinutes || 0);
     // Рахуємо суто час від посадки в перший автобус до висадки з останнього
-    const transitStart = firstTransitLeg.departureMin + (firstTransitLeg.delayMinutes || 0);
-    const transitEnd = lastTransitLeg.arrivalMin + (lastTransitLeg.delayMinutes || 0);
+    // departureMin/arrivalMin від бекенда вже з урахуванням затримки
+    const transitStart = firstTransitLeg.departureMin;
+    const transitEnd = lastTransitLeg.arrivalMin;
     const duration = Math.max(0, transitEnd - transitStart);
 
     const now = new Date();
@@ -1948,7 +1953,7 @@ function buildJourneyCard(journey) {
     </div>`;
     
     // 4. ТАЙМЕР АБСОЛЮТНИЙ (відцентрований відносно всього таймлайну!)
-    timelineHtml += `<div class="trasa-dep-min" data-dep="${firstTransitLeg.departureMin}" data-delay="${delay}" data-live="${isLive}" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 5;">${timerHtml}</div>`;
+    timelineHtml += `<div class="trasa-dep-min" data-dep="${firstTransitLeg.departureMin}" data-delay="${delay}" data-delay-initial="${delay}" data-trip-id="${firstTransitLeg.tripId || ''}" data-live="${isLive}" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 5;">${timerHtml}</div>`;
 
     timelineHtml += '</div>';
 

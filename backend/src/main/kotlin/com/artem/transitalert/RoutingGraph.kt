@@ -320,7 +320,7 @@ object TransitGraph {
             val outgoingEdges = currentEdges[state.stopId] ?: emptyList()
             
             for (edge in outgoingEdges) {
-            	val isWalk = edge.tripId == "WALK"
+                val isWalk = edge.tripId == "WALK"
                 
                 // 1. Витягуємо затримку для цього рейсу (0, якщо її немає)
                 val delayMin = liveDelays[edge.tripId] ?: 0

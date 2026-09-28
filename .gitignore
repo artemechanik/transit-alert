@@ -49,3 +49,6 @@ backend/seed_stop_departures.sql
 scraper/
 fb.py
 
+
+# Claude Code session exports
+*-command-message*.txt

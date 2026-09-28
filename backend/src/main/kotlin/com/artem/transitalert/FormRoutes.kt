@@ -167,25 +167,22 @@ fun Application.formRoutes() {
             var attempts = 0
             val MAX_ATTEMPTS = 150
 
+            // --- СТВОРЕННЯ МАТРИЦІ ЗАТРИМОК ---
+            // Один знімок на весь запит: tripId -> delayMin.
+            // Ділення `/ 60` — так само, як delayMinutes у JourneyLeg і /live-vehicles/delays,
+            // щоб граф і UI бачили однакову затримку.
+            val currentDelays = LiveVehiclesCache.all()
+                .mapNotNull { vehicle ->
+                    val delayMin = (vehicle.delaySeconds ?: 0) / 60
+                    if (delayMin != 0) vehicle.tripId to delayMin else null
+                }.toMap()
+            // ------------------------------------------------
+
             while (allJourneys.size < limit && attempts < MAX_ATTEMPTS) {
                 attempts++
-                
+
                 val searchTime = baseSearchDate.atStartOfDay().plusMinutes(currentSearchMin.toLong())
-                
-                // --- СТВОРЕННЯ МАТРИЦІ ЗАТРИМОК ---
-                // Витягуємо всі живі рейси і формуємо словник: tripId -> delayMin
-                val currentDelays = LiveVehiclesCache.all()
-                    .mapNotNull { vehicle ->
-                        val delaySec = vehicle.delaySeconds
-                        if (delaySec != null && delaySec != 0) {
-                            // Переводимо секунди у хвилини з математичним округленням
-                            vehicle.tripId to Math.round(delaySec / 60.0).toInt()
-                        } else {
-                            null
-                        }
-                    }.toMap()
-                // ------------------------------------------------
-                
+
                 // 1. Викликаємо нову функцію, ПЕРЕДАВШИ liveDelays
                 val alternatives = TransitGraph.findRouteAlternatives(
                     starts = starts, 

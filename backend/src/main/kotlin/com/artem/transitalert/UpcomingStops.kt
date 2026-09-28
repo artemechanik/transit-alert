@@ -38,6 +38,8 @@ fun Application.upcomingStopsRoutes() {
                     ?: return@transaction "no_route"
 
                 val currentSequence = currentStopRow[TripStops.stopSequence]
+                
+                val currentSeq = LiveVehiclesCache.byTripId(tripId)?.currentStopSequence
 
                 val upcoming = TripStops
                     .join(Stops, JoinType.INNER) { TripStops.stopId eq Stops.stopId }
@@ -47,6 +49,7 @@ fun Application.upcomingStopsRoutes() {
                     .map {
                         val minutes = it[TripStops.departureMinutes] % (24 * 60)
                         UpcomingStop(
+                        	isPassed = currentSeq != null && it[TripStops.stopSequence] < currentSeq,
                             stopId = it[TripStops.stopId],
                             name = it[TripStops.stopName],
                             platformCode = it[Stops.code],
@@ -87,6 +90,8 @@ fun Application.upcomingStopsRoutes() {
                     .firstOrNull() ?: return@transaction null
 
                 val currentSequence = currentStopRow[TripStops.stopSequence]
+                
+                val currentSeq = LiveVehiclesCache.byTripId(tripId)?.currentStopSequence
 
                 TripStops
                     .join(Stops, JoinType.INNER) { TripStops.stopId eq Stops.stopId }
@@ -96,6 +101,7 @@ fun Application.upcomingStopsRoutes() {
                     .map {
                         val minutes = it[TripStops.departureMinutes] % (24 * 60)
                         UpcomingStop(
+                        	isPassed = currentSeq != null && it[TripStops.stopSequence] < currentSeq,
                             stopId = it[TripStops.stopId],
                             name = it[TripStops.stopName],
                             platformCode = it[Stops.code],

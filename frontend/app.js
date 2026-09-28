@@ -345,7 +345,7 @@ async function toggleDepExpand(card, panel, dep) {
     const stops = await res.json();
 
     const stopsHtml = stops.length
-      ? stops.slice(0, 8).map(s => `<div class="dep-expand-stop"><span>${s.name}</span><span class="dep-expand-eta">${s.eta}</span></div>`).join('')
+      ? stops.map(s => `<div class="dep-expand-stop${s.isPassed ? ' dep-expand-stop-passed' : ''}"><span>${s.name}</span><span class="dep-expand-eta">${s.eta}</span></div>`).join('')
       : '<div class="dep-expand-loading">To ostatni przystanek na trasie</div>';
 
     panel.innerHTML = `

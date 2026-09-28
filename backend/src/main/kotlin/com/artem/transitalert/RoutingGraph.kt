@@ -273,7 +273,8 @@ object TransitGraph {
         searchTime: LocalDateTime,
         maxTransfers: Int = 2,
         minTransferAlternatives: Int = 0,
-        requireDirectionalRelevance: Boolean = false
+        requireDirectionalRelevance: Boolean = false,
+        liveDelays: Map<String, Int> = emptyMap()
     ): List<RouteEdge>? {
         if (!isLoaded) return null
         
@@ -319,13 +320,22 @@ object TransitGraph {
             val outgoingEdges = currentEdges[state.stopId] ?: emptyList()
             
             for (edge in outgoingEdges) {
-                val isWalk = edge.tripId == "WALK"
+            	val isWalk = edge.tripId == "WALK"
                 
-                // ШВИДКІСНИЙ ФІЛЬТР: якщо автобус відправився в минулому — одразу відкидаємо
-                if (!isWalk && edge.departureMin < state.currentMin) continue
+                // 1. Витягуємо затримку для цього рейсу (0, якщо її немає)
+                val delayMin = liveDelays[edge.tripId] ?: 0
+                
+                // 2. Рахуємо живий час
+                val liveDepMin = edge.departureMin + delayMin
+                val liveArrMin = edge.arrivalMin + delayMin
+                
+                // ШВИДКІСНИЙ ФІЛЬТР: тепер працює з реальним (живим) часом відправлення!
+                // Автобус, що запізнюється, більше не буде "зникати".
+                if (!isWalk && liveDepMin < state.currentMin) continue
 
-                val absDepMin = if (isWalk) state.currentMin else edge.departureMin
-                val absArrMin = if (isWalk) state.currentMin + edge.arrivalMin else edge.arrivalMin
+                // 3. Віддаємо живий час далі в алгоритм
+                val absDepMin = if (isWalk) state.currentMin else liveDepMin
+                val absArrMin = if (isWalk) state.currentMin + edge.arrivalMin else liveArrMin
 
                 val isSameTrip = state.tripId == edge.tripId
                 val newLastTransferMin = if (!isSameTrip && state.tripId != null) state.currentMin else state.lastTransferMin
@@ -413,9 +423,10 @@ object TransitGraph {
         targets: Map<String, Int>,
         searchTime: LocalDateTime,
         maxAcceptableDelayMin: Int = 15,
-        minTransferAlternatives: Int = 3
+        minTransferAlternatives: Int = 3,
+        liveDelays: Map<String, Int> = emptyMap()
     ): List<List<RouteEdge>> {
-        val optimal = findBestRoute(starts, targets, searchTime, maxTransfers = 2) ?: return emptyList()
+        val optimal = findBestRoute(starts, targets, searchTime, maxTransfers = 2, liveDelays = liveDelays) ?: return emptyList()
         val results = mutableListOf(optimal)
 
         val optimalTripCount = optimal.map { it.tripId }.filter { it != "WALK" }.distinct().size
@@ -423,7 +434,7 @@ object TransitGraph {
 
         val optimalArrival = optimal.last().arrivalMin
 
-        val direct = findBestRoute(starts, targets, searchTime, maxTransfers = 0)
+        val direct = findBestRoute(starts, targets, searchTime, maxTransfers = 0, liveDelays = liveDelays)
         if (direct != null && direct.last().arrivalMin - optimalArrival <= maxAcceptableDelayMin) {
             results.add(direct)
         }
@@ -432,7 +443,8 @@ object TransitGraph {
             starts, targets, searchTime,
             maxTransfers = 2,
             minTransferAlternatives = minTransferAlternatives,
-            requireDirectionalRelevance = true
+            requireDirectionalRelevance = true,
+            liveDelays = liveDelays
         )
         if (reliable != null && reliable !in results &&
             reliable.last().arrivalMin - optimalArrival <= maxAcceptableDelayMin

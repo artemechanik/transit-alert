@@ -1693,7 +1693,7 @@ async function updateTrasaCountdowns() {
         }
         
         const delayDelta = newDelay - oldDelay;
-        let expectedDepartureMin = depMin + newDelay;
+        let expectedDepartureMin = depMin;
         
         // --- ЧИСТА МАТЕМАТИКА ТАЙМЕРА (БЕЗ 1440) ---
         // JS Date сам перемкне день вперед, якщо expectedDepartureMin >= 1440
@@ -1768,7 +1768,6 @@ async function updateTrasaCountdowns() {
                     
                     const [h, m] = timeText.split(':').map(Number);
                     const currentTotalMins = h * 60 + m;
-                    const newTotalMins = currentTotalMins + delayDelta;
                     
                     // Тут спрацює наш оновлений formatTime з % 24
                     const newTimeStr = formatTime(newTotalMins);
@@ -1849,7 +1848,7 @@ function buildJourneyCard(journey) {
     
     // Універсальний помічник для фарбування часу
     const getColoredTime = (baseMin, delay) => {
-        const timeStr = formatTime(baseMin + delay);
+        const timeStr = formatTime(baseMin); // Прибрали + delay
         if (delay > 0) return `<span style="color: var(--danger); font-weight: 700;">${timeStr}</span>`;
         if (delay < 0) return `<span style="color: var(--blue); font-weight: 700;">${timeStr}</span>`;
         return timeStr;
@@ -1865,7 +1864,7 @@ function buildJourneyCard(journey) {
     const now = new Date();
     const delay = firstTransitLeg.delayMinutes || 0;
     const isLive = firstTransitLeg.isRealTime || false;
-    let expectedDepartureMin = firstTransitLeg.departureMin + delay;
+    let expectedDepartureMin = firstTransitLeg.departureMin;
 
     // ❌ ВСІ ХАКИ З 1440 ВИДАЛЕНО! ❌
     // Більше не треба перевіряти "нічні" чи "завтрашні" рейси.

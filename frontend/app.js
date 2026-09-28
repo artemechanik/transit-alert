@@ -1644,19 +1644,34 @@ function formatTime(minutes) {
     return `${h}:${m}`;
 }
 
-// Оновлює зворотній таймер на всіх картках маршруту, що зараз на екрані.
-// Робить запит на бекенд для отримання АКТУАЛЬНИХ затримок і зсуває весь таймлайн.
-async function updateTrasaCountdowns() {
-    const cards = document.querySelectorAll('.trasa-dep-min[data-dep]');
-    if (cards.length === 0) return;
+// Час рядка таймлайну, пофарбований за затримкою рейсу відносно розкладу
+function coloredTimeHtml(min, delay) {
+    const timeStr = formatTime(min);
+    if (delay > 0) return `<span style="color: var(--danger); font-weight: 700;">${timeStr}</span>`;
+    if (delay < 0) return `<span style="color: var(--blue); font-weight: 700;">${timeStr}</span>`;
+    return timeStr;
+}
 
-    // 1. Збираємо всі tripId з карток на екрані
+// Поточний live-час рядка: data-min — час від бекенда на момент пошуку (уже із затримкою),
+// тож додаємо лише зміну затримки цього рейсу відтоді
+function rowLiveMin(row) {
+    return parseInt(row.dataset.min, 10)
+        + parseInt(row.dataset.delay, 10) - parseInt(row.dataset.delayInitial, 10);
+}
+
+// Оновлює зворотній таймер на всіх картках маршруту, що зараз на екрані.
+// Робить запит на бекенд для отримання АКТУАЛЬНИХ затримок і зсуває кожен рядок
+// таймлайну на затримку ЙОГО рейсу (у маршруті з пересадкою рейси незалежні).
+async function updateTrasaCountdowns() {
+    const timelines = document.querySelectorAll('.trasa-timeline');
+    if (timelines.length === 0) return;
+
+    // 1. Збираємо всі tripId з рядків на екрані
     const tripIds = new Set();
-    cards.forEach(card => {
-        const tripId = card.getAttribute('data-trip-id');
-        if (tripId && tripId !== 'undefined' && tripId !== 'null') {
-            tripIds.add(tripId);
-        }
+    timelines.forEach(timeline => {
+        timeline.querySelectorAll('.trasa-row[data-trip-id]').forEach(row => {
+            if (row.dataset.tripId) tripIds.add(row.dataset.tripId);
+        });
     });
 
     // 2. Робимо запит на сервер за новими затримками
@@ -1673,120 +1688,106 @@ async function updateTrasaCountdowns() {
     }
 
     const now = new Date();
-    
-    cards.forEach(card => {
-        const depMin = parseInt(card.getAttribute('data-dep'), 10);
-        const tripId = card.getAttribute('data-trip-id');
-        
-        let oldDelay = parseInt(card.getAttribute('data-delay') || '0', 10);
-        let newDelay = oldDelay;
-        let isLive = card.getAttribute('data-live') === 'true';
 
-        // 3. Якщо прийшли нові дані - рахуємо дельту
-        if (tripId && liveDelays[tripId]) {
-            newDelay = liveDelays[tripId].delayMinutes;
-            isLive = liveDelays[tripId].isRealTime;
+    timelines.forEach(timeline => {
+        const rows = [...timeline.querySelectorAll('.trasa-row[data-trip-id]')];
+        if (rows.length === 0) return;
+
+        // 3. Кожен рядок бере затримку СВОГО рейсу. Якщо рейс зараз без GPS —
+        // лишаємо останню відому затримку, а не скидаємо в 0
+        rows.forEach(row => {
+            const info = liveDelays[row.dataset.tripId];
+            if (info && info.isRealTime) {
+                row.dataset.delay = info.delayMinutes;
+                row.dataset.live = 'true';
+            }
+            const timeEl = row.querySelector('.time');
+            if (timeEl) timeEl.innerHTML = coloredTimeHtml(rowLiveMin(row), parseInt(row.dataset.delay, 10));
+        });
+
+        // 4. Перевірка пересадок: та сама умова, що в RoutingGraph —
+        // наступний рейс має відправитись не раніше ніж прибуття + пішки + 1 хв
+        rows.forEach((row, k) => {
+            if (row.dataset.nextDep === undefined || !rows[k + 1]) return;
+            const next = rows[k + 1];
+            const nextDepLive = parseInt(row.dataset.nextDep, 10)
+                + parseInt(next.dataset.delay, 10) - parseInt(next.dataset.delayInitial, 10);
+            const walk = parseInt(row.dataset.transferWalk || '0', 10);
+            const missed = rowLiveMin(row) + walk + 1 > nextDepLive;
+
+            const warn = row.querySelector('.trasa-transfer-warn');
+            if (warn) warn.hidden = !missed;
+            row.title = missed ? 'Możesz nie zdążyć na przesiadkę' : '';
+        });
+
+        const firstRow = rows[0];
+        const lastRow = rows[rows.length - 1];
+        const firstDelay = parseInt(firstRow.dataset.delay, 10);
+        const isLive = firstRow.dataset.live === 'true';
+
+        // 5. Таймер відправлення — за першим рейсом
+        const timerEl = timeline.querySelector('.trasa-dep-min');
+        if (timerEl) {
+            const expectedDepartureMin = rowLiveMin(firstRow);
+
+            // --- ЧИСТА МАТЕМАТИКА ТАЙМЕРА (БЕЗ 1440) ---
+            // JS Date сам перемкне день вперед, якщо expectedDepartureMin >= 1440
+            const depDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(expectedDepartureMin / 60), expectedDepartureMin % 60, 0);
+            const diffMs = depDate - now;
+            let countdown = Math.max(0, Math.floor(diffMs / 60000));
+
+            function getMinLabel(m) {
+                if (m === 1) return 'minuta';
+                const mod10 = m % 10;
+                const mod100 = m % 100;
+                if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'minuty';
+                return 'minut';
+            }
+
+            const liveBadgeHtml = isLive 
+                ? `<span style="color: #ef4444; font-size: 9px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 2px; animation: trasaLiveBlink 1.5s infinite;">LIVE</span>` 
+                : '';
+
+            let timerHtml = '';
+            if (countdown < 60) {
+                let numStr = countdown === 0 ? '<1' : countdown;
+                let labelStr = countdown === 0 ? 'minuta' : getMinLabel(countdown);
+                let colorStr = countdown <= 30 ? '#10b981' : 'var(--text)';
+                
+                timerHtml = `
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
+                    ${liveBadgeHtml}
+                    <span style="font-size:26px; font-weight:800; color:${colorStr}; letter-spacing:-1px;">${numStr}</span>
+                    <span style="font-size:10px; font-weight:700; color:${colorStr}; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; opacity:0.8;">${labelStr}</span>
+                </div>`;
+            } else {
+                const h = Math.floor(countdown / 60);
+                const m = countdown % 60;
+                const hStr = String(h).padStart(1, '0');
+                const mStr = String(m).padStart(2, '0');
+
+                timerHtml = `
+                <div style="display:flex; flex-direction:column; align-items:center; line-height:1;">
+                    <span style="font-size:10px; font-weight:600; color:var(--text); opacity:0.8; margin-bottom:3px;">
+                        odjazd za:
+                    </span>
+                    <span style="font-size:16px; font-weight:700; color:var(--text);">
+                        ${hStr}h ${mStr}m
+                    </span>
+                </div>`;
+            }
             
-            // Записуємо нові дані в пам'ять картки
-            card.setAttribute('data-delay', newDelay);
-            card.setAttribute('data-live', isLive ? 'true' : 'false');
-        }
-        
-        const delayDelta = newDelay - oldDelay;
-        // data-dep уже містить затримку на момент пошуку (бекенд віддає live-час),
-        // тож додаємо лише те, наскільки затримка змінилась відтоді
-        const initialDelay = parseInt(card.getAttribute('data-delay-initial') || '0', 10);
-        let expectedDepartureMin = depMin + (newDelay - initialDelay);
-        
-        // --- ЧИСТА МАТЕМАТИКА ТАЙМЕРА (БЕЗ 1440) ---
-        // JS Date сам перемкне день вперед, якщо expectedDepartureMin >= 1440
-        const depDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(expectedDepartureMin / 60), expectedDepartureMin % 60, 0);
-        const diffMs = depDate - now;
-        let countdown = Math.max(0, Math.floor(diffMs / 60000));
-
-        function getMinLabel(m) {
-            if (m === 1) return 'minuta';
-            const mod10 = m % 10;
-            const mod100 = m % 100;
-            if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'minuty';
-            return 'minut';
+            timerEl.innerHTML = timerHtml;
         }
 
-        const liveBadgeHtml = isLive 
-            ? `<span style="color: #ef4444; font-size: 9px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 2px; animation: trasaLiveBlink 1.5s infinite;">LIVE</span>` 
-            : '';
-
-        let timerHtml = '';
-        if (countdown < 60) {
-            let numStr = countdown === 0 ? '<1' : countdown;
-            let labelStr = countdown === 0 ? 'minuta' : getMinLabel(countdown);
-            let colorStr = countdown <= 30 ? '#10b981' : 'var(--text)';
-            
-            timerHtml = `
-            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
-                ${liveBadgeHtml}
-                <span style="font-size:26px; font-weight:800; color:${colorStr}; letter-spacing:-1px;">${numStr}</span>
-                <span style="font-size:10px; font-weight:700; color:${colorStr}; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; opacity:0.8;">${labelStr}</span>
-            </div>`;
-        } else {
-    const h = Math.floor(countdown / 60);
-    const m = countdown % 60;
-    const hStr = String(h).padStart(1, '0');
-    const mStr = String(m).padStart(2, '0');
-
-    timerHtml = `
-    <div style="display:flex; flex-direction:column; align-items:center; line-height:1;">
-        <span style="font-size:10px; font-weight:600; color:var(--text); opacity:0.8; margin-bottom:3px;">
-            odjazd za:
-        </span>
-        <span style="font-size:16px; font-weight:700; color:var(--text);">
-            ${hStr}h ${mStr}m
-        </span>
-    </div>`;
-}
-        
-        card.innerHTML = timerHtml;
-
-        // --- ДИНАМІЧНЕ ОНОВЛЕННЯ ІКОНКИ СТАТУСУ ---
-        const trasaCard = card.closest('.trasa-card');
+        // 6. Шапка: статус першого рейсу + тривалість (перший і останній рейси можуть мати різні затримки)
+        const trasaCard = timeline.closest('.trasa-card');
         if (trasaCard) {
             const statusWrap = trasaCard.querySelector('.trasa-header-status-wrap');
-            if (statusWrap) {
-                // Викликаємо нашого помічника з новими даними
-                statusWrap.innerHTML = getLiveStatusBadge(isLive, newDelay);
-            }
-        }
+            if (statusWrap) statusWrap.innerHTML = getLiveStatusBadge(isLive, firstDelay);
 
-        // 4. Зсуваємо ВСІ години в картці, якщо затримка змінилася
-        if (delayDelta !== 0) {
-            const detailsContainer = card.closest('.trasa-details');
-            if (detailsContainer) {
-                // Знаходимо абсолютно всі години в цій картці
-                const timeElements = detailsContainer.querySelectorAll('.trasa-row .time');
-                
-                timeElements.forEach(timeEl => {
-                    // textContent дістає чистий текст (напр. "16:44"), ігноруючи HTML-теги
-                    const timeText = timeEl.textContent.trim();
-                    if (!timeText.includes(':')) return;
-                    
-                    const [h, m] = timeText.split(':').map(Number);
-                    const currentTotalMins = h * 60 + m;
-                    const newTotalMins = currentTotalMins + delayDelta;
-
-                    // Тут спрацює наш оновлений formatTime з % 24
-                    const newTimeStr = formatTime(newTotalMins);
-                    
-                    // Записуємо новий час і фарбуємо його
-                    if (newDelay > 0) {
-                        timeEl.innerHTML = `<span style="color: #ef4444; font-weight: 700;">${newTimeStr}</span>`;
-                    } else if (newDelay < 0) {
-                        timeEl.innerHTML = `<span style="color: #10b981; font-weight: 700;">${newTimeStr}</span>`;
-                    } else {
-                        // Якщо затримка повернулася в 0 (автобус нагнав розклад)
-                        timeEl.innerHTML = newTimeStr;
-                    }
-                });
-            }
+            const durationEl = trasaCard.querySelector('.trasa-duration');
+            if (durationEl) durationEl.textContent = `${Math.max(0, rowLiveMin(lastRow) - rowLiveMin(firstRow))}m`;
         }
     });
 }
@@ -1850,16 +1851,21 @@ function buildJourneyCard(journey) {
     // Коригуємо загальний час у дорозі, щоб математика зійшлася
     const extraWalkTime = (walkMin - walkMinRaw) + (finalWalkMin - finalWalkMinRaw);
     
-    // Універсальний помічник для фарбування часу
-    const getColoredTime = (baseMin, delay) => {
-        const timeStr = formatTime(baseMin); // Прибрали + delay
-        if (delay > 0) return `<span style="color: var(--danger); font-weight: 700;">${timeStr}</span>`;
-        if (delay < 0) return `<span style="color: var(--blue); font-weight: 700;">${timeStr}</span>`;
-        return timeStr;
+    // Прив'язка рядка таймлайну до рейсу: updateTrasaCountdowns зсуває кожен рядок
+    // на затримку саме його рейсу (min — час від бекенда, уже із затримкою)
+    const rowAttrs = (leg, min) => {
+        const d = leg.delayMinutes || 0;
+        return `data-trip-id="${leg.tripId || ''}" data-min="${min}" data-delay="${d}" data-delay-initial="${d}" data-live="${leg.isRealTime ? 'true' : 'false'}"`;
     };
 
-    const depTime = getColoredTime(firstTransitLeg.departureMin, firstTransitLeg.delayMinutes || 0);
-    const arrTime = getColoredTime(lastTransitLeg.arrivalMin, lastTransitLeg.delayMinutes || 0);
+    // Пішки між двома рейсами (сирі хвилини бекенда — та сама умова, що в роутингу)
+    const transferWalkMin = (fromLeg, toLeg) => legs
+        .slice(legs.indexOf(fromLeg) + 1, legs.indexOf(toLeg))
+        .filter(l => l.route === "Пішки" || !l.route)
+        .reduce((sum, l) => sum + Math.max(0, l.arrivalMin - l.departureMin), 0);
+
+    const depTime = coloredTimeHtml(firstTransitLeg.departureMin, firstTransitLeg.delayMinutes || 0);
+    const arrTime = coloredTimeHtml(lastTransitLeg.arrivalMin, lastTransitLeg.delayMinutes || 0);
     // Рахуємо суто час від посадки в перший автобус до висадки з останнього
     // departureMin/arrivalMin від бекенда вже з урахуванням затримки
     const transitStart = firstTransitLeg.departureMin;
@@ -1929,7 +1935,7 @@ function buildJourneyCard(journey) {
     const dotWrapperStyle = 'width: 24px; display: flex; justify-content: center; z-index: 2; flex-shrink: 0;';
 
     // 1. ПЕРША ЗУПИНКА
-    timelineHtml += `<div class="trasa-row" style="${rowStyle}">
+    timelineHtml += `<div class="trasa-row" ${rowAttrs(firstTransitLeg, firstTransitLeg.departureMin)} style="${rowStyle}">
         <div class="time" style="${timeStyle}">${depTime}</div>
         <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
         <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">${fromStop.name} ${fromStop.code ? `<span class="stop-code" style="color:var(--text); font-size:15px; font-weight:600;">(${fromStop.code})</span>` : ''}</div>
@@ -1938,22 +1944,23 @@ function buildJourneyCard(journey) {
     // 2. ПРОМІЖНІ ЗУПИНКИ
     for (let i = 0; i < transitLegs.length - 1; i++) {
         const tStop = splitStopName(transitLegs[i].toStopName);
-        timelineHtml += `<div class="trasa-row" style="${rowStyle} opacity: 0.8;">
-            <div class="time" style="${timeStyle} font-size: 14px; font-weight: 500; color: var(--text-muted);">${getColoredTime(transitLegs[i].arrivalMin, transitLegs[i].delayMinutes || 0)}</div>
+        const nextLeg = transitLegs[i + 1];
+        timelineHtml += `<div class="trasa-row" ${rowAttrs(transitLegs[i], transitLegs[i].arrivalMin)} data-next-dep="${nextLeg.departureMin}" data-transfer-walk="${transferWalkMin(transitLegs[i], nextLeg)}" style="${rowStyle} opacity: 0.8;">
+            <div class="time" style="${timeStyle} font-size: 14px; font-weight: 500; color: var(--text-muted);">${coloredTimeHtml(transitLegs[i].arrivalMin, transitLegs[i].delayMinutes || 0)}</div>
             <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--border); box-shadow: 0 0 0 3px var(--card);"></div></div>
-            <div class="stop-name" style="flex: 1; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">➔ ${tStop.name} ${tStop.code ? `<span class="stop-code" style="font-size: 14px; font-weight: 500; color: var(--text-muted);">(${tStop.code})</span>` : ''}</div>
+            <div class="stop-name" style="flex: 1; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;"><span class="trasa-transfer-warn" hidden style="color: var(--danger); font-weight: 700;">⚠ Zagrożona przesiadka · </span>➔ ${tStop.name} ${tStop.code ? `<span class="stop-code" style="font-size: 14px; font-weight: 500; color: var(--text-muted);">(${tStop.code})</span>` : ''}</div>
         </div>`;
     }
 
     // 3. ОСТАННЯ ЗУПИНКА
-    timelineHtml += `<div class="trasa-row" style="${rowStyle}">
+    timelineHtml += `<div class="trasa-row" ${rowAttrs(lastTransitLeg, lastTransitLeg.arrivalMin)} style="${rowStyle}">
         <div class="time" style="${timeStyle}">${arrTime}</div>
         <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
         <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">${toStop.name} ${toStop.code ? `<span class="stop-code" style="color:var(--text); font-size:15px; font-weight:600;">(${toStop.code})</span>` : ''}</div>
     </div>`;
     
     // 4. ТАЙМЕР АБСОЛЮТНИЙ (відцентрований відносно всього таймлайну!)
-    timelineHtml += `<div class="trasa-dep-min" data-dep="${firstTransitLeg.departureMin}" data-delay="${delay}" data-delay-initial="${delay}" data-trip-id="${firstTransitLeg.tripId || ''}" data-live="${isLive}" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 5;">${timerHtml}</div>`;
+    timelineHtml += `<div class="trasa-dep-min" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 5;">${timerHtml}</div>`;
 
     timelineHtml += '</div>';
 
@@ -1976,7 +1983,7 @@ function buildJourneyCard(journey) {
             <!-- Далі твій старий код пішоходів і годинника -->
             ${walkMin > 0 ? `<div style="display:flex; align-items:center; gap:2px;"><div class="svg-icon icon-walk" style="width:13px;height:13px;"></div>${walkMin}m</div> <span style="opacity:0.4">•</span>` : ''}
             <div style="display:flex; align-items:center; gap:3px; color: var(--text-muted);">
-                <div class="svg-icon icon-bus-ride" style="width:20px;height:16px; color:var(--text-muted);"></div>${duration}m
+                <div class="svg-icon icon-bus-ride" style="width:20px;height:16px; color:var(--text-muted);"></div><span class="trasa-duration">${duration}m</span>
             </div>
             ${finalWalkMin > 0 ? `<span style="opacity:0.4">•</span> <div style="display:flex; align-items:center; gap:2px;"><div class="svg-icon icon-walk" style="width:13px;height:13px;"></div>${finalWalkMin}m</div>` : ''}
         </div>
@@ -2110,7 +2117,10 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
             </div>`;
 
             // БЛОК 3: Список зупинок з лінією (Таймлайн)
-            const delay = leg.delayMinutes || 0; // ВИЛУЧАЄМО ЗАТРИМКУ З ПОТОЧНОГО РЕЙСУ
+            // s.eta — статичний розклад, тож додаємо ПОТОЧНУ затримку саме цього рейсу
+            // (рядок таймлайну оновлюється updateTrasaCountdowns; fallback — затримка на момент пошуку)
+            const legRow = [...card.querySelectorAll('.trasa-row[data-trip-id]')].find(r => r.dataset.tripId === leg.tripId);
+            const delay = legRow ? parseInt(legRow.dataset.delay, 10) : (leg.delayMinutes || 0);
             
             const stopsHtml = stops.length ? stops.map((s, index) => {
                 const stopName = s.name || '';

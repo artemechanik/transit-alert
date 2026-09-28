@@ -322,6 +322,24 @@ function flyToStop(stop) {
 }
 
 // ==================== Розгортання картки табло: наступні зупинки + показ на мапі ====================
+// Список зупинок рейсу від поточної зупинки; isPassed — автобус уже проїхав її.
+// Кидає помилку, якщо не вдалося завантажити (викликач сам вирішує, що показати)
+async function renderDepExpand(panel, dep) {
+  const res = await fetch(`${API_BASE_URL}/trips/${dep.tripId}/upcoming-stops?fromStopId=${encodeURIComponent(currentStopIdForDepartures)}`);
+  if (!res.ok) throw new Error('not found');
+  const stops = await res.json();
+  if (!panel.classList.contains('open')) return; // панель згорнули, поки йшов запит
+
+  const stopsHtml = stops.length
+    ? stops.map(s => `<div class="dep-expand-stop${s.isPassed ? ' dep-expand-stop-passed' : ''}"><span>${s.name}</span><span class="dep-expand-eta">${s.eta}</span></div>`).join('')
+    : '<div class="dep-expand-loading">To ostatni przystanek na trasie</div>';
+
+  panel.innerHTML = `
+    <div class="dep-expand-stops">${stopsHtml}</div>
+    <button class="dep-expand-map-btn" onclick="showVehicleOnMap('${dep.tripId}')"> <div class="svg-icon icon-map-pin"></div> Pokaż na mapie</button>
+  `;
+}
+
 async function toggleDepExpand(card, panel, dep) {
   const isOpen = panel.classList.contains('open');
   // Схлопуємо всі інші відкриті картки
@@ -340,18 +358,7 @@ async function toggleDepExpand(card, panel, dep) {
   panel.innerHTML = '<div class="dep-expand-loading">Ładowanie trasy...</div>';
 
   try {
-    const res = await fetch(`${API_BASE_URL}/trips/${dep.tripId}/upcoming-stops?fromStopId=${encodeURIComponent(currentStopIdForDepartures)}`);
-    if (!res.ok) throw new Error('not found');
-    const stops = await res.json();
-
-    const stopsHtml = stops.length
-      ? stops.map(s => `<div class="dep-expand-stop${s.isPassed ? ' dep-expand-stop-passed' : ''}"><span>${s.name}</span><span class="dep-expand-eta">${s.eta}</span></div>`).join('')
-      : '<div class="dep-expand-loading">To ostatni przystanek na trasie</div>';
-
-    panel.innerHTML = `
-      <div class="dep-expand-stops">${stopsHtml}</div>
-      <button class="dep-expand-map-btn" onclick="showVehicleOnMap('${dep.tripId}')"> <div class="svg-icon icon-map-pin"></div> Pokaż na mapie</button>
-    `;
+    await renderDepExpand(panel, dep);
 
     // --- НОВА ЛОГІКА ПЛАВНОГО СКРОЛУ ---
     setTimeout(() => {
@@ -1790,6 +1797,9 @@ async function updateTrasaCountdowns() {
             if (durationEl) durationEl.textContent = `${Math.max(0, rowLiveMin(lastRow) - rowLiveMin(firstRow))}m`;
         }
     });
+
+    // 7. Розгорнута картка: зупинки сіріють, поки автобус їде
+    await refreshOpenTrasaPassedStops();
 }
 
 // Розділяємо імена зупинок і коди платформ (напр. "Lipowa 03" -> {name:"Lipowa", code:"03"})
@@ -2016,6 +2026,39 @@ function buildJourneyCard(journey) {
 }
 
 // ==================== Розгортання картки маршруту: проміжні зупинки, пересадки, показ на мапі ====================
+// Оновлює "пройдені" зупинки в розгорнутій картці маршруту (викликається з updateTrasaCountdowns).
+// Міняє лише класи рядків, а не весь HTML, щоб не збивати скрол у списку
+async function refreshOpenTrasaPassedStops() {
+    const containers = document.querySelectorAll('.trasa-card.fullscreen-expanded .trasa-leg-stops[data-trip-id]');
+    await Promise.all([...containers].map(async container => {
+        const { tripId, fromStopId, toStopId } = container.dataset;
+        const stops = await fetchLegStops({ tripId, fromStopId, toStopId });
+        const rows = container.querySelectorAll('.trasa-leg-stop');
+        // Рядки рендерились із того самого запиту, тож порядок збігається; інакше — не чіпаємо
+        if (stops.length !== rows.length) return;
+        rows.forEach((row, i) => row.classList.toggle('dep-expand-stop-passed', !!stops[i].isPassed));
+    }));
+}
+
+// Зупинки одного відрізка маршруту: від посадки до висадки (включно).
+// isPassed у кожній — автобус уже проїхав цю зупинку
+async function fetchLegStops(leg) {
+    if (!leg.tripId || leg.tripId === 'WALK' || !leg.fromStopId) return [];
+    try {
+        const res = await fetch(`${API_BASE_URL}/trips/${leg.tripId}/upcoming-stops?fromStopId=${encodeURIComponent(leg.fromStopId)}`);
+        if (!res.ok) return [];
+        const stops = await res.json();
+        // Матчимо по toStopId (реальний ID зупинки висадки), а не по назві —
+        // назви можуть повторюватись раніше в маршруті й обрізати список зарано.
+        const cutIdx = leg.toStopId
+            ? stops.findIndex(s => s.stopId === leg.toStopId)
+            : -1;
+        return cutIdx >= 0 ? stops.slice(0, cutIdx + 1) : stops.slice(0, 8);
+    } catch (e) {
+        return [];
+    }
+}
+
 async function toggleTrasaExpand(card, legs, transitLegs) {
     const isOpen = card.classList.contains('fullscreen-expanded');
     const scrollPanel = card.querySelector('.trasa-middle-scroll');
@@ -2040,22 +2083,7 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
     scrollPanel.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--text-muted);">Ładowanie trasy...</div>';
 
     try {
-        const legStopsResults = await Promise.all(transitLegs.map(async (leg) => {
-            if (!leg.tripId || leg.tripId === 'WALK' || !leg.fromStopId) return [];
-            try {
-                const res = await fetch(`${API_BASE_URL}/trips/${leg.tripId}/upcoming-stops?fromStopId=${encodeURIComponent(leg.fromStopId)}`);
-                if (!res.ok) return [];
-                const stops = await res.json();
-                // Матчимо по toStopId (реальний ID зупинки висадки), а не по назві —
-                // назви можуть повторюватись раніше в маршруті й обрізати список зарано.
-                const cutIdx = leg.toStopId
-                    ? stops.findIndex(s => s.stopId === leg.toStopId)
-                    : -1;
-                return cutIdx >= 0 ? stops.slice(0, cutIdx + 1) : stops.slice(0, 8);
-            } catch (e) {
-                return [];
-            }
-        }));
+        const legStopsResults = await Promise.all(transitLegs.map(fetchLegStops));
 
         let html = '';
         let transitIdx = 0;
@@ -2143,7 +2171,7 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
                 }
 
                 return `
-                <div style="position: relative; padding: 10px 14px 10px 42px; display: flex; justify-content: space-between; align-items: center;">
+                <div class="trasa-leg-stop${s.isPassed ? ' dep-expand-stop-passed' : ''}" style="position: relative; padding: 10px 14px 10px 42px; display: flex; justify-content: space-between; align-items: center;">
                     <!-- Крапка -->
                     <div style="position: absolute; left: ${dotLeft}; top: 50%; transform: translateY(-50%); width: ${dotSize}; height: ${dotSize}; border-radius: 50%; background: ${dotColor}; z-index: 2;"></div>
                     
@@ -2158,7 +2186,8 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
                     <span style="font-weight: ${fontWeight}; color: ${textColor}; font-size: 15px;">${realEta}</span>
                 </div>`;
             }).join('') : '<div style="padding: 10px; text-align: center; color: var(--text-muted);">Brak danych</div>';
-            html += `<div style="padding-bottom: 4px;">${stopsHtml}</div>`;
+            // data-* — щоб refreshOpenTrasaPassedStops міг перезапитати цей відрізок
+            html += `<div class="trasa-leg-stops" data-trip-id="${leg.tripId || ''}" data-from-stop-id="${leg.fromStopId || ''}" data-to-stop-id="${leg.toStopId || ''}" style="padding-bottom: 4px;">${stopsHtml}</div>`;
             transitIdx++;
         });
 
@@ -2659,6 +2688,11 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
       const oldScrollTop = departuresList.scrollTop;
       const oldScrollHeight = departuresList.scrollHeight;
 
+      // Запам'ятовуємо відкриту панель зупинок, щоб перерендер її не закрив
+      const openCard = departuresList.querySelector('.dep-card.open');
+      const openKey = openCard ? openCard.dataset.depKey : null;
+      const openPanelHtml = openCard ? openCard.nextElementSibling.innerHTML : '';
+
       departuresList.innerHTML = '';
       
       currentDeparturesData.forEach(dep => {
@@ -2738,6 +2772,7 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
         const card = document.createElement('div');
         card.className = `dep-card${ghostClass}`;
         card.dataset.tripId = dep.tripId || '';
+        card.dataset.depKey = `${dep.tripId}-${dep.scheduledTime}`;
 
         // Перевіряємо чи є бортовий номер і тип
         const vehicleIdHtml = dep.vehicleId ? dep.vehicleId : ''; 
@@ -2773,6 +2808,15 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
         if (!isPast && dep.tripId) {
           card.classList.add('expandable');
           card.addEventListener('click', () => toggleDepExpand(card, expandPanel, dep));
+
+          // Відновлюємо відкриту панель: одразу старий вміст (без стрибка скролу),
+          // потім тихо підтягуємо свіжі isPassed — зупинки сіріють, поки автобус їде
+          if (openKey && card.dataset.depKey === openKey) {
+            card.classList.add('open');
+            expandPanel.classList.add('open');
+            expandPanel.innerHTML = openPanelHtml;
+            renderDepExpand(expandPanel, dep).catch(() => {}); // при збої лишаємо попередній список
+          }
         }
 
         wrapper.appendChild(card);

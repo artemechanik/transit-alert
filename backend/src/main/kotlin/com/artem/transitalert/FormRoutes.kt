@@ -291,19 +291,15 @@ fun Application.formRoutes() {
 
                     // 3. Зсуваємо час пошуку ТІЛЬКИ на основі першого (оптимального) маршруту
                     if (index == 0) {
-                        // Знаходимо, скільки хвилин іти від GPS до першої зупинки
-                        val startStopId = legs.first().fromStopId
-                        val walkFromGpsMins = starts.find { it.first == startStopId }?.second ?: 0
-                        
-                        // Якщо алгоритм пропонує додатково пройтися між зупинками
-                        val walkBetweenStops = if (legs.first().route == "Пішки") (legs.first().arrivalMin - legs.first().departureMin) else 0
+                        val walkDuration = if (legs.first().route == "Пішки") {
+                            legs.first().arrivalMin - legs.first().departureMin
+                        } else 0
                         val firstBus = legs.find { it.route != "Пішки" }
-                        
+
                         nextSearchMin = if (firstBus != null) {
-                            // Віднімаємо ВЕСЬ піший час, щоб отримати точний час виходу з точки GPS
-                            firstBus.departureMin - (walkFromGpsMins + walkBetweenStops) + 1
+                            firstBus.departureMin - walkDuration + 1
                         } else {
-                            legs.first().departureMin - walkFromGpsMins + 1
+                            legs.first().departureMin + 1
                         }
                     }
                 }

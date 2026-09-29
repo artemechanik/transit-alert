@@ -274,7 +274,8 @@ object TransitGraph {
         maxTransfers: Int = 2,
         minTransferAlternatives: Int = 0,
         requireDirectionalRelevance: Boolean = false,
-        liveDelays: Map<String, Int> = emptyMap()
+        liveDelays: Map<String, Int> = emptyMap(),
+        excludedTripIds: Set<String> = emptySet()
     ): List<RouteEdge>? {
         if (!isLoaded) return null
         
@@ -321,6 +322,10 @@ object TransitGraph {
             
             for (edge in outgoingEdges) {
                 val isWalk = edge.tripId == "WALK"
+
+                // Для пошуку альтернативи можна виключити вже знайдений рейс.
+                // Пішохідні ребра не мають виключатися.
+                if (!isWalk && edge.tripId in excludedTripIds) continue
                 
                 // 1. Витягуємо затримку для цього рейсу (0, якщо її немає)
                 val delayMin = liveDelays[edge.tripId] ?: 0
@@ -429,10 +434,35 @@ object TransitGraph {
         val optimal = findBestRoute(starts, targets, searchTime, maxTransfers = 2, liveDelays = liveDelays) ?: return emptyList()
         val results = mutableListOf(optimal)
 
-        val optimalTripCount = optimal.map { it.tripId }.filter { it != "WALK" }.distinct().size
-        if (optimalTripCount <= 1) return results // оптимальний і так прямий, решта неактуальна
-
+        val optimalTripIds = optimal.map { it.tripId }
+            .filter { it != "WALK" }
+            .distinct()
+        val optimalTripCount = optimalTripIds.size
         val optimalArrival = optimal.last().arrivalMin
+
+        // Якщо оптимальний маршрут прямий, шукаємо ще один прямий рейс,
+        // виключивши лише ті tripId, які вже використані оптимальним маршрутом.
+        // Пошук усе одно виконується по всіх starts одночасно — без окремого
+        // запуску алгоритму для кожної найближчої зупинки.
+        if (optimalTripCount <= 1) {
+            val alternativeDirect = findBestRoute(
+                starts = starts,
+                targets = targets,
+                searchTime = searchTime,
+                maxTransfers = 0,
+                liveDelays = liveDelays,
+                excludedTripIds = optimalTripIds.toSet()
+            )
+
+            if (
+                alternativeDirect != null &&
+                alternativeDirect.last().arrivalMin - optimalArrival <= maxAcceptableDelayMin
+            ) {
+                results.add(alternativeDirect)
+            }
+
+            return results
+        }
 
         val direct = findBestRoute(starts, targets, searchTime, maxTransfers = 0, liveDelays = liveDelays)
         if (direct != null && direct.last().arrivalMin - optimalArrival <= maxAcceptableDelayMin) {

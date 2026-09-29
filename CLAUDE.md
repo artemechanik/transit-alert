@@ -67,7 +67,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   порядку через psql у контейнер, напр.
   `docker exec -i $(docker compose ps -q postgres) psql -U transit -d transit_alert < seed_stops.sql`
   (порядок: `seed_stops` → `seed_service_calendar` → `seed_trip_headsign` →
-  `seed_stop_departures` → `seed_trip_stops`; останні два — ~225к рядків кожен).
+  `seed_stop_departures` → `seed_trip_stops`; останні два — ~225к рядків кожен,
+  ~50 МБ, лежать лише локально й у `.gitignore`, у клоні їх немає).
 - **Config через env** (усе має дефолти для localhost):
   `DB_URL`, `DB_USER`, `DB_PASSWORD` (див. `DatabaseFactory.kt`).
 - **JVM:** toolchain 17 (`build.gradle.kts`).

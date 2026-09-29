@@ -36,7 +36,9 @@ docker exec -i $(docker compose ps -q postgres) psql -U transit -d transit_alert
 docker exec -i $(docker compose ps -q postgres) psql -U transit -d transit_alert < seed_stop_departures.sql
 docker exec -i $(docker compose ps -q postgres) psql -U transit -d transit_alert < seed_trip_stops.sql
 ```
-Останні два файли великі (225к рядків кожен, ~13 МБ) — заливка займе трохи довше, це нормально.
+Останні два файли великі (225к рядків кожен, ~50 МБ) — заливка займе трохи довше, це нормально.
+`seed_stop_departures.sql` і `seed_trip_stops.sql` не зберігаються в git (див. `.gitignore`) —
+у свіжому клоні їх немає, тож згенеруй їх локально або пропусти цей крок.
 
 ### 4. Запусти застосунок
 Gradle wrapper (`gradlew`) у архіві немає — треба згенерувати один раз

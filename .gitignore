@@ -44,6 +44,7 @@ gtfs-static/
 # OS
 Thumbs.db
 backend/seed_stop_departures.sql
+backend/seed_trip_stops.sql
 
 # Scraper
 scraper/

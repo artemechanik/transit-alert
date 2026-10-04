@@ -25,20 +25,10 @@ docker compose up -d
 ```
 Перевір що піднялось: `docker compose ps`
 
-### 3. Завантаж дані зупинок і розкладу у БД (одноразово)
-Спочатку запусти застосунок хоч раз (нижче), щоб Exposed створив таблиці —
-`SchemaUtils.create()` в `DatabaseFactory.kt` робить це автоматично при старті.
-Потім залий seed-файли по порядку:
-```bash
-docker exec -i $(docker compose ps -q postgres) psql -U transit -d transit_alert < seed_stops.sql
-docker exec -i $(docker compose ps -q postgres) psql -U transit -d transit_alert < seed_service_calendar.sql
-docker exec -i $(docker compose ps -q postgres) psql -U transit -d transit_alert < seed_trip_headsign.sql
-docker exec -i $(docker compose ps -q postgres) psql -U transit -d transit_alert < seed_stop_departures.sql
-docker exec -i $(docker compose ps -q postgres) psql -U transit -d transit_alert < seed_trip_stops.sql
-```
-Останні два файли великі (225к рядків кожен, ~50 МБ) — заливка займе трохи довше, це нормально.
-`seed_stop_departures.sql` і `seed_trip_stops.sql` не зберігаються в git (див. `.gitignore`) —
-у свіжому клоні їх немає, тож згенеруй їх локально або пропусти цей крок.
+### 3. Дані зупинок і розкладу
+Нічого заливати не треба: при першому старті `GtfsStaticSync` сам завантажує GTFS-фід
+і заповнює таблиці (`SchemaUtils.create()` створює їх автоматично). Щоб примусово
+перезалити дані: `DELETE FROM gtfs_feed_meta;` і перезапусти застосунок.
 
 ### 4. Запусти застосунок
 Gradle wrapper (`gradlew`) у архіві немає — треба згенерувати один раз

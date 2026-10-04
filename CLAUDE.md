@@ -63,12 +63,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Frontend:** статика, віддається будь-яким HTTP-сервером:
   `cd frontend && python3 -m http.server 8000` → `http://localhost:8000`.
   `frontend/app.js` б'є у бекенд напряму (CORS `anyHost()`).
-- **Seed даних (одноразово, після першого старту застосунку):** залити SQL по
-  порядку через psql у контейнер, напр.
-  `docker exec -i $(docker compose ps -q postgres) psql -U transit -d transit_alert < seed_stops.sql`
-  (порядок: `seed_stops` → `seed_service_calendar` → `seed_trip_headsign` →
-  `seed_stop_departures` → `seed_trip_stops`; останні два — ~225к рядків кожен,
-  ~50 МБ, лежать лише локально й у `.gitignore`, у клоні їх немає).
+- **Дані GTFS:** seed-файлів немає — `GtfsStaticSync` сам заповнює `stops`, `service_calendar`,
+  `trip_headsigns`, `stop_departures`, `trip_stops` з фіду при першому старті. Щоб примусово
+  перезалити: `DELETE FROM gtfs_feed_meta;` і перезапуск бекенда.
 - **Config через env** (усе має дефолти для localhost):
   `DB_URL`, `DB_USER`, `DB_PASSWORD` (див. `DatabaseFactory.kt`).
 - **JVM:** toolchain 17 (`build.gradle.kts`).

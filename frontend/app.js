@@ -9,7 +9,6 @@ if (window.location.hostname.includes('trycloudflare.com')) {
     API_BASE_URL = window.location.protocol + '//' + window.location.hostname + ':8080';
 }
 // ================================================
-const LUBLIN_CENTER = [51.2465, 22.5684];
 const REPORT_TTL_MS = 45 * 60 * 1000; // синхронно з REPORT_TTL_MINUTES на бекенді
 
 let lastJourneyDepartureMin = null; // Зберігає час для наступного свайпу
@@ -52,218 +51,97 @@ window.addEventListener('DOMContentLoaded', () => {
     // Фіксуємо початковий стан при завантаженні
     window.history.replaceState({ screen: 'map' }, "");
 });
-// ==================== Карта ====================
+// ==================== Карта (MapLibre GL) ====================
 let map, reportMarkersLayer, searchMarker, vehicleMarker;
-let userLocationMarker; // Наша синя крапка (або чоловічок з валізою)
+let userLocationMarker;
 let allVehiclesClusterGroup = null;
 let liveMapInterval = null;
-L.Marker.prototype.smoothMove = function(newLat, newLon, durationMs) {
-    const startLatLng = this.getLatLng();
-    const startTime = performance.now();
-    const marker = this;
-
-    function step(currentTime) {
-        let progress = (currentTime - startTime) / durationMs;
-        if (progress > 1) progress = 1;
-
-        const currentLat = startLatLng.lat + (newLat - startLatLng.lat) * progress;
-        const currentLon = startLatLng.lng + (newLon - startLatLng.lng) * progress;
-        
-        marker.setLatLng([currentLat, currentLon]);
-
-        if (progress < 1) {
-            requestAnimationFrame(step);
-        }
-    }
-    requestAnimationFrame(step);
-};
-//=======Update Vehicle Bearing
-        function updateVehicleBearing(marker, route, bearing) {
-            // 1. Оновлюємо "живий" DOM (якщо автобус зараз видимий на екрані)
-            const domElement = marker.getElement();
-            if (domElement) {
-                const arrow = domElement.querySelector('.vehicle-arrow');
-                if (arrow) arrow.style.transform = `rotate(${bearing}deg)`;
-            }
-
-            // 2. ВАЖЛИВО: Оновлюємо внутрішній шаблон Leaflet!
-            // Тепер при виході з кластера або зумі маркер перемалюється з НОВИМ кутом.
-            marker.options.icon.options.html = `
-              <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
-                <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
-                  <polygon points="50,10 90,90 10,90" style="fill: var(--blue); stroke: white; stroke-width: 11px; stroke-linejoin: round;" />
-                </svg>
-                <div class="vehicle-marker-dot">${route || '🚌'}</div>
-              </div>
-            `;
-        }
-
-// Налаштовуємо круту іконку
-const passengerIcon = L.icon({
-    iconUrl: '43976.svg', 
-    iconSize: [30, 30], 
-    iconAnchor: [15, 30], // Щоб він стояв ногами на координатах
-    className: 'user-marker-icon'
-});
-// ==================== КНОПКА GPS ДЛЯ LEAFLET ====================
-L.Control.GPSButton = L.Control.extend({
-  options: { position: 'bottomleft' }, // Буде висіти над кнопками +/-
-  
-  onAdd: function(targetMap) {
-    const btn = L.DomUtil.create('button', 'gps-locate-btn');
-    btn.innerHTML = '<div class="svg-icon icon-gps"></div>';
-    
-    btn.onclick = function(e) {
-      e.stopPropagation(); // Блокуємо клік, щоб карта під кнопкою не смикалась
-      
-      // Перевіряємо, чи ми вже знайшли юзера (змінна з твого trackUserLocation)
-      if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
-        // Миттєво переносимо камеру на юзера
-        targetMap.flyTo(userLocationMarker.getLatLng(), 16, { duration: 0.5 });
-      } else {
-        showToast('Szukam lokalizacji GPS...');
-      }
-    };
-    
-    return btn;
-  }
-});
-// Функція, яка читає GPS телефону
-function trackUserLocation() {
-    if ('geolocation' in navigator) {
-        navigator.geolocation.watchPosition((position) => {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            
-            if (userLocationMarker) {
-                // Якщо маркер вже є - просто рухаємо його
-                userLocationMarker.setLatLng([lat, lon]);
-            } else {
-                // Якщо немає - створюємо
-                userLocationMarker = L.marker([lat, lon], { icon: passengerIcon, zIndexOffset: 1000 }).addTo(map);
-                // За бажанням: можна розкоментувати рядок нижче, щоб карта відразу центрувалась на тобі
-                map.flyTo([lat, lon], 14);
-            }
-        }, (error) => {
-            console.warn('Помилка GPS:', error.message);
-        }, { enableHighAccuracy: true });
-    }
-}
-let darkTileLayer, lightTileLayer;
-const MAPTILER_KEY = window.MAPTILER_KEY;
-
-function initMap() {
-  map = L.map('map', { zoomControl: false }).setView(LUBLIN_CENTER, 14);
-  L.control.zoom({ position: 'bottomleft' }).addTo(map);
-  new L.Control.GPSButton().addTo(map);
-  darkTileLayer = L.tileLayer(`https://api.maptiler.com/maps/streets-v4-dark/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`, {
-    maxZoom: 22,
-    attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
-  });
-
-  lightTileLayer = L.tileLayer(`https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`, {
-    maxZoom: 22,
-    attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
-  });
-
-  // 1. Ставимо правильну тему при завантаженні сторінки
-  updateMapTheme();
-
-  // 2. Слухаємо зміни теми в системі/телефоні в реальному часі!
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateMapTheme);
-
-  reportMarkersLayer = L.layerGroup().addTo(map);
-  // Запускаємо живу карту міста
-    updateLiveCityMap();
-    liveMapInterval = setInterval(updateLiveCityMap, 15000);
-}
-
-// Функція, яка перевіряє системну тему і змінює карту
-function updateMapTheme() {
-  if (!map) return;
-  
-  // Запитуємо безпосередньо систему телефону: темна тема увімкнена?
-  const isDarkOS = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-  if (isDarkOS) {
-    if (map.hasLayer(lightTileLayer)) map.removeLayer(lightTileLayer);
-    darkTileLayer.addTo(map);
-  } else {
-    if (map.hasLayer(darkTileLayer)) map.removeLayer(darkTileLayer);
-    lightTileLayer.addTo(map);
-  }
-}
-
-// ==================== LIVE КАРТА МІСТА ====================
-// Додаємо словник для збереження міток, щоб не створювати їх заново
 let activeVehicleMarkers = {}; 
 
+// Заглушки, щоб старий код не крашив додаток
+function trackUserLocation() {}
+// ==================== Живі Автобуси на Карті ====================
 async function updateLiveCityMap() {
-    if (typeof trackedTripId !== 'undefined' && trackedTripId !== null) return;
-    const mapScreenActive = !document.getElementById('nav-map').classList.contains('active');
-    if (mapScreenActive && trackedTripId === null) return; 
-
     try {
-        const res = await fetch(`${API_BASE_URL}/live-vehicles`);
-        if (!res.ok) throw new Error('Помилка мережі');
+        // Перевір, чи правильний тут ендпоінт для отримання ВСІХ автобусів міста
+        const res = await fetch(`${API_BASE_URL}/live-vehicles`); 
+        if (!res.ok) return;
         const vehicles = await res.json();
 
-       // 1. ПОВЕРТАЄМО КЛАСТЕРИ (БУЛЬБАШКИ!)
-        if (!allVehiclesClusterGroup) {
-            allVehiclesClusterGroup = L.markerClusterGroup({
-                disableClusteringAtZoom: 16, 
-                maxClusterRadius: 50, 
-                spiderfyOnMaxZoom: true
-            });
-            map.addLayer(allVehiclesClusterGroup);
-        }
+        // Сюди зберемо всі tripId, які зараз онлайн
         const currentTripIds = new Set();
 
-        vehicles.forEach(v => {
-            const tripId = v.tripId; 
-            currentTripIds.add(tripId);
+        vehicles.forEach(vehicle => {
+            if (!vehicle.lat || !vehicle.lon) return;
+            const lngLat = [vehicle.lon, vehicle.lat];
+            const bearing = vehicle.bearing || 0; 
+            currentTripIds.add(vehicle.tripId);
 
-          if (activeVehicleMarkers[tripId]) {
-                // АВТОБУС ВЖЕ Є: рухаємо і крутимо!
-                const marker = activeVehicleMarkers[tripId];
-                marker.smoothMove(v.lat, v.lon, 2000);
+            if (activeVehicleMarkers[vehicle.tripId]) {
+                const marker = activeVehicleMarkers[vehicle.tripId];
+                marker.setLngLat(lngLat);
                 
-                // Викликаємо нашу нову функцію:
-                updateVehicleBearing(marker, v.route, v.bearing || 0);
-
+                const arrowEl = marker.getElement().querySelector('.vehicle-arrow');
+                if (arrowEl) {
+                    arrowEl.style.transform = `rotate(${bearing}deg)`;
+                }
             } else {
-                // НОВИЙ АВТОБУС -> створюємо
-                const bearing = v.bearing || 0; 
-                const iconHtml = `
-                  <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
-                    <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
-                      <polygon points="50,10 90,90 10,90" style="fill: var(--blue); stroke: white; stroke-width: 11px; stroke-linejoin: round;" />
-                    </svg>
-                    <div class="vehicle-marker-dot">${v.route || '🚌'}</div>
-                  </div>
+                const el = document.createElement('div');
+                el.className = 'vehicle-marker-icon';
+                
+                // ТОЧНА копія твоєї HTML-структури з Leaflet
+                el.innerHTML = `
+                    <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
+                        <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
+                            <polygon points="50,10 90,90 10,90" style="fill: var(--blue); stroke: white; stroke-width: 11px; stroke-linejoin: round;" />
+                        </svg>
+                        <div class="vehicle-marker-dot">${vehicle.route || '🚌'}</div>
+                    </div>
                 `;
-                const icon = L.divIcon({ html: iconHtml, className: 'vehicle-marker-icon', iconSize: [34, 34], iconAnchor: [17, 17] });
-                
-                const marker = L.marker([v.lat, v.lon], { icon: icon });
-                marker.bindPopup(`<b>Linia ${v.route || '?'}</b>`);
-                
-                activeVehicleMarkers[tripId] = marker;
-                allVehiclesClusterGroup.addLayer(marker);
+
+                // MapLibre сам відцентрує цей блок 34x34 по координатах
+                const marker = new maplibregl.Marker({ element: el })
+                    .setLngLat(lngLat)
+                    .addTo(map);
+
+                activeVehicleMarkers[vehicle.tripId] = marker;
             }
         });
-
-        // Видаляємо з карти ті автобуси, які вже доїхали до кінцевої
-        for (const tripId in activeVehicleMarkers) {
-            if (!currentTripIds.has(tripId)) {
-                allVehiclesClusterGroup.removeLayer(activeVehicleMarkers[tripId]);
-                delete activeVehicleMarkers[tripId];
-            }
-        }
-    } catch (error) {
-        console.error('Не вдалося оновити живу карту:', error);
+    } catch (e) {
+        console.warn('Не вдалося оновити живу карту:', e);
     }
 }
+// MapLibre хоче координати у форматі [Довгота, Широта]
+const LUBLIN_CENTER_MAPLIBRE = [22.5684, 51.2465];
 
+function initMap() {
+    const isDarkOS = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    map = new maplibregl.Map({
+        container: 'map',
+        style: isDarkOS ? 'style-dark.json' : 'style-light.json',
+        center: LUBLIN_CENTER_MAPLIBRE,
+        zoom: 14,
+        attributionControl: false,
+        
+        // --- ОСЬ ЦЯ МАГІЯ ПІДСТАВЛЯЄ ТВІЙ КЛЮЧ ---
+        transformRequest: (url, resourceType) => {
+            if (url.includes('api.maptiler.com') && url.includes('{key}')) {
+                return {
+                    url: url.replace('{key}', MAPTILER_KEY)
+                };
+            }
+            return { url };
+        }
+        // ------------------------------------------
+    });
+
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+        map.setStyle(e.matches ? 'style-dark.json' : 'style-light.json');
+    });
+}
 // ==================== Пошук зупинки (верхня панель) ====================
 let searchDebounce;
 
@@ -374,6 +252,7 @@ async function toggleDepExpand(card, panel, dep) {
 }
 // --- ЗМІННІ ДЛЯ МІНІ-КАРТИ ---
 
+// ==================== Модальна міні-карта (Показ конкретного автобуса) ====================
 async function showVehicleOnMap(tripId) {
   try {
     const vehicle = await fetchVehiclePosition(tripId);
@@ -382,185 +261,137 @@ async function showVehicleOnMap(tripId) {
       return;
     }
 
-    // 1. Показуємо вікно
+    // 1. Відкриваємо модальне вікно
     const modal = document.getElementById('vehicle-modal');
     modal.style.display = 'flex';
     document.getElementById('modal-route-title').innerText = `Linia ${vehicle.route}`;
 
-    // Збиваємо старий таймаут, якщо він раптом завис
     if (modalInitTimeout) clearTimeout(modalInitTimeout);
 
-    // 2. Даємо браузеру 300мс на відмальовку, щоб не було сірого квадрата
+    // 2. Даємо невелику затримку на відмальовку DOM, щоб контейнер #modal-map мав розміри
     modalInitTimeout = setTimeout(() => {
-      
-      // БРОНЕЖИЛЕТ: Якщо юзер уже встиг закрити вікно за ці 300мс - скасовуємо все!
       if (modal.style.display === 'none') return;
 
-      // 3. Ініціалізуємо карту
-            if (!modalMap) {
-        modalMap = L.map('modal-map', { 
-            zoomControl: false, 
-            attributionControl: false // <--- Вимикаємо копірайт Leaflet
-        }).setView([vehicle.lat, vehicle.lon], 16);
-        L.control.zoom({ position: 'bottomleft' }).addTo(modalMap);
-        new L.Control.GPSButton().addTo(modalMap);
+      const lngLat = [vehicle.lon, vehicle.lat];
+
+      // 3. Ініціалізуємо MapLibre для модалки, якщо її ще немає
+      if (!modalMap) {
         const isDarkOS = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const tileUrl = isDarkOS 
-          ? `https://api.maptiler.com/maps/streets-v4-dark/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`
-          : `https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`;
-
-        L.tileLayer(tileUrl, {
-          maxZoom: 22,
-          attribution: '© MapTiler © OSM'
-        }).addTo(modalMap);
-      }
-
-      modalMap.invalidateSize();
-      
-      // 4. Твоя логіка масштабування та пасажир
-      if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
-        const userLatLng = userLocationMarker.getLatLng();
         
-        if (modalUserMarker) {
-            modalUserMarker.setLatLng(userLatLng);
-        } else {
-            modalUserMarker = L.marker(userLatLng, { icon: passengerIcon, zIndexOffset: 1000 }).addTo(modalMap);
-        }
+        modalMap = new maplibregl.Map({
+          container: 'modal-map',
+          style: isDarkOS ? 'style-dark.json' : 'style-light.json',
+          center: lngLat,
+          zoom: 16,
+          attributionControl: false,
+          transformRequest: (url) => {
+            if (url.includes('api.maptiler.com') && url.includes('{key}')) {
+              return { url: url.replace('{key}', MAPTILER_KEY) };
+            }
+            return { url };
+          }
+        });
 
-        const bounds = L.latLngBounds(userLatLng, [vehicle.lat, vehicle.lon]);
-        modalMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
+        modalMap.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
       } else {
-        modalMap.setView([vehicle.lat, vehicle.lon], 16);
+        modalMap.resize();
+        modalMap.flyTo({ center: lngLat, zoom: 16 });
       }
 
-      // 5. ПОВЕРТАЄМО ТВОЮ КРАСИВУ ІКОНКУ (З SVG-СТРІЛКОЮ)
-      if (modalVehicleMarker) {
-        modalMap.removeLayer(modalVehicleMarker);
-      }
-      
-      const bearing = vehicle.bearing || 0;
-      const iconHtml = `
-        <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
-          <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
-            <polygon points="50,10 90,90 10,90" style="fill: var(--blue); stroke: white; stroke-width: 11px; stroke-linejoin: round;" />
-          </svg>
-          <div class="vehicle-marker-dot">${vehicle.route || '🚌'}</div>
-        </div>
-      `;
-      
-      const customBusIcon = L.divIcon({
-          html: iconHtml,
-          className: 'vehicle-marker-icon',
-          iconSize: [34, 34],
-          iconAnchor: [17, 17]
-      });
+      // 4. Створюємо або рухаємо маркер обраного автобуса на міні-карті
+      if (!modalVehicleMarker) {
+        const el = document.createElement('div');
+        el.className = 'vehicle-marker-icon';
+        
+        const bearing = vehicle.bearing || 0;
+        el.innerHTML = `
+            <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
+                <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
+                    <polygon points="50,10 90,90 10,90" style="fill: var(--blue); stroke: white; stroke-width: 11px; stroke-linejoin: round;" />
+                </svg>
+                <div class="vehicle-marker-dot">${vehicle.route || '🚌'}</div>
+            </div>
+        `;
 
-      const popupHtml = `<b>Linia ${vehicle.route}</b><br>${vehicle.vehicleLabel || ''}`;
-      modalVehicleMarker = L.marker([vehicle.lat, vehicle.lon], { icon: customBusIcon })
-        .bindPopup(popupHtml)
-        .addTo(modalMap);
-
-      // 6. Запускаємо стеження
-      if (modalTrackInterval) clearInterval(modalTrackInterval);
-    modalTrackInterval = setInterval(async () => {
-        const updatedVehicle = await fetchVehiclePosition(tripId);
-        if (updatedVehicle && modalVehicleMarker) {
-          modalVehicleMarker.smoothMove(updatedVehicle.lat, updatedVehicle.lon, 2000);
-          modalMap.setView([updatedVehicle.lat, updatedVehicle.lon]); 
-          
-          // Викликаємо нашу нову функцію:
-          updateVehicleBearing(modalVehicleMarker, updatedVehicle.route, updatedVehicle.bearing || 0);
+        modalVehicleMarker = new maplibregl.Marker({ element: el })
+            .setLngLat(lngLat)
+            .addTo(modalMap);
+      } else {
+        modalVehicleMarker.setLngLat(lngLat);
+        const arrowEl = modalVehicleMarker.getElement().querySelector('.vehicle-arrow');
+        if (arrowEl) {
+            arrowEl.style.transform = `rotate(${vehicle.bearing || 0}deg)`;
         }
-      }, 15000);
+      }
 
-    }, 300);
+      // 5. Запускаємо інтервал оновлення позиції цього конкретного автобуса
+      if (modalTrackInterval) clearInterval(modalTrackInterval);
+      modalTrackInterval = setInterval(async () => {
+        const updated = await fetchVehiclePosition(tripId);
+        if (updated && modalVehicleMarker) {
+          const updatedLngLat = [updated.lon, updated.lat];
+          modalVehicleMarker.setLngLat(updatedLngLat);
+          modalMap.easeTo({ center: updatedLngLat, duration: 1000 });
+
+          const arrowEl = modalVehicleMarker.getElement().querySelector('.vehicle-arrow');
+          if (arrowEl) {
+              arrowEl.style.transform = `rotate(${updated.bearing || 0}deg)`;
+          }
+        }
+      }, 10000);
+
+    }, 200);
 
   } catch (e) {
+    console.error('Помилка міні-карти:', e);
     showToast('Brak połączenia z serwerem');
   }
 }
-// --- ЛОГІКА ЗАКРИТТЯ (ЯДЕРНА ОПЦІЯ ДЛЯ LEAFLET) ---
+
+// ЛОГІКА ЗАКРИТТЯ (Трохи підчистили від Leaflet)
 document.getElementById('close-modal-btn').addEventListener('click', () => {
-  // 1. Ховаємо вікно
   document.getElementById('vehicle-modal').style.display = 'none';
-  
-  // 2. Зупиняємо таймер
   if (modalTrackInterval) {
     clearInterval(modalTrackInterval);
     modalTrackInterval = null;
   }
-  
-  // 3. ПОВНІСТЮ ЗНИЩУЄМО КАРТУ (щоб при наступному відкритті вона зібралася з нуля)
-  if (modalMap) {
-    modalMap.remove(); 
-    modalMap = null;
-    modalVehicleMarker = null;
-    modalUserMarker = null;
-  }
+  modalMap = null;
 });
 
+// БЕЗПЕЧНО: Це просто запит до бекенда, залишаємо!
 async function fetchVehiclePosition(tripId) {
   const res = await fetch(`${API_BASE_URL}/live-vehicles/${tripId}`);
   if (!res.ok) return null;
   return res.json();
 }
 
+// ЗАМОРОЖЕНО: Тут був код малювання маркера
 function drawVehicleMarker(vehicle) {
-  // Якщо бекенд ще не передає bearing, за замовчуванням буде 0 (вгору)
-  const bearing = vehicle.bearing || 0; 
-  const popupHtml = `<b>Linia ${vehicle.route}</b><br>${vehicle.vehicleLabel || ''}`;
-
- if (vehicleMarker) {
-    vehicleMarker.smoothMove(vehicle.lat, vehicle.lon, 2000);
-    vehicleMarker.setPopupContent(popupHtml);
-    
-    // Викликаємо нашу нову функцію:
-    updateVehicleBearing(vehicleMarker, vehicle.route, vehicle.bearing || 0);
-  } else {
-    // Якщо маркера ще немає — створюємо його ВПЕРШЕ
-   const icon = L.divIcon({
-      className: 'vehicle-marker-icon',
-      html: `
-        <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
-         <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
-            <polygon points="50,10 90,90 10,90" style="fill: var(--blue); stroke: white; stroke-width: 11px; stroke-linejoin: round;" />
-          </svg>
-          <div class="vehicle-marker-dot">${vehicle.route}</div>
-        </div>
-      `,
-      iconSize: [34, 34],
-    });
-
-    vehicleMarker = L.marker([vehicle.lat, vehicle.lon], { icon }).addTo(map)
-      .bindPopup(popupHtml);
-  }
+  return; 
 }
 
+// БЕЗПЕЧНО: Залишаємо
 async function refreshTrackedVehicle() {
   if (!trackedTripId) return;
   const vehicle = await fetchVehiclePosition(trackedTripId);
   if (!vehicle) {
-    // Рейс зник з GPS (доїхав до кінцевої або GTFS-RT перестав його бачити)
     stopVehicleTracking();
     showToast('Pojazd zniknął z GPS (kurs zakończony?)');
     return;
   }
-  drawVehicleMarker(vehicle);
+  drawVehicleMarker(vehicle); // Просто викличе безпечну порожню функцію вище
 }
 
+// БЕЗПЕЧНО: Залишаємо
 function stopVehicleTracking() {
-    // Безпечно зупиняємо старий таймер, якщо він є
     if (typeof vehicleTrackInterval !== 'undefined' && vehicleTrackInterval) {
         clearInterval(vehicleTrackInterval);
         vehicleTrackInterval = null;
     }
-    
-    // Безпечно зупиняємо новий таймер модального вікна
     if (typeof modalTrackInterval !== 'undefined' && modalTrackInterval) {
         clearInterval(modalTrackInterval);
         modalTrackInterval = null;
     }
-
     trackedTripId = null;
 }
 
@@ -773,6 +604,7 @@ async function renderReportsList(container) {
 }
 
 async function refreshMapMarkers() {
+return;
   try {
     const reports = await fetchReports();
     reportMarkersLayer.clearLayers();
@@ -851,11 +683,7 @@ function closeModal() {
   updateContext = null;
 }
 
-// БУЛО:
-// document.getElementById('fab-report').addEventListener('click', openModal);
-
-// СТАЛО:
-document.getElementById('fab-report').addEventListener('click', openQuickModal);
+document.getElementById('fab-report').addEventListener('click', openModal);
 document.getElementById('modal-close').addEventListener('click', closeModal);
 document.getElementById('drawer-add').addEventListener('click', () => {
   closeDrawer(); // Акуратно ховаємо стрічку
@@ -1113,15 +941,75 @@ function resetForm() {
 
 // ==================== Старт ====================
 document.addEventListener('DOMContentLoaded', () => {
-  initMap();
-  refreshMapMarkers();
-  setInterval(refreshMapMarkers, 45000);
+    initMap();
+    
+    // ВАЖЛИВО: Чекаємо, поки карта повністю промалюється, перш ніж щось на неї додавати
+    map.on('load', () => {
+        console.log("Карта завантажена! Запускаємо GPS та маркери...");
+        trackUserLocation();
+        
+        // --- Додаємо запуск автобусів ---
+        updateLiveCityMap();
+        liveMapInterval = setInterval(updateLiveCityMap, 15000);
+        // --------------------------------
+    });
 
-  // Стартуємо GPS одразу на відкритті застосунку (не чекаючи переходу на Przystanek) —
-  // до моменту, коли юзер реально відкриє вкладку розкладу, userLocationMarker
-  // вже здебільшого готовий, і loadNearbyStopsDefault() піде швидкою гілкою без затримки.
-  trackUserLocation(); 
+    // ДОДАТИ ЦЕ: Плавний скрол поля вводу над клавіатурою
+    document.querySelectorAll('#report-modal input').forEach(input => {
+        input.addEventListener('focus', function() {
+            setTimeout(() => {
+                this.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 300);
+        });
+    });
+});
 
+// ==================== Геолокація користувача (MapLibre) ====================
+userLocationMarker = null;
+let userLocationAccuracyCircle = null;
+let watchId = null; // Глобальна змінна для контролю трекера
+
+function trackUserLocation() {
+    console.log("[GPS] Запит геолокації...");
+    
+    if (!('geolocation' in navigator)) {
+        showToast('Geolokalizacja nie jest wspierana');
+        return;
+    }
+
+    // ВБИВАЄМО старих клонів: якщо функція викликалась двічі, зупиняємо попередній трекер
+    if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+    }
+
+    watchId = navigator.geolocation.watchPosition(
+        (position) => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            const lngLat = [lon, lat];
+
+            if (!userLocationMarker) {
+                // Створюємо елемент лише ОДИН раз
+                const el = document.createElement('div');
+                el.className = 'user-marker-dom';
+
+                userLocationMarker = new maplibregl.Marker({ element: el })
+                    .setLngLat(lngLat)
+                    .addTo(map);
+
+                map.flyTo({ center: lngLat, zoom: 16 });
+                console.log("[GPS] Маркер створено!");
+            } else {
+                // Просто плавно рухаємо існуючий маркер
+                userLocationMarker.setLngLat(lngLat);
+            }
+        },
+        (error) => {
+            console.warn('[GPS] Помилка:', error.message);
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    );
+}
   // ДОДАТИ ЦЕ: Плавний скрол поля вводу над клавіатурою
   document.querySelectorAll('#report-modal input').forEach(input => {
     input.addEventListener('focus', function() {
@@ -1131,7 +1019,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }, 300);
     });
   });
-});
 
 // ==================== ПЛАНУВАЛЬНИК МАРШРУТУ (TRASA) ====================
 // ==================== ІСТОРІЯ МАРШРУТІВ ТА ЗУПИНОК (TRASA) ====================
@@ -1527,18 +1414,17 @@ function loadRouteDefaultSuggestions(isFrom) {
     gpsButton.style = 'padding: 10px; cursor: pointer; border-bottom: 1px solid var(--border); background: rgba(25, 118, 210, 0.05); display: flex; align-items: center; gap: 12px;';
     gpsButton.innerHTML = `<div class="svg-icon icon-map-pin" style="color: var(--blue);"></div><div style="font-weight: 700; color: var(--blue);">Moja lokalizacja</div>`;
     
-    gpsButton.addEventListener('click', () => {
-        // Перевіряємо наявність GPS тільки в момент КЛІКУ
+        gpsButton.addEventListener('click', () => {
+        // Перевіряємо, чи маркер локації існує і чи це MapLibre маркер
         if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
             inputEl.value = 'Moja lokalizacja';
             boxEl.style.display = 'none';
             
-            // ДОДАНО: Примусово показуємо хрестик
             const clearBtn = document.getElementById(isFrom ? 'route-clear-from' : 'route-clear-to');
             if (clearBtn) clearBtn.style.display = 'flex';
             
-            // Зберігаємо координати
-            const pos = userLocationMarker.getLatLng();
+            // ВАЖЛИВО: MapLibre використовує getLngLat() замість getLatLng()
+            const pos = userLocationMarker.getLngLat(); 
             const locObj = { name: 'Moja lokalizacja', lat: pos.lat, lon: pos.lng };
             
             if (isFrom) {
@@ -1627,10 +1513,9 @@ function loadRouteDefaultSuggestions(isFrom) {
         });
     };
     // 3. ПЕРЕВІРКА GPS ТА ЗАПУСК
-    if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
-        const lat = userLocationMarker.getLatLng().lat;
-        const lon = userLocationMarker.getLatLng().lng;
-        fetchAndShow(lat, lon);
+        if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
+        const pos = userLocationMarker.getLngLat(); // Виправлено з getLatLng()
+        fetchAndShow(pos.lat, pos.lng);
     } else {
         nearbyContainer.innerHTML = '<div style="padding: 10px; color: var(--text-muted); display: flex; align-items: center; gap: 12px;"><div class="svg-icon icon-map-pin"></div>Szukam lokalizacji...</div>';
         if ('geolocation' in navigator) {

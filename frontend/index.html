@@ -8,9 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1976d2">
 <meta name="color-scheme" content="light dark">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+<link href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css" rel="stylesheet" />
 <style>
   :root {
     color-scheme: light dark;
@@ -59,7 +57,23 @@
         filter: invert(1) brightness(1.2); 
     }
   }
+/* --- Маркер геолокації (MapLibre) --- */
+.user-marker-dom {
+    width: 20px;
+    height: 20px;
+    background-color: var(--blue);
+    border: 3px solid #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    /* Додаємо пульсацію для краси */
+    animation: pulse-gps 2s infinite;
+}
 
+@keyframes pulse-gps {
+    0% { box-shadow: 0 0 0 0 rgba(25, 118, 210, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(25, 118, 210, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(25, 118, 210, 0); }
+}
 /* --- ПОВНОЕКРАННА КАРТА ДЛЯ АВТОБУСА --- */
 .modal-overlay {
     display: none;
@@ -1066,6 +1080,42 @@
     mask-repeat: no-repeat;
     background-color: currentColor;
 }
+/* --- Оригінальні класи з Leaflet --- */
+.vehicle-marker-icon { 
+    background: transparent; 
+    border: none; 
+    width: 34px;
+    height: 34px;
+}
+
+.vehicle-arrow {
+    position: absolute;
+    top: -14px; 
+    left: 50%;
+    margin-left: -7px; 
+    width: 14px;
+    height: 14px;
+    transform-origin: 7px 31px; 
+    transition: transform 1s ease-out;
+    z-index: -1; 
+}
+
+.vehicle-marker-dot {
+    width: 34px; 
+    height: 34px; 
+    border-radius: 50%; 
+    background: var(--blue); 
+    color: #fff;
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    font-size: 12px; 
+    font-weight: 700;
+    border: 2px solid #fff; 
+    box-shadow: 0 2px 8px rgba(0,0,0,.4); 
+    position: relative;
+    z-index: 2;
+}
 /* Жорстко фіксуємо розмір квадратиків ТІЛЬКИ для плаваючої легенди */
 .trasa-legend .dep-route-box {
   width: 28px !important;
@@ -1305,10 +1355,8 @@
     </div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
-<script src="https://unpkg.com/leaflet.marker.slideto@0.2.0/Leaflet.Marker.SlideTo.js"></script>
 </body>
 </html>

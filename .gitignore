@@ -30,6 +30,8 @@ dist/
 .parcel-cache/
 *.tsbuildinfo
 frontend/config.js
+frontend/app.js1
+frontend/index.html1
 
 # Database
 *.db

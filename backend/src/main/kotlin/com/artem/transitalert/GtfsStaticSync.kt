@@ -278,7 +278,7 @@ object GtfsStaticSync {
             // trip_headsigns
             val headSb = StringBuilder()
             for ((tripId, stopId) in lastStopIdByTrip) {
-                val name = stopsById[stopId]?.get("stop_name") ?: continue
+                val name = stopsById[stopId]?.get("stop_name")?.trim() ?: continue
                 headSb.append(csv(tripId)).append(',').append(csv(name)).append('\n')
             }
             copyManager.copyIn(
@@ -306,7 +306,7 @@ object GtfsStaticSync {
                         ?: continue
 
                     tripStopsSb.append(csv(tripId)).append(',').append(seq).append(',')
-                        .append(csv(stopId)).append(',').append(csv(stop["stop_name"]!!)).append(',')
+                        .append(csv(stopId)).append(',').append(csv(stop["stop_name"]!!.trim())).append(',')
                         .append(minutes).append('\n')
 
                     val trip = tripsById[tripId] ?: continue
@@ -348,7 +348,7 @@ object GtfsStaticSync {
         conn.prepareStatement(sql).use { ps ->
             for (s in stops) {
                 ps.setString(1, s["stop_id"])
-                ps.setString(2, s["stop_name"])
+                ps.setString(2, s["stop_name"]?.trim())
                 ps.setString(3, s["stop_code"] ?: "")
                 ps.setDouble(4, s["stop_lat"]!!.toDouble())
                 ps.setDouble(5, s["stop_lon"]!!.toDouble())

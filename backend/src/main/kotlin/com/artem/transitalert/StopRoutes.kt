@@ -13,6 +13,33 @@ data class TempStop(val stopId: String, val name: String, val code: String, val 
 
 fun Application.stopRoutes() {
     routing {
+
+    get("/api/trip-stops/{tripId}") {
+        val tripId = call.parameters["tripId"]
+        if (tripId == null) {
+            call.respond(HttpStatusCode.BadRequest, "Missing tripId parameter")
+            return@get
+        }
+
+        val coordinates = org.jetbrains.exposed.sql.transactions.transaction {
+            TripStops.innerJoin(Stops, onColumn = { TripStops.stopId }, otherColumn = { Stops.stopId })
+                .slice(Stops.lon, Stops.lat)
+                .select { TripStops.tripId eq tripId }
+                .orderBy(TripStops.stopSequence to SortOrder.ASC)
+                .map { row ->
+                    listOf(row[Stops.lon], row[Stops.lat])
+                }
+        }
+
+
+
+        if (coordinates.isEmpty()) {
+            call.respond(HttpStatusCode.NotFound, "No stops found for this trip")
+        } else {
+            call.respond(coordinates)
+        }
+    }
+    
         get("/stops/nearby") {
             val latStr = call.request.queryParameters["lat"]
             val lonStr = call.request.queryParameters["lon"]

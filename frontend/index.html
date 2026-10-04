@@ -11,6 +11,9 @@
 <link href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css" rel="stylesheet" />
 <style>
   :root {
+    --live-green: #22c55e; /* Можеш додати змінну для зручності */
+}
+  :root {
     color-scheme: light dark;
     --blue: #1976d2;
     --blue-dark: #125499;
@@ -592,18 +595,19 @@
     margin-left: -7px; /* Центруємо (половина від 20px) */
     width: 14px;
     height: 14px;
-    
-    /* Нова математика обертання: 
-       10px = центр по горизонталі. 
-       31px = 14px (на скільки підняли) + 17px (половина мітки 34px) */
     transform-origin: 7px 31px; 
-    
     transition: transform 1s ease-out;
     z-index: -1; /* ВАЖЛИВО: жорстко заганяємо стрілку ПІД маркер */
 }
+  .vehicle-arrow polygon {
+    fill: var(--live-green);
+    stroke: white;
+    stroke-width: 11px;
+    stroke-linejoin: round;
+}
   .vehicle-marker-icon { background: transparent; border: none; }
   .vehicle-marker-dot {
-    width: 34px; height: 34px; border-radius: 50%; background: var(--blue); color: #fff;
+    width: 34px; height: 34px; border-radius: 50%; background: var(--live-green); color: #fff;
     display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
     border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.4); position: relative;
     z-index: 2;
@@ -1079,43 +1083,6 @@
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
     background-color: currentColor;
-}
-/* --- Оригінальні класи з Leaflet --- */
-.vehicle-marker-icon { 
-    background: transparent; 
-    border: none; 
-    width: 34px;
-    height: 34px;
-}
-
-.vehicle-arrow {
-    position: absolute;
-    top: -14px; 
-    left: 50%;
-    margin-left: -7px; 
-    width: 14px;
-    height: 14px;
-    transform-origin: 7px 31px; 
-    transition: transform 1s ease-out;
-    z-index: -1; 
-}
-
-.vehicle-marker-dot {
-    width: 34px; 
-    height: 34px; 
-    border-radius: 50%; 
-    background: var(--blue); 
-    color: #fff;
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    font-size: 12px; 
-    font-weight: 700;
-    border: 2px solid #fff; 
-    box-shadow: 0 2px 8px rgba(0,0,0,.4); 
-    position: relative;
-    z-index: 2;
-}
 /* Жорстко фіксуємо розмір квадратиків ТІЛЬКИ для плаваючої легенди */
 .trasa-legend .dep-route-box {
   width: 28px !important;

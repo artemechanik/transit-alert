@@ -291,9 +291,11 @@ fun Application.formRoutes() {
 
                     // 3. Зсуваємо час пошуку ТІЛЬКИ на основі першого (оптимального) маршруту
                     if (index == 0) {
-                        val walkDuration = if (legs.first().route == "Пішки") (legs.first().arrivalMin - legs.first().departureMin) else 0
+                        val walkDuration = if (legs.first().route == "Пішки") {
+                            legs.first().arrivalMin - legs.first().departureMin
+                        } else 0
                         val firstBus = legs.find { it.route != "Пішки" }
-                        
+
                         nextSearchMin = if (firstBus != null) {
                             firstBus.departureMin - walkDuration + 1
                         } else {

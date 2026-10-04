@@ -136,13 +136,22 @@ fun Application.liveVehiclesRoutes() {
                 // Два "кандидати" на дату/базову хвилину — як і в risk-routes/directions:
                 // покриває нічний хвіст GTFS (рейси 24:xx-27:xx, що належать service_id
                 // ВЧОРАШНЬОЇ дати, хоча за годинником це вже сьогодні після півночі).
-                for ((date, minuteBase) in timeCandidates(now)) {
+                // Плюс наступні дві дати: їхні рейси мають власний service_id і в вікно
+                // сьогоднішнього service_id не потрапляють (minuteBase від'ємний, бо
+                // відлік хвилин іде від півночі саме тієї дати).
+                val localNow = now.atZone(LUBLIN_ZONE)
+                val minutesToday = localNow.hour * 60 + localNow.minute
+                val candidates = timeCandidates(now) +
+                    (1..2).map { k -> localNow.toLocalDate().plusDays(k.toLong()) to (minutesToday - 1440 * k) }
+
+                for ((date, minuteBase) in candidates) {
                     val serviceIds = activeServiceIds(date)
                     if (serviceIds.isEmpty()) continue
 
                                         // Зміщуємо вікно пошуку на timeOffset хвилин
-                    val windowStart = minuteBase + timeOffset - 60 
+                    val windowStart = minuteBase + timeOffset - 60
                     val windowEnd = minuteBase + timeOffset + 1440
+                    if (windowEnd < 0) continue
                     val nowRefSeconds = minuteBase * 60 + nowSecondOfMinute
 
                     StopDepartures.join(TripHeadsigns, JoinType.INNER, onColumn = StopDepartures.tripId, otherColumn = TripHeadsigns.tripId)

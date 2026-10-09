@@ -49,11 +49,13 @@ fun Application.upcomingStopsRoutes() {
                     .map {
                         val minutes = it[TripStops.departureMinutes] % (24 * 60)
                         UpcomingStop(
-                        	isPassed = currentSeq != null && it[TripStops.stopSequence] < currentSeq,
+                            isPassed = currentSeq != null && it[TripStops.stopSequence] < currentSeq,
                             stopId = it[TripStops.stopId],
                             name = it[TripStops.stopName],
                             platformCode = it[Stops.code],
                             eta = "%02d:%02d".format(minutes / 60, minutes % 60),
+                            lat = it[Stops.lat],
+    			    lon = it[Stops.lon],
                         )
                     }
 
@@ -106,6 +108,8 @@ fun Application.upcomingStopsRoutes() {
                             name = it[TripStops.stopName],
                             platformCode = it[Stops.code],
                             eta = "%02d:%02d".format(minutes / 60, minutes % 60),
+                            lat = it[Stops.lat], 
+              		    lon = it[Stops.lon],  
                         )
                     }
             }

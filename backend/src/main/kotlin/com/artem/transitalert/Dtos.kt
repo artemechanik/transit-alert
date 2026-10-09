@@ -113,6 +113,8 @@ data class UpcomingStop(
     val platformCode: String? = null,
     val eta: String,
     val isPassed: Boolean = false,
+    val lat: Double? = null,
+    val lon: Double? = null,
 )
 
 @Serializable

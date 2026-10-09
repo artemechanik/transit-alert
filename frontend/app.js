@@ -261,7 +261,7 @@ async function toggleDepExpand(card, panel, dep) {
 // --- ЗМІННІ ДЛЯ МІНІ-КАРТИ ---
 
 // ==================== Модальна міні-карта (Показ конкретного автобуса) ====================
-async function showVehicleOnMap(tripId) {
+async function showVehicleOnMap(tripId, routeContext = { mode: 'przystanek' }) {
   try {
     modalUserInteracted = false;
 
@@ -315,11 +315,11 @@ async function showVehicleOnMap(tripId) {
         });
 
         modalMap.on('load', () => {
-          drawRouteShape(tripId, modalMap);
+          drawRouteShape(tripId, modalMap, routeContext); // передаємо routeContext
         });
       } else {
         modalMap.resize();
-        drawRouteShape(tripId, modalMap);
+        drawRouteShape(tripId, modalMap, routeContext); // передаємо routeContext
       }
 
       if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
@@ -425,8 +425,38 @@ document.getElementById('close-modal-btn').addEventListener('click', () => {
   }
 });
 
-// МАЛЮВАННЯ МАРШРУТУ ТА ВУЗЛОВИХ ЦЯТОК ЗУПИНОК
-// допоміжна математика для прив'язки точок до лінії
+// ==== МАЛЮВАННЯ МАРШРУТУ ТА ВУЗЛОВИХ ЦЯТОК ЗУПИНОК ====
+// ДОПОМІЖНА МАТЕМАТИКА
+// Знаходження найближчого індексу вершини в полілінії
+function findNearestVertexIndex(point, coords) {
+  let minDist = Infinity;
+  let bestIdx = 0;
+  for (let i = 0; i < coords.length; i++) {
+    const dx = coords[i][0] - point[0];
+    const dy = coords[i][1] - point[1];
+    const d = dx * dx + dy * dy;
+    if (d < minDist) {
+      minDist = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+// Вирізання частини лінії від старту до фінішу
+function sliceLineString(coords, startPoint, endPoint) {
+  const startIdx = findNearestVertexIndex(startPoint, coords);
+  const endIdx = findNearestVertexIndex(endPoint, coords);
+  
+  const from = Math.min(startIdx, endIdx);
+  const to = Math.max(startIdx, endIdx);
+  
+  const sliced = coords.slice(from, to + 1);
+  if (sliced.length < 2) return coords;
+  return sliced;
+}
+
+// Позиціонування точок на лінії маршруту
 function projectPointToLineString(point, coords) {
   const [px, py] = point;
   let minDistance = Infinity;
@@ -459,7 +489,7 @@ function projectPointToLineString(point, coords) {
   return nearestPoint;
 }
 //====== сама функція малювання =====
-async function drawRouteShape(tripId, mapInstance) {
+async function drawRouteShape(tripId, mapInstance, context = { mode: 'przystanek' }) {
   try {
     const res = await fetch(`${API_BASE_URL}/api/trip-stops/${tripId}`);
     if (!res.ok) return;
@@ -474,7 +504,7 @@ async function drawRouteShape(tripId, mapInstance) {
     }
     const coordsString = filteredStops.map(s => `${s[0]},${s[1]}`).join(';');
 
-    // 2. Отримуємо геометрію лінії від OSRM
+    // 2. Геометрія від OSRM
     const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsString}?geometries=geojson&overview=full`;
     const osrmRes = await fetch(osrmUrl);
     const osrmData = await osrmRes.json();
@@ -486,31 +516,39 @@ async function drawRouteShape(tripId, mapInstance) {
       routeGeoJSON = { type: 'LineString', coordinates: stops };
     }
 
-    // 3. «Примагнічуємо» зупинки точно в центр лінії дороги
     const lineCoords = routeGeoJSON.coordinates;
     const snappedStops = stops.map(stop => projectPointToLineString(stop, lineCoords));
 
+    const isTrasa = context && context.mode === 'trasa' && context.fromCoords && context.toCoords;
+
+    // 3. Формуємо точки зупинок
     const stopsGeoJSON = {
       type: 'FeatureCollection',
-      features: snappedStops.map((coord, index) => ({
-        type: 'Feature',
-        properties: {
-          isTerminal: index === 0 || index === snappedStops.length - 1
-        },
-        geometry: {
-          type: 'Point',
-          coordinates: coord
-        }
-      }))
+      features: snappedStops.map((coord, index) => {
+        let role = 'intermediate';
+        if (index === 0 || index === snappedStops.length - 1) role = 'terminal';
+        return {
+          type: 'Feature',
+          properties: { role },
+          geometry: { type: 'Point', coordinates: coord }
+        };
+      })
     };
 
-    // 4. Лінія маршруту
+    // 4. Базова / Фонова лінія маршруту
+    const baseColor = isTrasa ? '#94a3b8' : '#22c55e'; // У режимі Trasa фоновий маршрут приглушений
+    const baseOpacity = isTrasa ? 0.35 : 0.75;
+    const baseWidth = isTrasa ? 3 : 4;
+
     if (mapInstance.getSource('route-shape')) {
       mapInstance.getSource('route-shape').setData({
         type: 'Feature',
         properties: {},
         geometry: routeGeoJSON
       });
+      mapInstance.setPaintProperty('route-shape-layer', 'line-color', baseColor);
+      mapInstance.setPaintProperty('route-shape-layer', 'line-opacity', baseOpacity);
+      mapInstance.setPaintProperty('route-shape-layer', 'line-width', baseWidth);
     } else {
       mapInstance.addSource('route-shape', {
         type: 'geojson',
@@ -521,19 +559,47 @@ async function drawRouteShape(tripId, mapInstance) {
         id: 'route-shape-layer',
         type: 'line',
         source: 'route-shape',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round'
-        },
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': '#22c55e',
-          'line-width': 4,
-          'line-opacity': 0.7
+          'line-color': baseColor,
+          'line-width': baseWidth,
+          'line-opacity': baseOpacity
         }
       });
     }
 
-    // 5. Вузлові цятки зупинок (строго по нитці маршруту)
+    // 5. Якщо це режим 'Trasa': малюємо активний сегмент поїздки (насичений)
+    if (isTrasa) {
+      const activeCoords = sliceLineString(lineCoords, context.fromCoords, context.toCoords);
+      const activeGeoJSON = {
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'LineString', coordinates: activeCoords }
+      };
+
+      if (mapInstance.getSource('route-active-segment')) {
+        mapInstance.getSource('route-active-segment').setData(activeGeoJSON);
+      } else {
+        mapInstance.addSource('route-active-segment', {
+          type: 'geojson',
+          data: activeGeoJSON
+        });
+
+        mapInstance.addLayer({
+          id: 'route-active-segment-layer',
+          type: 'line',
+          source: 'route-active-segment',
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-color': '#16a34a',
+            'line-width': 5.5,
+            'line-opacity': 0.95
+          }
+        });
+      }
+    }
+
+    // 6. Вузлові цятки зупинок
     if (mapInstance.getSource('route-stops')) {
       mapInstance.getSource('route-stops').setData(stopsGeoJSON);
     } else {
@@ -2294,7 +2360,16 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
             const stops = legStopsResults[transitIdx] || [];
             const routeNum = parseInt(leg.route, 10);
             const trolleyClass = (routeNum >= 150) ? ' trolleybus' : '';
-            
+
+            // Формуємо контекст Trasa для модалки мапи
+            let mapOnClick = `showVehicleOnMap('${leg.tripId}')`;
+            if (stops.length >= 2 && stops[0].lon && stops[stops.length - 1].lon) {
+                const fromCoord = [stops[0].lon, stops[0].lat];
+                const toCoord = [stops[stops.length - 1].lon, stops[stops.length - 1].lat];
+                const ctx = JSON.stringify({ mode: 'trasa', fromCoords: fromCoord, toCoords: toCoord }).replace(/"/g, '&quot;');
+                mapOnClick = `showVehicleOnMap('${leg.tripId}', ${ctx})`;
+            }
+
             // БЛОК 2: Заголовок автобуса з акуратною кнопкою карти
             html += `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg); position: sticky; top: 0; z-index: 10; border-bottom: 2px solid var(--border);">
@@ -2302,7 +2377,7 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
                     <div class="dep-route-box trasa-detail-box${trolleyClass}">${leg.route}</div>
                     <span style="font-weight: 700; color: var(--text); font-size: 15px;">Wsiądź</span>
                 </div>
-                <button class="dep-expand-map-btn" onclick="showVehicleOnMap('${leg.tripId}')" style="margin: 0; width: auto; background: rgba(25, 118, 210, 0.1); color: var(--blue); border: none; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                <button class="dep-expand-map-btn" onclick="${mapOnClick}" style="margin: 0; width: auto; background: rgba(25, 118, 210, 0.1); color: var(--blue); border: none; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
                     <div class="svg-icon icon-map-pin" style="width: 14px; height: 14px;"></div> Mapa
                 </button>
             </div>`;

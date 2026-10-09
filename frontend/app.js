@@ -106,6 +106,14 @@ async function updateLiveCityMap() {
                 activeVehicleMarkers[vehicle.tripId] = marker;
             }
         });
+        for (const tripId in activeVehicleMarkers) {
+            if (!currentTripIds.has(tripId)) {
+                // 1. Видаляємо маркер з карти Leaflet/MapLibre
+                activeVehicleMarkers[tripId].remove();
+                // 2. Видаляємо запис з нашого словника, щоб звільнити пам'ять
+                delete activeVehicleMarkers[tripId];
+            }
+        }
     } catch (e) {
         console.warn('Не вдалося оновити живу карту:', e);
     }
@@ -563,6 +571,12 @@ function switchScreen(screenId, btn, isBackAction = false) {
     if (routeScreen) routeScreen.style.display = 'flex'; 
     if (mapSearchBar) mapSearchBar.style.display = 'none';
     if (fabReport) fabReport.style.display = 'none';
+    if (typeof updateRouteButtonState === 'function') {
+      updateRouteButtonState(true);  // перевіряє стан поля "Звідки"
+      updateRouteButtonState(false); // перевіряє стан поля "Куди"
+    }
+    if (typeof renderRecentRoutes === 'function') {
+      renderRecentRoutes();          // підтягує історію поїздок
   }
 
   // МАГІЯ ІСТОРІЇ: Якщо перемикання відбулося через клік юзера, записуємо крок
@@ -570,8 +584,9 @@ function switchScreen(screenId, btn, isBackAction = false) {
       const currentState = window.history.state;
       if (!currentState || currentState.screen !== screenId) {
           window.history.pushState({ screen: screenId }, "");
-      }
-  }
+       }
+     }  
+   }
 } // <--- ВАЖЛИВО: Ось ця дужка закриває функцію!
 
 
@@ -1193,65 +1208,173 @@ function renderRecentRoutes() {
 
 // 4. Дія при кліку на маршрут з історії
 function applyRecentRoute(route) {
-    // Заповнюємо поля вводу
     document.getElementById('route-input-from').value = route.from.name;
     document.getElementById('route-input-to').value = route.to.name;
     
-    // ДОДАНО: Показуємо обидва хрестики
-    const clearFrom = document.getElementById('route-clear-from');
-    const clearTo = document.getElementById('route-clear-to');
-    if (clearFrom) clearFrom.style.display = 'flex';
-    if (clearTo) clearTo.style.display = 'flex';
-    
-    // Відновлюємо приховані об'єкти з усіма ID
     routeFromStop = route.from;
     routeToStop = route.to;
     
-    // Ховаємо список останніх маршрутів і автоматично запускаємо пошук!
+    // Оновлюємо стани кнопок (верхня буде ✕, нижня — ⇅)
+    updateRouteButtonState(true);
+    updateRouteButtonState(false);
+    
     document.getElementById('recent-routes-list').style.display = 'none';
     document.getElementById('route-search-btn').click(); 
 }
 let routeFromStop = null;
 let routeToStop = null;
 
+// Оновлення класу кнопки залежно від стану поля
+function updateRouteButtonState(isFrom) {
+  const input = document.getElementById(isFrom ? 'route-input-from' : 'route-input-to');
+  const btn = document.getElementById(isFrom ? 'route-clear-from' : 'route-clear-to');
+  if (!input || !btn) return;
+
+  const isFocused = document.activeElement === input;
+  const hasText = input.value.trim().length > 0;
+
+  if (isFrom) {
+    // Верхнє поле: або 📍 (порожнє), або ✕ (з текстом)
+    btn.className = hasText ? 'route-action-btn icon-clear' : 'route-action-btn icon-location';
+    btn.title = hasText ? 'Wyczyść' : 'Moja lokalizacja';
+  } else {
+    // Нижнє поле: 📍 (порожнє), ✕ (активний ввід), ⇅ (вибрано ціль і фокус знято)
+    if (!hasText) {
+      btn.className = 'route-action-btn icon-location';
+      btn.title = 'Moja lokalizacja';
+    } else if (isFocused) {
+      btn.className = 'route-action-btn icon-clear';
+      btn.title = 'Wyczyść';
+    } else {
+      btn.className = 'route-action-btn icon-swap';
+      btn.title = 'Zamień miejscami';
+    }
+  }
+}
+
+// Реверс маршруту (Swap ⇅)
+function swapRoutePoints() {
+  const inputFrom = document.getElementById('route-input-from');
+  const inputTo = document.getElementById('route-input-to');
+
+  // Міняємо тексти в інпутах
+  const tmpName = inputFrom.value;
+  inputFrom.value = inputTo.value;
+  inputTo.value = tmpName;
+
+  // Міняємо збережені об'єкти точок
+  const tmpStop = routeFromStop;
+  routeFromStop = routeToStop;
+  routeToStop = tmpStop;
+
+  // Оновлюємо вигляд обох кнопок
+  updateRouteButtonState(true);
+  updateRouteButtonState(false);
+
+  // Якщо обидва заповнені — запускаємо пошук нового маршруту
+  if (routeFromStop && routeToStop) {
+    document.getElementById('recent-routes-list').style.display = 'none';
+    document.getElementById('route-search-btn')?.click();
+  }
+}
+function applyMyCurrentLocation(isFrom) {
+  const inputEl = document.getElementById(isFrom ? 'route-input-from' : 'route-input-to');
+  const boxEl = document.getElementById(isFrom ? 'route-suggestions-from' : 'route-suggestions-to');
+
+  if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
+    if (inputEl) inputEl.value = 'Moja lokalizacja';
+    if (boxEl) {
+      boxEl.innerHTML = '';
+      boxEl.style.display = 'none';
+    }
+
+    const locObj = { name: 'Moja lokalizacja', isDynamicGps: true };
+
+    if (isFrom) {
+      routeFromStop = locObj;
+    } else {
+      routeToStop = locObj;
+    }
+
+    if (inputEl) inputEl.blur();
+    updateRouteButtonState(isFrom);
+
+    // Якщо обидві точки вже є — ховаємо останні маршрути і шукаємо
+    if (routeFromStop && routeToStop) {
+      const recentList = document.getElementById('recent-routes-list');
+      if (recentList) recentList.style.display = 'none';
+      document.getElementById('route-search-btn')?.click();
+    }
+  } else {
+    if (typeof showToast === 'function') {
+      showToast('Szukam lokalizacji GPS, spróbuj za sekundę...');
+    } else {
+      alert('Szukam lokalizacji GPS, spróbuj za sekundę...');
+    }
+  }
+}
 function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
     const input = document.getElementById(inputId);
     const suggestionsBox = document.getElementById(suggestionsId);
-    // ДОДАНО: Шукаємо кнопку очищення
-    const clearBtn = document.getElementById(isFrom ? 'route-clear-from' : 'route-clear-to');
+    const actionBtn = document.getElementById(isFrom ? 'route-clear-from' : 'route-clear-to');
 
     if (!input || !suggestionsBox) return;
 
-    // ДОДАНО: Логіка кліку по хрестику
-    if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-            input.value = '';
-            clearBtn.style.display = 'none';
-            suggestionsBox.style.display = 'none';
-            if (isFrom) routeFromStop = null;
-            else routeToStop = null;
-            
-            // Відразу показуємо GPS та історію після очищення
-            loadRouteDefaultSuggestions(isFrom);
-            input.focus();
+    // ОБРОБКА КЛІКУ ПО КНОПЦІ В ПОЛІ
+    if (actionBtn) {
+        actionBtn.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+        });
+
+        actionBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+
+            // 1. Стан SWAP ⇅ (тільки для нижнього поля)
+            if (actionBtn.classList.contains('icon-swap')) {
+                swapRoutePoints();
+                return;
+            }
+
+            // 2. Стан CLEAR ✕
+            if (actionBtn.classList.contains('icon-clear')) {
+                input.value = '';
+                suggestionsBox.style.display = 'none';
+                if (isFrom) routeFromStop = null;
+                else routeToStop = null;
+
+                updateRouteButtonState(isFrom);
+                loadRouteDefaultSuggestions(isFrom);
+                input.focus();
+                return;
+            }
+
+            // 3. Стан GPS 📍
+            if (actionBtn.classList.contains('icon-location')) {
+              applyMyCurrentLocation(isFrom);
+              return;
+            }
         });
     }
 
+    // Відстеження фокусу для перемикання ✕ на ⇅
+    input.addEventListener('focus', () => {
+        updateRouteButtonState(isFrom);
+    });
+
+    input.addEventListener('blur', () => {
+        // Невелика затримка, щоб клік по Swap встиг зареєструватися
+        setTimeout(() => updateRouteButtonState(isFrom), 150);
+    });
+
     input.addEventListener('input', async (e) => {
-       const query = e.target.value.trim();
-        
-       // ДОДАНО: Показуємо або ховаємо хрестик, якщо є текст
-       if (clearBtn) {
-           clearBtn.style.display = query.length > 0 ? 'flex' : 'none';
-       }
-        
-       if (query.length === 0) {
-            // Якщо поле повністю очистили — відразу повертаємо історію та GPS!
+        const query = e.target.value.trim();
+        updateRouteButtonState(isFrom);
+
+        if (query.length === 0) {
             if (isFrom) routeFromStop = null; else routeToStop = null;
             loadRouteDefaultSuggestions(isFrom);
             return;
-       } else if (query.length < 2) {
-            // Якщо введена лише 1 літера — просто ховаємо список і чекаємо
+        } else if (query.length < 2) {
             suggestionsBox.innerHTML = '';
             suggestionsBox.style.display = 'none';
             if (isFrom) routeFromStop = null; else routeToStop = null;
@@ -1259,16 +1382,13 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
         }
 
         try {
-            // 1. ПАРАЛЕЛЬНІ ЗАПИТИ: Шукаємо зупинки на бекенді + адреси в MapTiler
             const stopsPromise = fetch(`${API_BASE_URL}/stops/search?q=${encodeURIComponent(query)}`)
                 .then(r => r.ok ? r.json() : []);
                 
-            // Bounding box для Любліна, щоб не шукало вулиці у Варшаві (minLon, minLat, maxLon, maxLat)
             const mapTilerUrl = `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${MAPTILER_KEY}&language=pl&autocomplete=true&bbox=22.35,51.11,22.75,51.36`;
             const geocodePromise = fetch(mapTilerUrl)
                 .then(r => r.ok ? r.json() : { features: [] });
 
-            // Чекаємо результатів з обох серверів одночасно!
             const [stops, geocodeData] = await Promise.all([stopsPromise, geocodePromise]);
             
             if (stops.length === 0 && (!geocodeData.features || geocodeData.features.length === 0)) {
@@ -1279,7 +1399,7 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
 
             suggestionsBox.innerHTML = '';
 
-            // 2. ОБРОБКА ТА ВІДМАЛЬОВКА ЗУПИНОК (твоя логіка групування)
+            // Клік по зупинці
             if (stops.length > 0) {
                 const groupedStops = {};
                 stops.forEach(stop => {
@@ -1297,8 +1417,6 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                     const div = document.createElement('div');
                     div.className = 'stop-card';
                     div.style = 'padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; gap: 12px;';
-                    
-                   // Використовуємо іконку stop.svg через маску
                     div.innerHTML = `
                         <div style="-webkit-mask-image: url('stop.svg'); mask-image: url('stop.svg'); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; background-color: var(--blue); width: 20px; height: 20px; flex-shrink: 0;"></div>
                         <div style="font-weight: bold; color: var(--text);">${group.name}</div>
@@ -1309,22 +1427,22 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                         suggestionsBox.innerHTML = '';
                         suggestionsBox.style.display = 'none';
                         
-                        // Примусово показуємо хрестик
-                        if (clearBtn) clearBtn.style.display = 'flex';
-                        
                         const routeObj = { name: group.name, ids: group.ids };
                         if (isFrom) routeFromStop = routeObj;
                         else routeToStop = routeObj;
                         
                         saveRecentRouteStop({ name: group.name, ids: group.ids });
+
+                        // Знімаємо фокус і оновлюємо стан кнопки
+                        input.blur();
+                        updateRouteButtonState(isFrom);
                     });
                     suggestionsBox.appendChild(div);
                 });
             }
 
-                        // 3. ОБРОБКА ТА ВІДМАЛЬОВКА АДРЕС (MapTiler)
+            // Клік по адресі (MapTiler)
             if (geocodeData.features && geocodeData.features.length > 0) {
-                // Беремо максимум 4 адреси, щоб не засмічувати список
                 geocodeData.features.slice(0, 4).forEach(feature => {
                     const div = document.createElement('div');
                     div.className = 'stop-card';
@@ -1333,7 +1451,6 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                     const shortName = feature.text + (feature.address ? ' ' + feature.address : '');
                     const contextParts = feature.place_name.split(',').slice(1).join(',').trim();
 
-                    // Розділяємо на ліву (клікабельну) частину і праву кнопку-стрілочку
                     div.innerHTML = `
                         <div class="address-main-click" style="display: flex; align-items: center; gap: 12px; flex: 1; cursor: pointer;">
                             <div class="svg-icon icon-map-pin" style="color: var(--text-muted); flex-shrink: 0;"></div>
@@ -1345,23 +1462,25 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                         <div class="address-copy-btn" style="padding: 4px 8px; cursor: pointer; color: var(--text-muted); font-size: 20px; font-weight: bold; flex-shrink: 0;">↖</div>
                     `;
                     
-                    // 1. Клік по самій адресі (як і було - вибирає адресу і ховає список)
                     div.querySelector('.address-main-click').addEventListener('click', () => {
                         input.value = shortName; 
                         suggestionsBox.innerHTML = '';
                         suggestionsBox.style.display = 'none';
-                        if (clearBtn) clearBtn.style.display = 'flex';
                         
                         const routeObj = { name: shortName, lat: feature.center[1], lon: feature.center[0] };
                         if (isFrom) routeFromStop = routeObj; else routeToStop = routeObj;
                         saveRecentRouteStop(routeObj);
+
+                        // Знімаємо фокус і оновлюємо стан кнопки
+                        input.blur();
+                        updateRouteButtonState(isFrom);
                     });
 
-                    // 2. Клік по стрілочці (тільки підставляє текст в інпут, щоб дописати номер)
                     div.querySelector('.address-copy-btn').addEventListener('click', (e) => {
-                        e.stopPropagation(); // Блокуємо клік по основному блоку
-                        input.value = shortName + ' '; // Додаємо пробіл для зручності
-                        input.focus(); // Повертаємо курсор у поле вводу
+                        e.stopPropagation();
+                        input.value = shortName + ' ';
+                        input.focus();
+                        updateRouteButtonState(isFrom);
                     });
 
                     suggestionsBox.appendChild(div);
@@ -1373,6 +1492,7 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
             console.error('Помилка пошуку:', error);
         }
     });
+
     document.addEventListener('click', (e) => {
         if (!input.contains(e.target) && !suggestionsBox.contains(e.target)) {
             suggestionsBox.style.display = 'none';
@@ -1382,7 +1502,8 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
 // Запускаємо логіку для обох полів
 setupRouteAutocomplete('route-input-from', 'route-suggestions-from', true);
 setupRouteAutocomplete('route-input-to', 'route-suggestions-to', false);
-
+updateRouteButtonState(true);  // перевірить поле "Звідки"
+updateRouteButtonState(false); // перевірить поле "Куди"
 // ДОДАЄМО ВИКЛИК GPS-МЕНЮ ПРИ КЛІКУ В ПОЛЕ
 document.getElementById('route-input-from').addEventListener('focus', () => loadRouteDefaultSuggestions(true));
 document.getElementById('route-input-to').addEventListener('focus', () => loadRouteDefaultSuggestions(false));
@@ -1507,45 +1628,7 @@ function loadRouteDefaultSuggestions(isFrom) {
     boxEl.style.backgroundColor = 'var(--bg)'; 
     boxEl.style.zIndex = '100'; 
     // ========================================================
-    
-    // Якщо список не перекриває кнопку пошуку, а зсуває її вниз, 
-    // розкоментуй наступні три рядки:
-    // boxEl.style.position = 'absolute';
-    // boxEl.style.left = '0';
-    // boxEl.style.right = '0';
-    // ==================================================
-    // ========================================================
-    // 0. КНОПКА "MOJA LOKALIZACJA" (GPS) - ТЕПЕР ЗАВЖДИ ВИДИМА
-    // 0. КНОПКА "MOJA LOKALIZACJA" (GPS) - ТЕПЕР ЗАВЖДИ ВИДИМА
-    const gpsButton = document.createElement('div');
-    gpsButton.className = 'stop-card';
-    // ЗМІНЕНО: padding з '14px 16px' на '10px'
-    gpsButton.style = 'padding: 10px; cursor: pointer; border-bottom: 1px solid var(--border); background: rgba(25, 118, 210, 0.05); display: flex; align-items: center; gap: 12px;';
-    gpsButton.innerHTML = `<div class="svg-icon icon-map-pin" style="color: var(--blue);"></div><div style="font-weight: 700; color: var(--blue);">Moja lokalizacja</div>`;
-    
-        gpsButton.addEventListener('click', () => {
-        if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
-            inputEl.value = 'Moja lokalizacja';
-            boxEl.style.display = 'none';
-            
-            const clearBtn = document.getElementById(isFrom ? 'route-clear-from' : 'route-clear-to');
-            if (clearBtn) clearBtn.style.display = 'flex';
-            
-            // Замість фіксації lat і lon, просто кажемо додатку: "Бери GPS у момент пошуку"
-            const locObj = { name: 'Moja lokalizacja', isDynamicGps: true };
-            
-            if (isFrom) {
-                routeFromStop = locObj;
-            } else {
-                routeToStop = locObj;
-            }
-        } else {
-            showToast('Szukam lokalizacji GPS, spróbuj za sekundę...');
-        }
-    });
-    
-    boxEl.appendChild(gpsButton);
-    // ========================================================
+  
     // 1. ОСТАННІ ПОШУКИ (Групуємо історію, щоб прибрати платформи, якщо вони там були)
     const recents = getRecentRouteStops();
     if (recents.length > 0) {
@@ -2509,7 +2592,7 @@ function loadNearbyStopsDefault() {
         return;
     }
 
-    nearbyContainer.innerHTML = '<div style="padding: 10px; color: var(--text-muted);"><div class="svg-icon icon-walk"></div>Шукаємо локацію...</div>';
+    nearbyContainer.innerHTML = '<div style="padding: 10px; color: var(--text-muted);"><div class="svg-icon icon-walk"></div>Szukam lokalizacji...</div>';
 
     if ('geolocation' in navigator) {
         navigator.geolocation.getCurrentPosition(

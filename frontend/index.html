@@ -779,8 +779,65 @@
 .icon-gps {
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cline x1='12' y1='2' x2='12' y2='6'%3E%3C/line%3E%3Cline x1='12' y1='18' x2='12' y2='22'%3E%3C/line%3E%3Cline x1='2' y1='12' x2='6' y2='12'%3E%3C/line%3E%3Cline x1='18' y1='12' x2='22' y2='12'%3E%3C/line%3E%3C/svg%3E");
 }
+/* Базовий вигляд кнопок-дії в полі вводу */
+.route-action-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
 
-/* 2. Справжній супутник */
+/* Сама іконка через CSS-маску */
+.route-action-btn::before {
+  pointer-events: none;
+  content: '';
+  display: block;
+  width: 18px;
+  height: 18px;
+  background-color: var(--text-muted);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  transition: background-color 0.2s ease, transform 0.15s ease;
+}
+
+.route-action-btn:active::before {
+  transform: scale(0.88);
+}
+
+/* Стан: Локація (GPS з кружечком всередині) */
+.route-action-btn.icon-location::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8'/%3E%3Ccircle cx='12' cy='12' r='3' fill='black'/%3E%3Cline x1='12' y1='1' x2='12' y2='4'/%3E%3Cline x1='12' y1='20' x2='12' y2='23'/%3E%3Cline x1='1' y1='12' x2='4' y2='12'/%3E%3Cline x1='20' y1='12' x2='23' y2='12'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8'/%3E%3Ccircle cx='12' cy='12' r='3' fill='black'/%3E%3Cline x1='12' y1='1' x2='12' y2='4'/%3E%3Cline x1='12' y1='20' x2='12' y2='23'/%3E%3Cline x1='1' y1='12' x2='4' y2='12'/%3E%3Cline x1='20' y1='12' x2='23' y2='12'/%3E%3C/svg%3E");
+}
+
+/* Стан: Хрестик (Clear) */
+.route-action-btn.icon-clear::before {
+  width: 15px;
+  height: 15px;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E");
+}
+
+/* Стан: Реверс (Swap ⇅) */
+.route-action-btn.icon-swap::before {
+  background-color: var(--blue); /* Робимо кнопку swap синьою/акцентною */
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 16V4M7 4L3 8M7 4L11 8'/%3E%3Cpath d='M17 8V20M17 20L21 16M17 20L13 16'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 16V4M7 4L3 8M7 4L11 8'/%3E%3Cpath d='M17 8V20M17 20L21 16M17 20L13 16'/%3E%3C/svg%3E");
+}
 /* --- ПУЛЬСУЮЧИЙ ІНДИКАТОР LIVE --- */
 .live-indicator {
   position: relative;
@@ -1249,32 +1306,24 @@
   <div class="stop-search-header" style="display: flex; flex-direction: column; gap: 6px;">
     
     <!-- Поле "Звідки" -->
-    <div style="position: relative;">
-      <input type="text" id="route-input-from"
-        style="width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 9px; padding: 9px 36px 9px 12px; font-size: 15px; background: var(--bg); color: var(--text);"
-        placeholder="Skąd (np. Plac Litewski)..." autocomplete="off">
-      
-      <button id="route-clear-from"
-        style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; background: none; border: none; font-size: 16px; color: var(--text-muted); cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0;">
-        ✕
-      </button>
-      
-      <div id="route-suggestions-from" class="autocomplete-list"></div>
-    </div>
+<div style="position: relative;">
+  <input type="text" id="route-input-from"
+    style="width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 9px; padding: 9px 36px 9px 12px; font-size: 15px; background: var(--bg); color: var(--text);"
+    placeholder="Skąd..." autocomplete="off">
+  
+  <button id="route-clear-from" type="button" class="route-action-btn icon-location" title="Użyj mojej lokalizacji"></button>
+  <div id="route-suggestions-from" class="autocomplete-list"></div>
+</div>
 
-    <!-- Поле "Куди" -->
-    <div style="position: relative;">
-      <input type="text" id="route-input-to"
-        style="width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 9px; padding: 9px 36px 9px 12px; font-size: 15px; background: var(--bg); color: var(--text);"
-        placeholder="Dokąd (np. Lotnicza)..." autocomplete="off">
-      
-      <button id="route-clear-to"
-        style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; background: none; border: none; font-size: 16px; color: var(--text-muted); cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0;">
-        ✕
-      </button>
-      
-      <div id="route-suggestions-to" class="autocomplete-list"></div>
-    </div>
+<!-- Поле "Куди" -->
+<div style="position: relative;">
+  <input type="text" id="route-input-to"
+    style="width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 9px; padding: 9px 36px 9px 12px; font-size: 15px; background: var(--bg); color: var(--text);"
+    placeholder="Dokąd..." autocomplete="off">
+  
+  <button id="route-clear-to" type="button" class="route-action-btn icon-location" title="Użyj mojej lokalizacji"></button>
+  <div id="route-suggestions-to" class="autocomplete-list"></div>
+</div>
 
     <button id="route-search-btn"
       style="width: 100%; background: var(--blue); color: #fff; border: none; border-radius: 9px; padding: 10px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 2px;">

@@ -425,70 +425,143 @@ document.getElementById('close-modal-btn').addEventListener('click', () => {
   }
 });
 
-//  МАЛЮВАННЯ МАРШРУТУ
-async function drawRouteShape(tripId, mapInstance) {
-    try {
-        // 1. Беремо координати зупинок з нашого нового бекенду
-        // Заміни URL, якщо твій бекенд має іншу адресу
-        const res = await fetch(`${API_BASE_URL}/api/trip-stops/${tripId}`);
-        if (!res.ok) return;
-        const stops = await res.json();
+// МАЛЮВАННЯ МАРШРУТУ ТА ВУЗЛОВИХ ЦЯТОК ЗУПИНОК
+// допоміжна математика для прив'язки точок до лінії
+function projectPointToLineString(point, coords) {
+  const [px, py] = point;
+  let minDistance = Infinity;
+  let nearestPoint = point;
 
-        if (!stops || stops.length < 2) return;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const [x1, y1] = coords[i];
+    const [x2, y2] = coords[i + 1];
 
-        // 2. Клеїмо рядок для OSRM (формат: lon,lat;lon,lat...)
-        // OSRM приймає максимум 100 точок. Якщо їх більше, беремо кожну другу
-        let filteredStops = stops;
-        if (stops.length > 90) {
-            filteredStops = stops.filter((_, i) => i % 2 === 0 || i === stops.length - 1);
-        }
-        const coordsString = filteredStops.map(s => `${s[0]},${s[1]}`).join(';');
+    const dx = x2 - x1;
+    const dy = y2 - y1;
 
-        // 3. Робимо запит до OSRM
-        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsString}?geometries=geojson&overview=full`;
-        const osrmRes = await fetch(osrmUrl);
-        const osrmData = await osrmRes.json();
+    if (dx === 0 && dy === 0) continue;
 
-        let routeGeoJSON;
-        if (osrmData.routes && osrmData.routes.length > 0) {
-            // Маршрут по вулицях побудовано успішно
-            routeGeoJSON = osrmData.routes[0].geometry;
-        } else {
-            // План Б: якщо OSRM не впорався, з'єднуємо зупинки прямими лініями
-            routeGeoJSON = { type: 'LineString', coordinates: stops };
-        }
+    // Параметр проекції t від 0 до 1
+    let t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy);
+    t = Math.max(0, Math.min(1, t));
 
-        // 4. Додаємо шар на карту MapLibre
-        if (mapInstance.getSource('route-shape')) {
-            mapInstance.getSource('route-shape').setData({
-                type: 'Feature',
-                properties: {},
-                geometry: routeGeoJSON
-            });
-        } else {
-        	mapInstance.addSource('route-shape', {
-                'type': 'geojson',
-                'data': { type: 'Feature', properties: {}, geometry: routeGeoJSON }
-            });
+    const projX = x1 + t * dx;
+    const projY = y1 + t * dy;
 
-            mapInstance.addLayer({
-                'id': 'route-shape-layer',
-                'type': 'line',
-                'source': 'route-shape',
-                'layout': {
-                    'line-join': 'round',
-                    'line-cap': 'round'
-                },
-                'paint': {
-                    'line-color': '#22c55e', // Твій зелений колір
-                    'line-width': 4,
-                    'line-opacity': 0.7
-                }
-            }); 
-        }
-    } catch (e) {
-        console.error('Помилка побудови маршруту:', e);
+    // Квадрат відстані до проекції
+    const distSq = (px - projX) * (px - projX) + (py - projY) * (py - projY);
+    if (distSq < minDistance) {
+      minDistance = distSq;
+      nearestPoint = [projX, projY];
     }
+  }
+
+  return nearestPoint;
+}
+//====== сама функція малювання =====
+async function drawRouteShape(tripId, mapInstance) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/trip-stops/${tripId}`);
+    if (!res.ok) return;
+    const stops = await res.json();
+
+    if (!stops || stops.length < 2) return;
+
+    // 1. Готуємо зупинки для OSRM
+    let filteredStops = stops;
+    if (stops.length > 90) {
+      filteredStops = stops.filter((_, i) => i % 2 === 0 || i === stops.length - 1);
+    }
+    const coordsString = filteredStops.map(s => `${s[0]},${s[1]}`).join(';');
+
+    // 2. Отримуємо геометрію лінії від OSRM
+    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsString}?geometries=geojson&overview=full`;
+    const osrmRes = await fetch(osrmUrl);
+    const osrmData = await osrmRes.json();
+
+    let routeGeoJSON;
+    if (osrmData.routes && osrmData.routes.length > 0) {
+      routeGeoJSON = osrmData.routes[0].geometry;
+    } else {
+      routeGeoJSON = { type: 'LineString', coordinates: stops };
+    }
+
+    // 3. «Примагнічуємо» зупинки точно в центр лінії дороги
+    const lineCoords = routeGeoJSON.coordinates;
+    const snappedStops = stops.map(stop => projectPointToLineString(stop, lineCoords));
+
+    const stopsGeoJSON = {
+      type: 'FeatureCollection',
+      features: snappedStops.map((coord, index) => ({
+        type: 'Feature',
+        properties: {
+          isTerminal: index === 0 || index === snappedStops.length - 1
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: coord
+        }
+      }))
+    };
+
+    // 4. Лінія маршруту
+    if (mapInstance.getSource('route-shape')) {
+      mapInstance.getSource('route-shape').setData({
+        type: 'Feature',
+        properties: {},
+        geometry: routeGeoJSON
+      });
+    } else {
+      mapInstance.addSource('route-shape', {
+        type: 'geojson',
+        data: { type: 'Feature', properties: {}, geometry: routeGeoJSON }
+      });
+
+      mapInstance.addLayer({
+        id: 'route-shape-layer',
+        type: 'line',
+        source: 'route-shape',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#22c55e',
+          'line-width': 4,
+          'line-opacity': 0.7
+        }
+      });
+    }
+
+    // 5. Вузлові цятки зупинок (строго по нитці маршруту)
+    if (mapInstance.getSource('route-stops')) {
+      mapInstance.getSource('route-stops').setData(stopsGeoJSON);
+    } else {
+      mapInstance.addSource('route-stops', {
+        type: 'geojson',
+        data: stopsGeoJSON
+      });
+
+      mapInstance.addLayer({
+        id: 'route-stops-layer',
+        type: 'circle',
+        source: 'route-stops',
+        paint: {
+          'circle-radius': [
+            'interpolate', ['linear'], ['zoom'],
+            11, 2,
+            15, 4,
+            18, 5.5
+          ],
+          'circle-color': '#ffffff',
+          'circle-stroke-color': '#16a34a',
+          'circle-stroke-width': 2
+        }
+      });
+    }
+  } catch (e) {
+    console.error('Помилка побудови маршруту:', e);
+  }
 }
 // БЕЗПЕЧНО: Це просто запит до бекенда, залишаємо!
 async function fetchVehiclePosition(tripId) {

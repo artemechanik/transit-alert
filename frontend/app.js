@@ -21,6 +21,7 @@ let modalTrackInterval = null;
 let modalMap = null;
 let modalUserMarker = null; // Додали маркер юзера для модалки
 let modalInitTimeout = null;
+let modalUserInteracted = false;
 let globalCachedNearbyStops = null;
 let globalCachedNearbyTime = 0;
 // ==================== Toast-повідомлення ====================
@@ -262,6 +263,8 @@ async function toggleDepExpand(card, panel, dep) {
 // ==================== Модальна міні-карта (Показ конкретного автобуса) ====================
 async function showVehicleOnMap(tripId) {
   try {
+    modalUserInteracted = false;
+
     const vehicle = await fetchVehiclePosition(tripId);
     if (!vehicle) {
       showToast('Brak danych GPS dla tego kursu');
@@ -284,7 +287,7 @@ async function showVehicleOnMap(tripId) {
       // 3. Ініціалізуємо MapLibre для модалки, якщо її ще немає
       if (!modalMap) {
         const isDarkOS = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        
+
         modalMap = new maplibregl.Map({
           container: 'modal-map',
           style: isDarkOS ? 'style-dark.json' : 'style-light.json',
@@ -300,84 +303,95 @@ async function showVehicleOnMap(tripId) {
         });
 
         modalMap.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
+
+        // Відстежуємо ручну взаємодію з картою
+        modalMap.on('dragstart', () => {
+          modalUserInteracted = true;
+        });
+        modalMap.on('zoomstart', (e) => {
+          if (e.originalEvent) {
+            modalUserInteracted = true;
+          }
+        });
+
         modalMap.on('load', () => {
-            drawRouteShape(tripId, modalMap);
+          drawRouteShape(tripId, modalMap);
         });
       } else {
         modalMap.resize();
-        // Прибрали звідси flyTo, бо камера тепер "розумна"
         drawRouteShape(tripId, modalMap);
       }
-      
+
       if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
         const userPos = userLocationMarker.getLngLat();
-        
+
         if (!modalUserMarker) {
           const userEl = document.createElement('div');
-          userEl.className = 'user-marker-dom'; 
+          userEl.className = 'user-marker-dom';
           modalUserMarker = new maplibregl.Marker({ element: userEl })
-              .setLngLat(userPos)
-              .addTo(modalMap);
+            .setLngLat(userPos)
+            .addTo(modalMap);
         } else {
           modalUserMarker.setLngLat(userPos);
         }
 
-        // === ВСТАВКА: Камера охоплює і автобус, і тебе ===
+        // Камера охоплює і автобус, і користувача
         const bounds = new maplibregl.LngLatBounds()
-            .extend(lngLat) // Координати автобуса
-            .extend([userPos.lng, userPos.lat]); // Твої координати
-            
-        modalMap.fitBounds(bounds, { padding: 50, maxZoom: 16, duration: 1000 });
+          .extend(lngLat)
+          .extend([userPos.lng, userPos.lat]);
 
+        modalMap.fitBounds(bounds, { padding: 50, maxZoom: 16, duration: 1000 });
       } else {
-        // === Якщо тебе немає на карті (GPS вимкнено), центруємо тільки на автобусі ===
         modalMap.flyTo({ center: lngLat, zoom: 16 });
       }
-      
-      // 4. Створюємо або рухаємо маркер обраного автобуса на міні-карті
+
+      // 4. Створюємо або оновлюємо маркер обраного автобуса
       if (!modalVehicleMarker) {
         const el = document.createElement('div');
         el.className = 'vehicle-marker-icon';
-        
+
         const bearing = vehicle.bearing || 0;
         el.innerHTML = `
-            <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
-                <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
-                    <polygon points="50,10 90,90 10,90" />
-                </svg>
-                <div class="vehicle-marker-dot">${vehicle.route || '🚌'}</div>
-            </div>
+          <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
+            <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
+              <polygon points="50,10 90,90 10,90" />
+            </svg>
+            <div class="vehicle-marker-dot">${vehicle.route || '🚌'}</div>
+          </div>
         `;
 
         modalVehicleMarker = new maplibregl.Marker({ element: el })
-            .setLngLat(lngLat)
-            .addTo(modalMap);
+          .setLngLat(lngLat)
+          .addTo(modalMap);
       } else {
         modalVehicleMarker.setLngLat(lngLat);
         const arrowEl = modalVehicleMarker.getElement().querySelector('.vehicle-arrow');
         if (arrowEl) {
-            arrowEl.style.transform = `rotate(${vehicle.bearing || 0}deg)`;
+          arrowEl.style.transform = `rotate(${vehicle.bearing || 0}deg)`;
         }
       }
 
-      // 5. Запускаємо інтервал оновлення позиції цього конкретного автобуса
+      // 5. Періодичне оновлення позиції
       if (modalTrackInterval) clearInterval(modalTrackInterval);
       modalTrackInterval = setInterval(async () => {
         const updated = await fetchVehiclePosition(tripId);
         if (updated && modalVehicleMarker) {
           const updatedLngLat = [updated.lon, updated.lat];
           modalVehicleMarker.setLngLat(updatedLngLat);
-          modalMap.easeTo({ center: updatedLngLat, duration: 1000 });
+
+          if (!modalUserInteracted) {
+            modalMap.easeTo({ center: updatedLngLat, duration: 1000 });
+          }
 
           const arrowEl = modalVehicleMarker.getElement().querySelector('.vehicle-arrow');
           if (arrowEl) {
-              arrowEl.style.transform = `rotate(${updated.bearing || 0}deg)`;
+            arrowEl.style.transform = `rotate(${updated.bearing || 0}deg)`;
           }
         }
         if (typeof userLocationMarker !== 'undefined' && userLocationMarker && modalUserMarker) {
-           modalUserMarker.setLngLat(userLocationMarker.getLngLat());
+          modalUserMarker.setLngLat(userLocationMarker.getLngLat());
         }
-      }, 10000);
+      }, 5000);
 
     }, 200);
 
@@ -390,6 +404,7 @@ async function showVehicleOnMap(tripId) {
 // ЛОГІКА ЗАКРИТТЯ
 document.getElementById('close-modal-btn').addEventListener('click', () => {
   document.getElementById('vehicle-modal').style.display = 'none';
+  modalUserInteracted = false;
   
   if (modalTrackInterval) {
     clearInterval(modalTrackInterval);

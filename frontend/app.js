@@ -536,9 +536,9 @@ async function drawRouteShape(tripId, mapInstance, context = { mode: 'przystanek
     };
 
     // 4. Базова / Фонова лінія маршруту
-    const baseColor = isTrasa ? '#94a3b8' : '#22c55e'; // У режимі Trasa фоновий маршрут приглушений
-    const baseOpacity = isTrasa ? 0.35 : 0.75;
-    const baseWidth = isTrasa ? 3 : 4;
+    const baseColor = isTrasa ? '#c0c0c0' : '#22c55e'; // У режимі Trasa фоновий маршрут приглушений
+    const baseOpacity = isTrasa ? 0.75 : 0.75; 
+    const baseWidth = isTrasa ? 4 : 4;
 
     if (mapInstance.getSource('route-shape')) {
       mapInstance.getSource('route-shape').setData({

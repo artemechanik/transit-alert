@@ -149,7 +149,7 @@ fun Application.liveVehiclesRoutes() {
                     if (serviceIds.isEmpty()) continue
 
                                         // Зміщуємо вікно пошуку на timeOffset хвилин
-                    val windowStart = minuteBase + timeOffset - 60
+                    val windowStart = minuteBase + timeOffset - 20
                     val windowEnd = minuteBase + timeOffset + 1440
                     if (windowEnd < 0) continue
                     val nowRefSeconds = minuteBase * 60 + nowSecondOfMinute
@@ -169,7 +169,7 @@ fun Application.liveVehiclesRoutes() {
                         }
 
                         .orderBy(StopDepartures.departureMinutes to SortOrder.ASC)
-                        .limit(30)
+                        .limit(100)
                         .forEach { row ->
                             val scheduledMin = row[StopDepartures.departureMinutes]
                             val tripId = row[StopDepartures.tripId]

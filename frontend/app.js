@@ -57,14 +57,14 @@ let map, reportMarkersLayer, searchMarker, vehicleMarker;
 let userLocationMarker;
 let allVehiclesClusterGroup = null;
 let liveMapInterval = null;
-let activeVehicleMarkers = {}; 
+let activeVehicleMarkers = {};
 
 // Заглушки, щоб старий код не крашив додаток
 function trackUserLocation() {}
 // ==================== Живі Автобуси на Карті ====================
 async function updateLiveCityMap() {
     try {
-        const res = await fetch(`${API_BASE_URL}/live-vehicles`); 
+        const res = await fetch(`${API_BASE_URL}/live-vehicles`);
         if (!res.ok) return;
         const vehicles = await res.json();
 
@@ -74,13 +74,13 @@ async function updateLiveCityMap() {
         vehicles.forEach(vehicle => {
             if (!vehicle.lat || !vehicle.lon) return;
             const lngLat = [vehicle.lon, vehicle.lat];
-            const bearing = vehicle.bearing || 0; 
+            const bearing = vehicle.bearing || 0;
             currentTripIds.add(vehicle.tripId);
 
             if (activeVehicleMarkers[vehicle.tripId]) {
                 const marker = activeVehicleMarkers[vehicle.tripId];
                 marker.setLngLat(lngLat);
-                
+
                 const arrowEl = marker.getElement().querySelector('.vehicle-arrow');
                 if (arrowEl) {
                     arrowEl.style.transform = `rotate(${bearing}deg)`;
@@ -88,7 +88,7 @@ async function updateLiveCityMap() {
             } else {
                 const el = document.createElement('div');
                 el.className = 'vehicle-marker-icon';
-                
+
                 // ТОЧНА копія твоєї HTML-структури з Leaflet
                 el.innerHTML = `
                     <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
@@ -124,14 +124,14 @@ const LUBLIN_CENTER_MAPLIBRE = [22.5684, 51.2465];
 
 function initMap() {
     const isDarkOS = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
+
     map = new maplibregl.Map({
         container: 'map',
         style: isDarkOS ? 'style-dark.json' : 'style-light.json',
         center: LUBLIN_CENTER_MAPLIBRE,
         zoom: 14,
         attributionControl: false,
-        
+
         // --- ОСЬ ЦЯ МАГІЯ ПІДСТАВЛЯЄ ТВІЙ КЛЮЧ ---
         transformRequest: (url, resourceType) => {
             if (url.includes('api.maptiler.com') && url.includes('{key}')) {
@@ -248,7 +248,7 @@ async function toggleDepExpand(card, panel, dep) {
 
     // --- НОВА ЛОГІКА ПЛАВНОГО СКРОЛУ ---
     setTimeout(() => {
-      // 'nearest' означає, що екран підсунеться рівно настільки, 
+      // 'nearest' означає, що екран підсунеться рівно настільки,
       // щоб нижня частина панелі з кнопкою стала видимою
       panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, 150); // Чекаємо 150мс, поки відпрацює CSS-анімація розкриття
@@ -405,19 +405,19 @@ async function showVehicleOnMap(tripId, routeContext = { mode: 'przystanek' }) {
 document.getElementById('close-modal-btn').addEventListener('click', () => {
   document.getElementById('vehicle-modal').style.display = 'none';
   modalUserInteracted = false;
-  
+
   if (modalTrackInterval) {
     clearInterval(modalTrackInterval);
     modalTrackInterval = null;
   }
-  
+
   if (modalMap) {
     modalMap.remove(); // ВАЖЛИВО: фізично знищуємо карту, звільняючи пам'ять
     modalMap = null;
   }
-  
+
   modalVehicleMarker = null; // Скидаємо пам'ять про маркер автобуса
-  
+
   // === ДОДАНО: Скидаємо твій маркер ===
   if (modalUserMarker) {
     modalUserMarker.remove();
@@ -447,10 +447,10 @@ function findNearestVertexIndex(point, coords) {
 function sliceLineString(coords, startPoint, endPoint) {
   const startIdx = findNearestVertexIndex(startPoint, coords);
   const endIdx = findNearestVertexIndex(endPoint, coords);
-  
+
   const from = Math.min(startIdx, endIdx);
   const to = Math.max(startIdx, endIdx);
-  
+
   const sliced = coords.slice(from, to + 1);
   if (sliced.length < 2) return coords;
   return sliced;
@@ -537,7 +537,7 @@ async function drawRouteShape(tripId, mapInstance, context = { mode: 'przystanek
 
     // 4. Базова / Фонова лінія маршруту
     const baseColor = isTrasa ? '#c0c0c0' : '#22c55e'; // У режимі Trasa фоновий маршрут приглушений
-    const baseOpacity = isTrasa ? 0.75 : 0.75; 
+    const baseOpacity = isTrasa ? 0.75 : 0.75;
     const baseWidth = isTrasa ? 4 : 4;
 
     if (mapInstance.getSource('route-shape')) {
@@ -638,7 +638,7 @@ async function fetchVehiclePosition(tripId) {
 
 // ЗАМОРОЖЕНО: Тут був код малювання маркера
 function drawVehicleMarker(vehicle) {
-  return; 
+  return;
 }
 
 // БЕЗПЕЧНО: Залишаємо
@@ -671,13 +671,13 @@ function switchScreen(screenId, btn, isBackAction = false) {
   // --- ДОДАЄМО: ЗАКРИВАЄМО МІНІ-КАРТУ, ЯКЩО ВОНА ВІДКРИТА ---
   const vehicleModal = document.getElementById('vehicle-modal');
   if (vehicleModal && vehicleModal.style.display !== 'none') {
-    document.getElementById('close-modal-btn').click(); 
+    document.getElementById('close-modal-btn').click();
   }
   // --------------------------------------------------------
 
   // Оновлюємо активну кнопку
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  
+
   if (btn) {
       btn.classList.add('active');
   } else {
@@ -697,32 +697,32 @@ function switchScreen(screenId, btn, isBackAction = false) {
   // ДОДАЄМО СЮДИ НАШУ ТРАСУ
   const routeScreen = document.getElementById('screen-route');
   if (routeScreen) routeScreen.style.display = 'none';
-  
+
   // 3. Обробляємо логіку для кожної вкладки
   if (screenId === 'map') {
-    closeDrawer(false); 
+    closeDrawer(false);
     if (mapSearchBar) mapSearchBar.style.display = 'flex';
     if (fabReport) fabReport.style.display = 'flex';
-    
+
   } else if (screenId === 'stop') {
     stopVehicleTracking();
-    closeDrawer(false); 
+    closeDrawer(false);
     if (mapSearchBar) mapSearchBar.style.display = 'none';
     if (fabReport) fabReport.style.display = 'none';
-    if (stopScreen) stopScreen.style.display = 'flex'; 
-    
+    if (stopScreen) stopScreen.style.display = 'flex';
+
     loadNearbyStopsDefault();
-  
+
   } else if (screenId === 'reports') {
     stopVehicleTracking();
     openDrawer('Zgłoszenia', renderReportsList);
     if (mapSearchBar) mapSearchBar.style.display = 'flex';
     if (fabReport) fabReport.style.display = 'flex';
-    
+
   } else if (screenId === 'route') {
     stopVehicleTracking();
     if (typeof closeDrawer === 'function') closeDrawer(false);
-    if (routeScreen) routeScreen.style.display = 'flex'; 
+    if (routeScreen) routeScreen.style.display = 'flex';
     if (mapSearchBar) mapSearchBar.style.display = 'none';
     if (fabReport) fabReport.style.display = 'none';
     if (typeof updateRouteButtonState === 'function') {
@@ -739,7 +739,7 @@ function switchScreen(screenId, btn, isBackAction = false) {
       if (!currentState || currentState.screen !== screenId) {
           window.history.pushState({ screen: screenId }, "");
        }
-     }  
+     }
    }
 } // <--- ВАЖЛИВО: Ось ця дужка закриває функцію!
 
@@ -757,14 +757,14 @@ function openDrawer(title, fillFn) {
 function closeDrawer(resetNav = true) {
   document.getElementById('reports-drawer').classList.remove('open');
   document.getElementById('overlay').classList.remove('show');
-  
+
   if (resetNav) {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     document.getElementById('nav-map').classList.add('active');
-    
+
     const stopScreen = document.getElementById('screen-stop');
     if (stopScreen) stopScreen.style.display = 'none';
-    
+
     // Повертаємо елементи карти
     const mapSearchBar = document.getElementById('search-bar');
     const fabReport = document.getElementById('fab-report');
@@ -773,8 +773,8 @@ function closeDrawer(resetNav = true) {
   }
 }
 document.getElementById('drawer-close').addEventListener('click', () => closeDrawer(true));
-document.getElementById('overlay').addEventListener('click', () => { 
-  closeDrawer(true); 
+document.getElementById('overlay').addEventListener('click', () => {
+  closeDrawer(true);
   if (typeof closeModal === 'function') closeModal();
   if (typeof closeQuickModal === 'function') closeQuickModal(); // <-- Додано
 });
@@ -807,12 +807,12 @@ function reportCardHtml(r) {
     const original = reportsById[r.previousReportId];
     if (original) {
       const origTime = new Date(original.createdAt).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
-      
+
       // Формуємо контекст: якщо була лінія - показуємо її, інакше - зупинку
-      const origContext = original.route 
-        ? `Linia ${original.route}${original.direction ? ' → ' + original.direction : ''}` 
+      const origContext = original.route
+        ? `Linia ${original.route}${original.direction ? ' → ' + original.direction : ''}`
         : `${original.stopName} ${original.stopCode}`;
-        
+
       quoteBlock = `
         <div class="rc-update-block">
           <div class="rc-update-header">upd: ${origContext} (${origTime})</div>
@@ -983,7 +983,7 @@ function closeQuickModal() {
 
 function openManualFromQuick() {
   closeQuickModal();
-  setTimeout(() => { openModal(); }, 200); 
+  setTimeout(() => { openModal(); }, 200);
 }
 
 // Функція вибору зі списку (робить кнопку червоною)
@@ -992,7 +992,7 @@ function selectQuickOption(btnEl, value) {
   document.querySelectorAll('.quick-option').forEach(b => b.classList.remove('selected'));
   // Додаємо його тій, на яку клікнули
   btnEl.classList.add('selected');
-  
+
   // Запам'ятовуємо вибір
   currentQuickSelection = value;
 }
@@ -1000,10 +1000,10 @@ function selectQuickOption(btnEl, value) {
 // Функція відправки (після натискання "Potwierdzam")
 function sendQuickReport() {
   if (!currentQuickSelection) return;
-  
+
   closeQuickModal();
   showToast('Zgłoszenie wysłane: ' + currentQuickSelection + ' ✓');
-  
+
   // У майбутньому тут ми братимемо координати / ID і відправлятимемо POST-запит
 }
 
@@ -1220,12 +1220,12 @@ function resetForm() {
 // ==================== Старт ====================
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
-    
+
     // ВАЖЛИВО: Чекаємо, поки карта повністю промалюється, перш ніж щось на неї додавати
     map.on('load', () => {
         console.log("Карта завантажена! Запускаємо GPS та маркери...");
         trackUserLocation();
-        
+
         // --- Додаємо запуск автобусів ---
         updateLiveCityMap();
         liveMapInterval = setInterval(updateLiveCityMap, 15000);
@@ -1249,7 +1249,7 @@ let watchId = null; // Глобальна змінна для контролю �
 
 function trackUserLocation() {
     console.log("[GPS] Запит геолокації...");
-    
+
     if (!('geolocation' in navigator)) {
         showToast('Geolokalizacja nie jest wspierana');
         return;
@@ -1323,11 +1323,11 @@ function getRecentRoutes() {
 function saveRecentRoute(fromStop, toStop) {
     let routes = getRecentRoutes();
     const routeKey = `${fromStop.name}-${toStop.name}`; // Унікальний ключ маршруту
-    
+
     // Видаляємо такий самий маршрут, якщо він вже є, щоб підняти його наверх
     routes = routes.filter(r => `${r.from.name}-${r.to.name}` !== routeKey);
     routes.unshift({ from: fromStop, to: toStop });
-    
+
     if (routes.length > 3) routes.length = 3; // Зберігаємо 3 останні маршрути
     localStorage.setItem('ta_recent_routes', JSON.stringify(routes));
 }
@@ -1336,18 +1336,18 @@ function saveRecentRoute(fromStop, toStop) {
 function renderRecentRoutes() {
     const container = document.getElementById('recent-routes-list');
     if (!container) return;
-    
+
     const routes = getRecentRoutes();
     if (routes.length === 0) {
         container.innerHTML = '';
         return;
     }
-    
+
     let html = '<div style="padding: 10px; font-weight: bold; color: var(--text-muted); font-size: 0.9em;">OSTATNIE TRASY</div>';
-    
+
     routes.forEach(route => {
         html += `
-        <div class="stop-card" style="padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; gap: 10px;" 
+        <div class="stop-card" style="padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; gap: 10px;"
              onclick='applyRecentRoute(${JSON.stringify(route)})'>
             <div class="svg-icon icon-clock" style="color: var(--blue);"></div>
             <div style="flex: 1;">
@@ -1356,7 +1356,7 @@ function renderRecentRoutes() {
             </div>
         </div>`;
     });
-    
+
     container.innerHTML = html;
 }
 
@@ -1364,16 +1364,16 @@ function renderRecentRoutes() {
 function applyRecentRoute(route) {
     document.getElementById('route-input-from').value = route.from.name;
     document.getElementById('route-input-to').value = route.to.name;
-    
+
     routeFromStop = route.from;
     routeToStop = route.to;
-    
+
     // Оновлюємо стани кнопок (верхня буде ✕, нижня — ⇅)
     updateRouteButtonState(true);
     updateRouteButtonState(false);
-    
+
     document.getElementById('recent-routes-list').style.display = 'none';
-    document.getElementById('route-search-btn').click(); 
+    document.getElementById('route-search-btn').click();
 }
 let routeFromStop = null;
 let routeToStop = null;
@@ -1538,13 +1538,13 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
         try {
             const stopsPromise = fetch(`${API_BASE_URL}/stops/search?q=${encodeURIComponent(query)}`)
                 .then(r => r.ok ? r.json() : []);
-                
+
             const mapTilerUrl = `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${MAPTILER_KEY}&language=pl&autocomplete=true&bbox=22.35,51.11,22.75,51.36`;
             const geocodePromise = fetch(mapTilerUrl)
                 .then(r => r.ok ? r.json() : { features: [] });
 
             const [stops, geocodeData] = await Promise.all([stopsPromise, geocodePromise]);
-            
+
             if (stops.length === 0 && (!geocodeData.features || geocodeData.features.length === 0)) {
                 suggestionsBox.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">Brak wyników</div>';
                 suggestionsBox.style.display = 'block';
@@ -1575,16 +1575,16 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                         <div style="-webkit-mask-image: url('stop.svg'); mask-image: url('stop.svg'); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; background-color: var(--blue); width: 20px; height: 20px; flex-shrink: 0;"></div>
                         <div style="font-weight: bold; color: var(--text);">${group.name}</div>
                     `;
-                    
+
                     div.addEventListener('click', () => {
-                        input.value = group.name; 
+                        input.value = group.name;
                         suggestionsBox.innerHTML = '';
                         suggestionsBox.style.display = 'none';
-                        
+
                         const routeObj = { name: group.name, ids: group.ids };
                         if (isFrom) routeFromStop = routeObj;
                         else routeToStop = routeObj;
-                        
+
                         saveRecentRouteStop({ name: group.name, ids: group.ids });
 
                         // Знімаємо фокус і оновлюємо стан кнопки
@@ -1601,7 +1601,7 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                     const div = document.createElement('div');
                     div.className = 'stop-card';
                     div.style = 'padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; justify-content: space-between; gap: 12px;';
-                    
+
                     const shortName = feature.text + (feature.address ? ' ' + feature.address : '');
                     const contextParts = feature.place_name.split(',').slice(1).join(',').trim();
 
@@ -1615,12 +1615,12 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                         </div>
                         <div class="address-copy-btn" style="padding: 4px 8px; cursor: pointer; color: var(--text-muted); font-size: 20px; font-weight: bold; flex-shrink: 0;">↖</div>
                     `;
-                    
+
                     div.querySelector('.address-main-click').addEventListener('click', () => {
-                        input.value = shortName; 
+                        input.value = shortName;
                         suggestionsBox.innerHTML = '';
                         suggestionsBox.style.display = 'none';
-                        
+
                         const routeObj = { name: shortName, lat: feature.center[1], lon: feature.center[0] };
                         if (isFrom) routeFromStop = routeObj; else routeToStop = routeObj;
                         saveRecentRouteStop(routeObj);
@@ -1640,7 +1640,7 @@ function setupRouteAutocomplete(inputId, suggestionsId, isFrom) {
                     suggestionsBox.appendChild(div);
                 });
             }
-            
+
             suggestionsBox.style.display = 'block';
         } catch (error) {
             console.error('Помилка пошуку:', error);
@@ -1667,7 +1667,7 @@ function groupStopsByNameAndDistance(stopsArray) {
     stopsArray.forEach(stop => {
         // Беремо масив ids (якщо це з історії) або робимо масив з одного stopId (якщо з GPS)
         const currentIds = stop.ids ? stop.ids : (stop.stopId ? [stop.stopId] : []);
-        
+
         if (!grouped[stop.name]) {
             grouped[stop.name] = {
                 name: stop.name,
@@ -1702,16 +1702,16 @@ function groupStopsByNameAndDistance(stopsArray) {
 function createRouteSuggestionElement(group, inputEl, suggestionsBoxEl, isFrom) {
     const item = document.createElement('div');
     item.className = 'stop-suggestion-item';
-    
+
     const title = document.createElement('div');
     title.className = 'stop-suggestion-title';
     title.innerHTML = `${group.name}`; // БЕЗ КОДУ ПЛАТФОРМИ!
-    
+
     if (group.distance) {
         title.innerHTML += ` <span style="float: right; font-size: 13px; color: #888;">${group.distance}m</span>`;
     }
     item.appendChild(title);
-    
+
     if (group.routes && group.routes.length > 0) {
         const carousel = document.createElement('div');
         carousel.className = 'stop-routes-carousel';
@@ -1723,14 +1723,14 @@ function createRouteSuggestionElement(group, inputEl, suggestionsBoxEl, isFrom) 
         });
         item.appendChild(carousel);
     }
-    
+
     item.addEventListener('click', () => {
         inputEl.value = group.name;
         suggestionsBoxEl.style.display = 'none';
-        
+
         const clearBtn = document.getElementById(isFrom ? 'route-clear-from' : 'route-clear-to');
         if (clearBtn) clearBtn.style.display = 'flex';
-        
+
         // ДОДАНО: Розділяємо логіку для адрес і зупинок
         let routeObj;
         if (group.lat && group.lon) {
@@ -1738,10 +1738,10 @@ function createRouteSuggestionElement(group, inputEl, suggestionsBoxEl, isFrom) 
         } else {
             routeObj = { name: group.name, ids: group.ids }; // Це зупинка
         }
-        
+
         if (isFrom) routeFromStop = routeObj;
         else routeToStop = routeObj;
-        
+
         // Зберігаємо в історію, оновлюючи її
         if (group.lat && group.lon) {
             saveRecentRouteStop(routeObj);
@@ -1759,40 +1759,40 @@ function loadRouteDefaultSuggestions(isFrom) {
 // === АБСОЛЮТНО АДАПТИВНА ВЕРСТКА ДЛЯ БУДЬ-ЯКОГО ЕКРАНА ===
     // 1. Отримуємо точні координати інпута на поточному телефоні
     const inputRect = inputEl.getBoundingClientRect();
-    
+
     if (inputEl.value.trim() !== '') return;
 
-    boxEl.innerHTML = ''; 
+    boxEl.innerHTML = '';
    // 2. Відриваємо список від звичайного потоку і робимо його "плаваючим"
     boxEl.style.position = 'fixed'; // Фіксуємо відносно екрана
     boxEl.style.left = '0';
     boxEl.style.right = '0';
-    
+
     // 3. Прибиваємо верх списку рівно під інпут (додаємо 8px відступу для краси)
     boxEl.style.top = `${inputRect.bottom + 8}px`;
-    
-    // 4. Прибиваємо низ списку над твоєю навігацією 
+
+    // 4. Прибиваємо низ списку над твоєю навігацією
     // (заміни 70px на реальну висоту твого нижнього меню, зазвичай це 60-80px)
-    boxEl.style.bottom = '70px'; 
-    
+    boxEl.style.bottom = '70px';
+
     // 5. Вбиваємо старі конфлікти
-    boxEl.style.maxHeight = 'none'; 
-    boxEl.style.height = 'auto'; 
-    boxEl.style.overflowY = 'auto'; 
-    boxEl.style.backgroundColor = 'var(--bg)'; 
-    boxEl.style.zIndex = '100'; 
+    boxEl.style.maxHeight = 'none';
+    boxEl.style.height = 'auto';
+    boxEl.style.overflowY = 'auto';
+    boxEl.style.backgroundColor = 'var(--bg)';
+    boxEl.style.zIndex = '100';
     // ========================================================
-  
+
     // 1. ОСТАННІ ПОШУКИ (Групуємо історію, щоб прибрати платформи, якщо вони там були)
     const recents = getRecentRouteStops();
     if (recents.length > 0) {
         const groupedRecents = groupStopsByNameAndDistance(recents);
-        
+
         const recentsHeader = document.createElement('div');
         recentsHeader.style = 'padding: 10px; font-weight: bold; color: var(--blue); display: flex; align-items: center; gap: 12px;';
         recentsHeader.innerHTML = '<div class="svg-icon icon-clock"></div> Ostatnio wyszukiwane';
         boxEl.appendChild(recentsHeader);
-        
+
         groupedRecents.forEach(group => {
             boxEl.appendChild(createRouteSuggestionElement(group, inputEl, boxEl, isFrom));
         });
@@ -1811,18 +1811,18 @@ function loadRouteDefaultSuggestions(isFrom) {
             // === 1. ПЕРЕВІРКА КЕШУ (діє 2 хвилини = 120000 мс) ===
             const now = Date.now();
             if (globalCachedNearbyStops && (now - globalCachedNearbyTime < 120000)) {
-                renderNearby(globalCachedNearbyStops); 
+                renderNearby(globalCachedNearbyStops);
                 return;
             }
 
             // === 2. ЗАПИТ ДО СЕРВЕРА (якщо кешу немає або він старий) ===
             const res = await fetch(`${API_BASE_URL}/stops/nearby?lat=${lat}&lon=${lon}`);
             const apiGroups = await res.json();
-            
+
             // === 3. ЗБЕРІГАЄМО В ГЛОБАЛЬНИЙ КЕШ ===
             globalCachedNearbyStops = apiGroups;
             globalCachedNearbyTime = now;
-            
+
             // Відмальовуємо результати
             renderNearby(apiGroups);
 
@@ -1837,21 +1837,21 @@ function loadRouteDefaultSuggestions(isFrom) {
             nearbyContainer.innerHTML = `<div style="padding: 10px; color: var(--text-muted);">Brak przystanków w pobliżu 😕</div>`;
             return;
         }
-        
+
         // Збираємо всі зупинки з API в один плоский масив і чіпляємо дистанцію
         let flatNearbyStops = [];
         apiGroups.forEach(g => {
             g.stops.forEach(s => {
-                s.distance = g.distance; 
+                s.distance = g.distance;
                 flatNearbyStops.push(s);
             });
         });
-        
+
         // Групуємо їх за назвою (зливаємо 01, 02 і т.д.)
         const groupedNearby = groupStopsByNameAndDistance(flatNearbyStops);
-        
+
         nearbyContainer.innerHTML = '<div style="padding: 10px; font-weight: bold; color: var(--blue); display: flex; align-items: center; gap: 12px;"><div class="svg-icon icon-walk"></div> Przystanki w pobliżu</div>';
-        
+
         groupedNearby.forEach(group => {
             nearbyContainer.appendChild(createRouteSuggestionElement(group, inputEl, boxEl, isFrom));
         });
@@ -1980,8 +1980,8 @@ async function updateTrasaCountdowns() {
                 return 'minut';
             }
 
-            const liveBadgeHtml = isLive 
-                ? `<span style="color: #ef4444; font-size: 9px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 2px; animation: trasaLiveBlink 1.5s infinite;">LIVE</span>` 
+            const liveBadgeHtml = isLive
+                ? `<span style="color: #ef4444; font-size: 9px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 2px; animation: trasaLiveBlink 1.5s infinite;">LIVE</span>`
                 : '';
 
             let timerHtml = '';
@@ -1989,7 +1989,7 @@ async function updateTrasaCountdowns() {
                 let numStr = countdown === 0 ? '<1' : countdown;
                 let labelStr = countdown === 0 ? 'minuta' : getMinLabel(countdown);
                 let colorStr = countdown <= 30 ? '#10b981' : 'var(--text)';
-                
+
                 timerHtml = `
                 <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
                     ${liveBadgeHtml}
@@ -2012,7 +2012,7 @@ async function updateTrasaCountdowns() {
                     </span>
                 </div>`;
             }
-            
+
             timerEl.innerHTML = timerHtml;
         }
 
@@ -2036,13 +2036,13 @@ function splitStopName(fullName) {
     if (!fullName) return { name: '', code: '' };
     const parts = fullName.split(' ');
     const lastPart = parts[parts.length - 1];
-    
+
     // Перевіряємо, чи останнє слово - це рівно 2 цифри (код платформи, напр "01")
     if (/^\d{2}$/.test(lastPart)) {
         parts.pop();
         return { name: parts.join(' '), code: lastPart };
     }
-    
+
     // Якщо це адреса ("Biłgorajska 24") або системна мітка - повертаємо як є
     return { name: fullName, code: '' };
 }
@@ -2050,10 +2050,10 @@ function splitStopName(fullName) {
 // Помічник для генерації іконки статусу в шапці
 function getLiveStatusBadge(isLive, delayMinutes) {
     if (!isLive) return ''; // Якщо немає GPS-даних, нічого не показуємо
-    
+
     // Зменшили іконки з 20px до 18px, щоб вони пасували до компактного тексту
     const iconStyle = "width:18px; height:18px; flex-shrink:0; display:inline-block; transform: translateY(0px);";
-    
+
     if (delayMinutes > 0) {
         // Запізнюється (червоний + іконка slow)
         return `<div style="display:flex; align-items:center; gap:2px; color: var(--danger);"><div class="svg-icon icon-slow" style="${iconStyle}"></div>+${delayMinutes}m</div> <span style="opacity:0.4">•</span> `;
@@ -2082,14 +2082,14 @@ function buildJourneyCard(journey) {
     const initialWalkLeg = (firstLeg.route === "Пішки" || !firstLeg.route) ? firstLeg : null;
     const walkMinRaw = initialWalkLeg ? Math.max(0, initialWalkLeg.arrivalMin - initialWalkLeg.departureMin) : 0;
     const walkMin = Math.round(walkMinRaw * 1.8); // Наш множник для реальності
-    
+
     const finalWalkLeg = (lastLeg.route === "Пішки" || !lastLeg.route) ? lastLeg : null;
     const finalWalkMinRaw = finalWalkLeg ? Math.max(0, finalWalkLeg.arrivalMin - finalWalkLeg.departureMin) : 0;
     const finalWalkMin = Math.round(finalWalkMinRaw * 1.8); // Наш множник для реальності
-    
+
     // Коригуємо загальний час у дорозі, щоб математика зійшлася
     const extraWalkTime = (walkMin - walkMinRaw) + (finalWalkMin - finalWalkMinRaw);
-    
+
     // Прив'язка рядка таймлайну до рейсу: updateTrasaCountdowns зсуває кожен рядок
     // на затримку саме його рейсу (min — час від бекенда, уже із затримкою)
     const rowAttrs = (leg, min) => {
@@ -2118,7 +2118,7 @@ function buildJourneyCard(journey) {
 
     // ❌ ВСІ ХАКИ З 1440 ВИДАЛЕНО! ❌
     // Більше не треба перевіряти "нічні" чи "завтрашні" рейси.
-    // Якщо бекенд прислав 1450 хвилин (00:10 ночі наступного дня), 
+    // Якщо бекенд прислав 1450 хвилин (00:10 ночі наступного дня),
     // JS Date сам перекине дату на завтра!
 
     const depDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(expectedDepartureMin / 60), expectedDepartureMin % 60, 0);
@@ -2138,7 +2138,7 @@ function buildJourneyCard(journey) {
         let numStr = countdown === 0 ? '<1' : countdown;
         let labelStr = countdown === 0 ? 'minuta' : getMinLabel(countdown);
         let colorStr = countdown <= 30 ? '#10b981' : 'var(--text)';
-        
+
         timerHtml = `
         <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
             <span style="font-size:26px; font-weight:800; color:${colorStr}; letter-spacing:-1px;">${numStr}</span>
@@ -2197,7 +2197,7 @@ function buildJourneyCard(journey) {
         <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
         <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">${toStop.name} ${toStop.code ? `<span class="stop-code" style="color:var(--text); font-size:15px; font-weight:600;">(${toStop.code})</span>` : ''}</div>
     </div>`;
-    
+
     // 4. ТАЙМЕР АБСОЛЮТНИЙ (відцентрований відносно всього таймлайну!)
     timelineHtml += `<div class="trasa-dep-min" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 5;">${timerHtml}</div>`;
 
@@ -2228,13 +2228,13 @@ function buildJourneyCard(journey) {
         </div>
     </div>`;
 
-    
+
     const wrapper = document.createElement('div');
     wrapper.className = 'trasa-wrapper';
     const card = document.createElement('div');
     card.className = 'trasa-card expandable';
     card.style.cursor = 'pointer';
-    
+
     card.innerHTML = `
         <button class="close-trasa-btn" title="Zamknij">✕</button>
         ${compactHeaderHtml}
@@ -2243,14 +2243,14 @@ function buildJourneyCard(journey) {
             ${timelineHtml}
         </div>
     `;
-    
+
     card.addEventListener('click', (e) => {
         if (e.target.closest('.dep-expand-map-btn')) return;
         toggleTrasaExpand(card, legs, transitLegs);
     });
-    
+
     wrapper.appendChild(card);
-    
+
     return wrapper;
 }
 
@@ -2291,13 +2291,13 @@ async function fetchLegStops(leg) {
 async function toggleTrasaExpand(card, legs, transitLegs) {
     const isOpen = card.classList.contains('fullscreen-expanded');
     const scrollPanel = card.querySelector('.trasa-middle-scroll');
-    
-    document.querySelectorAll('.trasa-card.fullscreen-expanded').forEach(c => { 
+
+    document.querySelectorAll('.trasa-card.fullscreen-expanded').forEach(c => {
         if (c !== card) {
-            c.classList.remove('fullscreen-expanded'); 
+            c.classList.remove('fullscreen-expanded');
             const p = c.querySelector('.trasa-middle-scroll');
             if (p) { p.innerHTML = ''; p.style.display = 'none'; }
-        } 
+        }
     });
 
     if (isOpen) {
@@ -2316,15 +2316,15 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
 
         let html = '';
         let transitIdx = 0;
-        
+
         legs.forEach((leg, i) => {
             const isWalk = leg.route === 'Пішки' || !leg.route;
-            
+
             // БЛОК 1: Пішохідний перехід
             if (isWalk) {
                 const walkMinRaw = Math.max(0, leg.arrivalMin - leg.departureMin);
                 const walkMin = Math.round(walkMinRaw * 1.8);
-                
+
                 // Якщо це найперший крок (старт з адреси)
                 if (i === 0) {
                     html += `
@@ -2337,14 +2337,14 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
                         <div class="svg-icon icon-walk" style="width:16px; height:16px; margin-right:8px; color: var(--text-muted);"></div>
                         <span style="font-weight: 600; font-size: 14px; color: var(--text-muted);">Przejście pieszo: ${walkMin} min</span>
                     </div>`;
-                } 
+                }
                 else {
                     html += `
                     <div style="padding: 12px 14px; background: rgba(0,0,0,0.02); display: flex; align-items: center; border-left: 2px dashed var(--border); margin-left: 22px;">
                         <div class="svg-icon icon-walk" style="width:16px; height:16px; margin-right:8px; color: var(--text-muted);"></div>
                         <span style="font-weight: 600; font-size: 14px; color: var(--text-muted);">Przejście pieszo: ${walkMin} min</span>
                     </div>`;
-                    
+
                     // Якщо це останній крок (фініш), малюємо червону крапку і назву адреси!
                     if (i === legs.length - 1) {
                         html += `
@@ -2387,20 +2387,20 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
             // (рядок таймлайну оновлюється updateTrasaCountdowns; fallback — затримка на момент пошуку)
             const legRow = [...card.querySelectorAll('.trasa-row[data-trip-id]')].find(r => r.dataset.tripId === leg.tripId);
             const delay = legRow ? parseInt(legRow.dataset.delay, 10) : (leg.delayMinutes || 0);
-            
+
             const stopsHtml = stops.length ? stops.map((s, index) => {
                 const stopName = s.name || '';
                 const platformCode = s.platformCode || '';
-                
+
                 const isFirst = index === 0;
                 const isLast = index === stops.length - 1;
                 const isImportant = isFirst || isLast;
-                
+
                 const fontWeight = isImportant ? '700' : '500';
                 const textColor = isImportant ? 'var(--text)' : 'var(--text-muted)';
                 const dotColor = isImportant ? 'var(--blue)' : 'var(--border)';
                 const dotSize = isImportant ? '12px' : '8px';
-                const dotLeft = isImportant ? '21px' : '23px'; 
+                const dotLeft = isImportant ? '21px' : '23px';
 
                 // МАГІЯ: коригуємо ETA за допомогою твоєї готової функції!
                 let realEta = s.eta;
@@ -2412,12 +2412,12 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
                 <div class="trasa-leg-stop${s.isPassed ? ' dep-expand-stop-passed' : ''}" style="position: relative; padding: 10px 14px 10px 42px; display: flex; justify-content: space-between; align-items: center;">
                     <!-- Крапка -->
                     <div style="position: absolute; left: ${dotLeft}; top: 50%; transform: translateY(-50%); width: ${dotSize}; height: ${dotSize}; border-radius: 50%; background: ${dotColor}; z-index: 2;"></div>
-                    
+
                     <!-- Лінія вниз (не малюємо у найостаннішої зупинки) -->
                     ${!isLast ? `<div style="position: absolute; left: 26px; top: 50%; bottom: -50%; width: 2px; background: var(--border); z-index: 1;"></div>` : ''}
-                    
+
                     <span style="font-weight: ${fontWeight}; color: ${textColor}; font-size: 15px;">
-                        ${stopName} 
+                        ${stopName}
                         <span class="stop-code" style="color:${textColor}; font-size:13px; font-weight: 500;">${platformCode}</span>
                     </span>
                     <!-- Виводимо вже скоригований реальний час -->
@@ -2449,7 +2449,7 @@ const routeResultsBox = document.getElementById('route-results-list');
 
 if (searchRouteBtn && routeResultsBox) {
     searchRouteBtn.addEventListener('click', async () => {
-    
+
         if (routeFromStop && routeFromStop.isDynamicGps) {
             if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
                 const pos = userLocationMarker.getLngLat();
@@ -2471,18 +2471,18 @@ if (searchRouteBtn && routeResultsBox) {
                 return;
             }
         }
-    
+
         if (!routeFromStop || !routeToStop) {
             showToast('Wybierz przystanek początkowy i końcowy z listy!');
             return;
         }
 
-        saveRecentRoute(routeFromStop, routeToStop); 
+        saveRecentRoute(routeFromStop, routeToStop);
         const recentRoutesContainer = document.getElementById('recent-routes-list');
         if (recentRoutesContainer) recentRoutesContainer.style.display = 'none';
 
         routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Szukam połączeń... <div class="svg-icon icon-hourglass"></div></div>';
-        
+
         let fromParams = '';
         if (routeFromStop.ids) {
             fromParams = `from=${routeFromStop.ids.join(',')}`;
@@ -2500,7 +2500,7 @@ if (searchRouteBtn && routeResultsBox) {
         try {
             const res = await fetch(`${API_BASE_URL}/route/complex?${fromParams}&${toParams}&limit=8`);
             if (!res.ok) throw new Error('Помилка сервера');
-            
+
             const journeys = await res.json();
             routeResultsBox.innerHTML = '';
 
@@ -2509,7 +2509,7 @@ if (searchRouteBtn && routeResultsBox) {
     const bBus = b.legs.find(l => l.route !== "Пішки") || b.legs[0];
     return aBus.departureMin - bBus.departureMin;
 });
-            
+
             if (journeys.length === 0) {
                 routeResultsBox.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 40px;">Brak połączeń dla tej trasy</div>';
                 return;
@@ -2596,7 +2596,7 @@ routeResultsBox.addEventListener('touchend', async (e) => {
     const bBus = b.legs.find(l => l.route !== "Пішки") || b.legs[0];
     return aBus.departureMin - bBus.departureMin;
 });
-            
+
             if (newJourneys.length > 0) {
                 const lastJourney = newJourneys[newJourneys.length - 1];
                 const transitLegs = lastJourney.legs.filter(l => l.route !== "Пішки" && l.route);
@@ -2667,7 +2667,7 @@ function getRecentStops() {
 function saveRecentStop(stop) {
     let recents = getRecentStops();
     // Видаляємо дублікат, якщо ця зупинка вже є (щоб підняти її наверх)
-    recents = recents.filter(s => s.stopId !== stop.stopId); 
+    recents = recents.filter(s => s.stopId !== stop.stopId);
     recents.unshift(stop); // Додаємо на початок
     if (recents.length > 2) recents.length = 2; // Лишаємо тільки 2 останні
     localStorage.setItem('ta_recent_stops', JSON.stringify(recents));
@@ -2677,17 +2677,17 @@ function saveRecentStop(stop) {
 function createStopSuggestionElement(stop, distanceStr = '') {
     const item = document.createElement('div');
     item.className = 'stop-suggestion-item';
-    
+
     const title = document.createElement('div');
     title.className = 'stop-suggestion-title';
     title.innerHTML = `${stop.name} <span class="stop-suggestion-code">${stop.code}</span>`;
-    
+
     // Якщо передали дистанцію (для GPS) - малюємо її праворуч
     if (distanceStr) {
         title.innerHTML += ` <span style="float: right; font-size: 13px; color: #888;">${distanceStr}</span>`;
     }
     item.appendChild(title);
-    
+
     // Малюємо карусель ліній, якщо вони є
     if (stop.routes && stop.routes.length > 0) {
         const carousel = document.createElement('div');
@@ -2700,22 +2700,22 @@ function createStopSuggestionElement(stop, distanceStr = '') {
         });
         item.appendChild(carousel);
     }
-    
+
     // Обробка кліку по картці
     item.addEventListener('click', () => {
         stopSuggestionsBox.style.display = 'none';
         stopSearchInput.value = '';
         stopTitleContainer.style.display = 'block';
         stopNameDisplay.textContent = `${stop.name} ${stop.code}`;
-        
+
         saveRecentStop(stop); // 💾 ЗБЕРІГАЄМО В ІСТОРІЮ ПРИ КЛІКУ
-        
+
         currentStopIdForDepartures = stop.stopId;
         topTimeOffset = 0;
-        bottomTimeOffset = 0; 
+        bottomTimeOffset = 0;
         loadDepartures(currentStopIdForDepartures);
     });
-    
+
     return item;
 }
 
@@ -2723,9 +2723,9 @@ function createStopSuggestionElement(stop, distanceStr = '') {
 function loadNearbyStopsDefault() {
     if (stopSearchInput.value.trim() !== '') return;
 
-    stopSuggestionsBox.innerHTML = ''; 
-    
-    
+    stopSuggestionsBox.innerHTML = '';
+
+
     // 1. ОСТАННІ ПОШУКИ (малюємо миттєво з пам'яті браузера)
     const recents = getRecentStops();
     if (recents.length > 0) {
@@ -2733,7 +2733,7 @@ function loadNearbyStopsDefault() {
         recentsHeader.style = 'padding: 10px; font-weight: bold; color: var(--blue); display: flex; align-items: center; gap: 12px;';
         recentsHeader.innerHTML = '<div class="svg-icon icon-clock"></div> Ostatnio wyszukiwane';
         stopSuggestionsBox.appendChild(recentsHeader);
-        
+
         recents.forEach(stop => {
             stopSuggestionsBox.appendChild(createStopSuggestionElement(stop)); // Без дистанції
         });
@@ -2767,12 +2767,12 @@ function loadNearbyStopsDefault() {
                 } else {
                     userLocationMarker.setLatLng([lat, lon]);
                 }
-                showNearbyStops(lat, lon); 
-            }, 
+                showNearbyStops(lat, lon);
+            },
             (error) => {
                 console.warn('GPS помилка:', error.message);
                 nearbyContainer.innerHTML = '<div style="padding: 10px; color: red;">Увімкніть GPS для Przystanki w pobliżu</div>';
-            }, 
+            },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
     }
@@ -2780,7 +2780,7 @@ function loadNearbyStopsDefault() {
 
 async function showNearbyStops(lat, lon) {
     const nearbyContainer = document.getElementById('nearby-container');
-    if (!nearbyContainer) return; 
+    if (!nearbyContainer) return;
 
     try {
         // === ПОЧАТОК РОЗУМНОГО КЕШУ ===
@@ -2794,22 +2794,22 @@ async function showNearbyStops(lat, lon) {
             // 2. Якщо кешу немає, робимо запит до сервера
             const res = await fetch(`${API_BASE_URL}/stops/nearby?lat=${lat}&lon=${lon}`);
             if (!res.ok) throw new Error(`Код помилки: ${res.status}`);
-            
+
             groups = await res.json();
-            
+
             // 3. Зберігаємо новий результат у спільний кеш
             globalCachedNearbyStops = groups;
             globalCachedNearbyTime = now;
         }
         // === КІНЕЦЬ РОЗУМНОГО КЕШУ ===
-        
+
         if (groups.length === 0) {
             nearbyContainer.innerHTML = `<div style="padding: 10px; color: var(--text-muted);">Зупинок поруч не знайдено 😕</div>`;
             return;
         }
-        
+
         nearbyContainer.innerHTML = '<div style="padding: 10px; font-weight: bold; color: var(--blue); display: flex; align-items: center; gap: 12px;"><div class="svg-icon icon-map-pin"></div> Przystanki w pobliżu</div>';
-        
+
         groups.forEach(group => {
             group.stops.forEach(stop => {
                 nearbyContainer.appendChild(createStopSuggestionElement(stop, `${group.distance}m`));
@@ -2822,10 +2822,10 @@ async function showNearbyStops(lat, lon) {
 
 stopSearchInput.addEventListener('focus', loadNearbyStopsDefault);
 
-// ==================== Логіка текстового пошуку ====================
+/// ==================== Логіка текстового пошуку ====================
 stopSearchInput.addEventListener('input', async (e) => {
   const query = e.target.value.trim();
-  
+
   if (query.length < 2) {
     if (query.length === 0) loadNearbyStopsDefault();
     else stopSuggestionsBox.style.display = 'none';
@@ -2835,21 +2835,39 @@ stopSearchInput.addEventListener('input', async (e) => {
   try {
     const res = await fetch(`${API_BASE_URL}/stops/search?q=${encodeURIComponent(query)}`);
     if (!res.ok) throw new Error('Помилка мережі');
-    
+
     const stops = await res.json();
-    
+
     if (stops.length === 0) {
       stopSuggestionsBox.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">Нічого не знайдено</div>';
       stopSuggestionsBox.style.display = 'block';
       return;
     }
 
+    // --- НОВА ЛОГІКА СОРТУВАННЯ ---
+    const lowerQuery = query.toLowerCase();
+    stops.sort((a, b) => {
+      // Заміни .name на те поле, де в тебе зберігається назва (наприклад, .stopName або .stop_name)
+      const nameA = (a.name || '').toLowerCase();
+      const nameB = (b.name || '').toLowerCase();
+
+      const isExactA = nameA === lowerQuery;
+      const isExactB = nameB === lowerQuery;
+
+      // 1. Точний збіг іде наверх
+      if (isExactA && !isExactB) return -1;
+      if (!isExactA && isExactB) return 1;
+
+      // 2. Все інше за алфавітом (з урахуванням польських літер)
+      return nameA.localeCompare(nameB, 'pl');
+    });
+    // ------------------------------
+
     stopSuggestionsBox.innerHTML = '';
     stops.forEach(stop => {
-      // Тут ми теж використовуємо нашу нову універсальну функцію!
       stopSuggestionsBox.appendChild(createStopSuggestionElement(stop));
     });
-    
+
     stopSuggestionsBox.style.display = 'block';
   } catch (error) {
     console.error('Помилка пошуку зупинки:', error);
@@ -2879,53 +2897,53 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
   if (!isBackgroundRefresh && fetchOffset === 0) {
     departuresList.innerHTML = '<div style="text-align: center; margin-top: 40px; color: var(--text-muted);">Завантаження... <div class="svg-icon icon-hourglass"></div></div>';
   }
-  
+
   try {
     const res = await fetch(`${API_BASE_URL}/stops/${stopId}/departures?offset=${fetchOffset}`);
     if (!res.ok) throw new Error('Не вдалося завантажити розклад');
-    
+
     const fetchedDepartures = await res.json();
-    
+
     // 1. РОЗУМНИЙ МЕНЕДЖМЕНТ СПИСКУ
     if (fetchOffset === 0 && !isBackgroundRefresh) {
       currentDeparturesData = fetchedDepartures;
-    } 
+    }
         else if (fetchOffset < 0) {
       // Свайп вниз (Історія) -> Додаємо 3 старі рейси
       const currentOldest = currentDeparturesData.length > 0 ? currentDeparturesData[0].minutesLeft : 0;
       const existingKeys = new Set(currentDeparturesData.map(d => `${d.route}-${d.scheduledTime}`));
-      
+
       const freshHistory = fetchedDepartures
         .filter(d => !existingKeys.has(`${d.route}-${d.scheduledTime}`))
         .filter(d => d.minutesLeft < currentOldest)
-        .sort((a, b) => b.minutesLeft - a.minutesLeft); 
-      
-      const itemsToAdd = freshHistory.slice(0, 3).reverse(); 
+        .sort((a, b) => b.minutesLeft - a.minutesLeft);
+
+      const itemsToAdd = freshHistory.slice(0, 3).reverse();
       currentDeparturesData = [...itemsToAdd, ...currentDeparturesData];
-      
+
       // КОВЗНЕ ВІКНО: Видаляємо стільки ж знизу (якщо список не надто малий)
       if (currentDeparturesData.length > 10) {
         currentDeparturesData.splice(-itemsToAdd.length);
       }
-    } 
+    }
     else if (fetchOffset > 0) {
       // Свайп вверх (Майбутнє) -> Додаємо 3 нові рейси
       const currentNewest = currentDeparturesData.length > 0 ? currentDeparturesData[currentDeparturesData.length - 1].minutesLeft : 0;
       const existingKeys = new Set(currentDeparturesData.map(d => `${d.route}-${d.scheduledTime}`));
-      
+
       const freshFuture = fetchedDepartures
         .filter(d => !existingKeys.has(`${d.route}-${d.scheduledTime}`))
         .filter(d => d.minutesLeft > currentNewest)
-        .sort((a, b) => a.minutesLeft - b.minutesLeft); 
-      
-      const itemsToAdd = freshFuture.slice(0, 3); 
+        .sort((a, b) => a.minutesLeft - b.minutesLeft);
+
+      const itemsToAdd = freshFuture.slice(0, 3);
       currentDeparturesData = [...currentDeparturesData, ...itemsToAdd];
-      
+
       // КОВЗНЕ ВІКНО: Видаляємо стільки ж зверху
       if (currentDeparturesData.length > 10) {
         currentDeparturesData.splice(0, itemsToAdd.length);
       }
-    } 
+    }
     else if (isBackgroundRefresh) {
       // Якщо ми не дивимося історію/майбутнє — просто чисто оновлюємо список
       if (topTimeOffset === 0 && bottomTimeOffset === 0) {
@@ -2935,7 +2953,7 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
           const key = `${fetchedDep.route}-${fetchedDep.scheduledTime}`;
           const existingIndex = currentDeparturesData.findIndex(d => `${d.route}-${d.scheduledTime}` === key);
           if (existingIndex !== -1) {
-            currentDeparturesData[existingIndex] = fetchedDep; 
+            currentDeparturesData[existingIndex] = fetchedDep;
           }
         });
       }
@@ -2955,28 +2973,28 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
       const openPanelHtml = openCard ? openCard.nextElementSibling.innerHTML : '';
 
       departuresList.innerHTML = '';
-      
+
       currentDeparturesData.forEach(dep => {
         const isHistory = dep.minutesLeft < 0;
         const isGhost = !dep.isRealTime && dep.minutesLeft === 0;
         const isPast = isHistory || isGhost;
         const minClass = (dep.isRealTime && !isPast) ? 'dep-min live' : 'dep-min';
-        
+
                             // ФОРМАТУВАННЯ ЧАСУ ТА САТЕЛІТ-ІКОНКА
         let timeText;
-        let schedHtml = dep.scheduledTime; 
+        let schedHtml = dep.scheduledTime;
         let hideSchedBottom = false; // Прибираємо дублювання часу знизу для далеких рейсів
         const absMins = Math.abs(dep.minutesLeft);
-        
+
         if (isHistory) {
           if (absMins >= 60) {
-            timeText = dep.scheduledTime; 
-            hideSchedBottom = true; 
+            timeText = dep.scheduledTime;
+            hideSchedBottom = true;
           } else {
             timeText = `${dep.minutesLeft} min`;
           }
         } else if (isGhost) {
-          timeText = '0 min'; 
+          timeText = '0 min';
         } else {
           if (dep.minutesLeft >= 60) {
             timeText = dep.scheduledTime; // Далекі рейси показуємо як точний час (будильник)
@@ -2985,7 +3003,7 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
             timeText = dep.minutesLeft === 0 ? '< 1 min' : `${dep.minutesLeft} min`;
           }
         }
-        
+
         let statusHtml = '';
         const liveIcon = ''; // Надпис LIVE
 
@@ -3016,16 +3034,16 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
         } else {
            if (hideSchedBottom) schedHtml = '';
         }
-        
+
         // Статуси для історії та звичайного розкладу без GPS
         if (isPast) {
           statusHtml = `<div class="dep-status status-sched">Odjechał</div>`;
         } else if (!dep.isRealTime) {
           statusHtml = `<div class="dep-status status-sched">Rozkład jazdy</div>`;
         }
-        
+
                 // ... (твій код статусів залишається без змін) ...
-        
+
         const ghostClass = isPast ? ' ghost' : '';
         const wrapper = document.createElement('div');
         wrapper.className = 'dep-item';
@@ -3036,7 +3054,7 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
         card.dataset.depKey = `${dep.tripId}-${dep.scheduledTime}`;
 
         // Перевіряємо чи є бортовий номер і тип
-        const vehicleIdHtml = dep.vehicleId ? dep.vehicleId : ''; 
+        const vehicleIdHtml = dep.vehicleId ? dep.vehicleId : '';
         // Очищаємо номер від усього зайвого (залишаємо тільки цифри)
         const routeNum = parseInt(dep.route, 10);
         const trolleyClass = (routeNum >= 150) ? ' trolleybus' : '';
@@ -3062,7 +3080,7 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
             <div class="dep-sched">${schedHtml}</div>
           </div>
         `;
-        
+
         const expandPanel = document.createElement('div');
         expandPanel.className = 'dep-expand';
 
@@ -3083,7 +3101,7 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
         wrapper.appendChild(card);
         wrapper.appendChild(expandPanel);
         departuresList.appendChild(wrapper);
-      });        
+      });
 
       // М'ЯКО ВІДНОВЛЮЄМО СКРОЛ!
       if (fetchOffset < 0) {
@@ -3098,11 +3116,11 @@ async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset =
     if (!departuresRefreshInterval) {
       departuresRefreshInterval = setInterval(() => {
         if (currentStopIdForDepartures && stopScreenContainer.style.display !== 'none') {
-          loadDepartures(currentStopIdForDepartures, true, 0); 
+          loadDepartures(currentStopIdForDepartures, true, 0);
         }
-      }, 15000); 
+      }, 15000);
     }
-    
+
   } catch (error) {
     console.error('Помилка завантаження розкладу:', error);
     if (!isBackgroundRefresh) {
@@ -3127,7 +3145,7 @@ departuresList.addEventListener('touchstart', (e) => {
 departuresList.addEventListener('touchmove', (e) => {
   if (!startY || isRefreshing) return;
   const dy = e.touches[0].clientY - startY;
-  
+
   // 1. Тягнемо ВНИЗ (за історією)
   if (dy > 0 && startScrollTop === 0) {
     ptrIndicator.style.height = Math.min(dy, 50) + 'px';
@@ -3141,32 +3159,32 @@ departuresList.addEventListener('touchmove', (e) => {
 departuresList.addEventListener('touchend', async (e) => {
   if (!startY || isRefreshing) return;
   const dy = e.changedTouches[0].clientY - startY;
-  
+
   // 1. Відпустили ІСТОРІЮ
   if (dy > 60 && startScrollTop === 0 && currentStopIdForDepartures) {
     isRefreshing = true;
-    ptrIndicator.style.height = '40px'; 
+    ptrIndicator.style.height = '40px';
     ptrIndicator.innerHTML = '↻ Ładowanie historii...';
-    
+
     // РОЗУМНИЙ СТРИБОК У МИНУЛЕ: беремо час найстарішого автобуса на екрані і віднімаємо 30 хв
     if (currentDeparturesData.length > 0) {
       topTimeOffset = currentDeparturesData[0].minutesLeft - 30;
     } else {
       topTimeOffset -= 60; // Запасний варіант, якщо екран порожній
     }
-    
+
     await loadDepartures(currentStopIdForDepartures, false, topTimeOffset);
-    
-    ptrIndicator.style.height = '0';    
+
+    ptrIndicator.style.height = '0';
     setTimeout(() => { ptrIndicator.innerHTML = '↻ Odświeżanie...'; }, 200);
     isRefreshing = false;
-  } 
+  }
   // 2. Відпустили МАЙБУТНЄ
   else if (dy < -60 && isAtBottom && currentStopIdForDepartures) {
     isRefreshing = true;
-    ptrBottomIndicator.style.height = '40px'; 
+    ptrBottomIndicator.style.height = '40px';
     ptrBottomIndicator.innerHTML = '↻ Ładowanie przyszłości...';
-    
+
     // РОЗУМНИЙ СТРИБОК У МАЙБУТНЄ: беремо час найдальшого автобуса і просимо наступні!
     if (currentDeparturesData.length > 0) {
       const lastBus = currentDeparturesData[currentDeparturesData.length - 1];
@@ -3174,16 +3192,16 @@ departuresList.addEventListener('touchend', async (e) => {
     } else {
       bottomTimeOffset += 60; // Запасний варіант, якщо екран порожній
     }
-    
+
     await loadDepartures(currentStopIdForDepartures, false, bottomTimeOffset);
-    
-    ptrBottomIndicator.style.height = '0';    
+
+    ptrBottomIndicator.style.height = '0';
     setTimeout(() => { ptrBottomIndicator.innerHTML = '↻ Ładowanie...'; }, 200);
     isRefreshing = false;
-  } 
+  }
   // 3. Не дотягнули
   else {
-    ptrIndicator.style.height = '0';    
+    ptrIndicator.style.height = '0';
     ptrBottomIndicator.style.height = '0';
   }
   startY = 0;
@@ -3191,7 +3209,7 @@ departuresList.addEventListener('touchend', async (e) => {
 window.addEventListener('popstate', (event) => {
     if (event.state && event.state.screen) {
         const targetScreenId = event.state.screen;
-        
+
         // Знаходимо HTML-кнопку, яка відповідає за цей екран
         let targetButton;
         switch(targetScreenId) {
@@ -3201,7 +3219,7 @@ window.addEventListener('popstate', (event) => {
             case 'reports': targetButton = document.getElementById('nav-reports'); break;
         }
 
-        // Викликаємо твою ж функцію перемикання, але передаємо true, 
+        // Викликаємо твою ж функцію перемикання, але передаємо true,
         // щоб вона знову не записала це в історію
         if (targetButton) {
             switchScreen(targetScreenId, targetButton, true);

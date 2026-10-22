@@ -57,7 +57,7 @@
     }
     .user-marker-icon {
         /* Інвертує кольори: чорне стає білим */
-        filter: invert(1) brightness(1.2); 
+        filter: invert(1) brightness(1.2);
     }
   }
 /* --- Маркер геолокації (MapLibre) --- */
@@ -81,9 +81,9 @@
 .modal-overlay {
     display: none;
     position: fixed;
-    top: 0; left: 0; right: 0; 
+    top: 0; left: 0; right: 0;
     /* Відступаємо знизу місце для панелі навігації (як у звичайних екранів) */
-    bottom: 0; 
+    bottom: 0;
     background: var(--bg);
     z-index: 450;
 }
@@ -191,7 +191,7 @@
 /* --- Контейнер з результатами пошуку (Вкладка Przystanek) --- */
   #stop-screen-suggestions {
     /* Перебиваємо стандартні 220px з класу autocomplete-list */
-    max-height: calc(100vh - 150px) !important; 
+    max-height: calc(100vh - 150px) !important;
     border-radius: 0 0 12px 12px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.1);
   }
@@ -210,10 +210,10 @@
   .stop-suggestion-title {
     font-size: 16px; /* Зробили шрифт трохи меншим (було 15) */
     font-weight: 700;
-    color: var(--text); 
+    color: var(--text);
     line-height: 1.1; /* Вбили зайву висоту */
   }
-  
+
   .stop-suggestion-code {
     color: var(--text-muted);
     font-size: 11px; /* Код платформи теж зменшили */
@@ -233,26 +233,26 @@
   .stop-routes-carousel::-webkit-scrollbar {
     display: none;
   }
-  
+
   /* --- Коробочки маршрутів --- */
   .route-pill {
     flex: 0 0 auto;
-    display: inline-flex; 
-    align-items: center;  
-    background: rgba(128, 128, 128, 0.1); 
+    display: inline-flex;
+    align-items: center;
+    background: rgba(128, 128, 128, 0.1);
     border: 1px solid rgba(128, 128, 128, 0.3);
-    border-radius: 4px; 
+    border-radius: 4px;
     padding: 0px 4px; /* Прибрали вертикальні відступи повністю */
     height: 15px; /* Ще на 1px нижче */
     color: var(--text-muted);
     white-space: nowrap;
   }
-  
+
   .route-pill-num, .route-pill-dir {
     font-size: 9px; /* Екстремально дрібний шрифт для напрямків */
     line-height: 1;
   }
-  
+
   .route-pill-num {
     margin-right: 2px;
     color: var(--blue);
@@ -266,43 +266,43 @@
   #route-search-btn:active {
   transform: scale(0.97);
   }
-  
+
   /* --- Кнопка "Kanar obok" (Жовта, напівпрозора, скляна) --- */
   #fab-report {
-    position: absolute; 
-    left: 50%; 
-    right: auto; 
+    position: absolute;
+    left: 50%;
+    right: auto;
     transform: translateX(-50%);
-    bottom: calc(85px + var(--safe-bottom)); 
-    width: max-content; 
-    z-index: 400; 
-    
+    bottom: calc(85px + var(--safe-bottom));
+    width: max-content;
+    z-index: 400;
+
     /* Жовтий напівпрозорий фон */
-    background: rgba(255, 204, 0, 0.55); 
+    background: rgba(255, 204, 0, 0.55);
     /* Ефект розмиття того, що під кнопкою (карта) */
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
-    
+
     /* Темний текст для ідеального контрасту на жовтому */
-    color: #1c2530; 
-    border: none; 
-    border-radius: 24px; 
-    padding: 12px 24px; 
-    font-size: 15px; 
+    color: #1c2530;
+    border: none;
+    border-radius: 24px;
+    padding: 12px 24px;
+    font-size: 15px;
     font-weight: 800; /* Зробив шрифт трохи жирнішим для читабельності */
     box-shadow: 0 4px 14px rgba(255, 204, 0, 0.4); /* Жовтувата тінь */
-    display: flex; 
-    align-items: center; 
-    gap: 8px; 
+    display: flex;
+    align-items: center;
+    gap: 8px;
     cursor: pointer;
   }
-  
-  #fab-report:active { 
+
+  #fab-report:active {
     /* При натисканні стає повністю яскравою і непрозорою */
-    background: rgba(255, 204, 0, 1); 
-    transform: translateX(-50%) scale(0.96); 
+    background: rgba(255, 204, 0, 1);
+    transform: translateX(-50%) scale(0.96);
   }
-  
+
   #fab-report .icon { font-size: 18px; }
  /* --- Швидка модалка (Kanar obok) --- */
   #quick-report-modal {
@@ -313,60 +313,60 @@
     display: flex; flex-direction: column;
   }
   #quick-report-modal.open { transform: translateY(0); }
-  
+
   .quick-header { text-align: center; padding: 20px 20px 14px; position: relative; }
   .quick-header h2 { margin: 0 0 6px 0; font-size: 18px; color: var(--text); }
   .quick-header p { margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.4; }
 
   .quick-options { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
-  
+
   /* Жорстко стилізуємо кнопки вибору (вбиваємо системний дизайн) */
   .quick-option {
-    background: var(--bg); 
-    border: 1px solid var(--border); 
+    background: var(--bg);
+    border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 14px 16px; 
-    font-size: 15px; 
-    color: var(--text); 
+    padding: 14px 16px;
+    font-size: 15px;
+    color: var(--text);
     font-weight: 600;
-    display: flex; 
-    align-items: center; 
+    display: flex;
+    align-items: center;
     justify-content: flex-start; /* Текст строго зліва */
-    gap: 12px; 
-    cursor: pointer; 
+    gap: 12px;
+    cursor: pointer;
     width: 100%; /* Розтягуємо на всю ширину */
-    appearance: none; 
+    appearance: none;
     -webkit-appearance: none; /* Вимикаємо дизайн браузера */
     outline: none;
   }
-  
+
   /* Обраний варіант */
   .quick-option.selected {
-    background: rgba(229, 57, 53, 0.1); 
-    border-color: var(--danger); 
+    background: rgba(229, 57, 53, 0.1);
+    border-color: var(--danger);
     color: var(--danger);
   }
-  
+
   /* Кнопки Anuluj / Potwierdzam */
   .quick-actions { display: flex; gap: 12px; padding: 0 16px; }
   .quick-action-btn {
-    flex: 1; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; 
+    flex: 1; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700;
     cursor: pointer; appearance: none; -webkit-appearance: none; border: none; outline: none;
   }
   .btn-cancel { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
   .btn-cancel:active { background: var(--border); }
-  
+
   .btn-confirm { background: var(--danger); color: #fff; }
   .btn-confirm:active { background: var(--danger-dark); }
-  
+
   /* Посилання "Wpisz ręcznie" */
   .manual-link-wrap { text-align: center; margin-top: 16px; }
-  .manual-link { 
-    color: var(--blue); 
-    font-size: 14px; 
-    font-weight: 600; 
+  .manual-link {
+    color: var(--blue);
+    font-size: 14px;
+    font-weight: 600;
     text-decoration: none !important; /* Жорстко забираємо підкреслення */
-    padding: 10px; 
+    padding: 10px;
     display: inline-block;
   }
   /* --- Нижня навігація --- */
@@ -376,22 +376,22 @@
     display: flex; padding-bottom: var(--safe-bottom);
     box-shadow: 0 -2px 10px rgba(0,0,0,.06);
   }
-  
+
   .nav-item {
-    flex: 1; border: none; background: none; 
+    flex: 1; border: none; background: none;
     padding: 12px 4px 10px; /* Збільшені відступи зверху і знизу, щоб панель стала вищою */
     display: flex; flex-direction: column;
-    align-items: center; 
+    align-items: center;
     gap: 5px; /* Більша відстань між іконкою та текстом (було 3px) */
-    color: var(--text-muted); 
+    color: var(--text-muted);
     font-size: 13px; /* Збільшений шрифт (було 11px) */
     cursor: pointer;
   }
-  
-  .nav-item .nav-icon { 
+
+  .nav-item .nav-icon {
     width: 28px;  /* Збільшена іконка (було 24px) */
     height: 28px; /* Збільшена іконка (було 24px) */
-    background-color: var(--text-muted); 
+    background-color: var(--text-muted);
     -webkit-mask-size: contain;
     -webkit-mask-repeat: no-repeat;
     -webkit-mask-position: center;
@@ -400,7 +400,7 @@
     mask-position: center;
     transition: background-color 0.2s ease;
   }
-  
+
   .nav-item.active { color: var(--blue); font-weight: 600; }
   .nav-item.active .nav-icon { background-color: var(--blue); }
  /* --- Drawer зі стрічкою --- */
@@ -413,19 +413,19 @@
   }
   #reports-drawer.open { transform: translateY(0); }
   #drawer-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 10px auto 4px; }
-  
+
   #drawer-header { display: flex; justify-content: space-between; align-items: center; padding: 4px 18px 10px; }
   #drawer-header h2 { font-size: 16px; margin: 0; }
-  
+
   .drawer-actions { display: flex; align-items: center; gap: 12px; }
-  #drawer-add { 
-    border: none; background: none; 
-    font-size: 28px; font-weight: 300; 
-    color: var(--blue); cursor: pointer; 
-    padding: 0 4px; line-height: 1; 
+  #drawer-add {
+    border: none; background: none;
+    font-size: 28px; font-weight: 300;
+    color: var(--blue); cursor: pointer;
+    padding: 0 4px; line-height: 1;
   }
   #drawer-close { border: none; background: none; font-size: 20px; color: var(--text-muted); cursor: pointer; padding: 4px 8px; }
-  
+
   #drawer-list { overflow-y: auto; padding: 0 14px 14px; }
   #drawer-empty { text-align: center; color: var(--text-muted); font-size: 13px; padding: 30px 10px; }
 
@@ -449,21 +449,21 @@
   .rc-vote-btn.active.deny { background: var(--danger); color: #fff; }
   .rc-update-badge { font-size: 11px; color: var(--blue); font-weight: 600; margin-bottom: 6px; }
 /* --- Стилі для блоку оновлення (Update Quote) --- */
-  .rc-update-block { 
-    margin-bottom: 10px; 
-    padding-bottom: 8px; 
-    border-bottom: 1px dashed var(--border); 
+  .rc-update-block {
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--border);
   }
-  .rc-update-header { 
-    font-size: 11px; 
-    color: var(--text-muted); 
+  .rc-update-header {
+    font-size: 11px;
+    color: var(--text-muted);
   }
-  .rc-update-comment { 
-    font-size: 12px; 
-    color: var(--text-muted); 
-    margin-top: 4px; 
-    font-style: italic; 
-    line-height: 1.3; 
+  .rc-update-comment {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-style: italic;
+    line-height: 1.3;
   }
   /* --- Overlay --- */
   #overlay {
@@ -530,7 +530,7 @@
     opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; white-space: nowrap;
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  
+
   /* --- Екрани вкладок --- */
   .screen-container {
     position: absolute; inset: 0; z-index: 100;
@@ -548,7 +548,7 @@
     padding: 12px 16px; font-size: 16px; background: var(--bg); color: var(--text);
   }
   #stop-title-container {
-    padding: 16px 16px 8px; 
+    padding: 16px 16px 8px;
     border-bottom: 1px solid var(--border);
     /* Додаємо липкість: */
     position: sticky;
@@ -557,7 +557,7 @@
     z-index: 150; /* Щоб він був вище за список автобусів, але нижче за модалки */
   }
   #stop-title-container h2 { margin: 0; font-size: 18px; color: var(--text); }
-  
+
   #departures-list {
     flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px;
   }
@@ -586,7 +586,7 @@
     width: 100%; margin-top: 10px; border: none; border-radius: 10px; padding: 10px;
     background: var(--blue); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
   }
- 
+
   /* Стрілочка напрямку (компас) */
   .vehicle-arrow {
     position: absolute;
@@ -595,7 +595,7 @@
     margin-left: -7px; /* Центруємо (половина від 20px) */
     width: 14px;
     height: 14px;
-    transform-origin: 7px 31px; 
+    transform-origin: 7px 31px;
     transition: transform 1s ease-out;
     z-index: -1; /* ВАЖЛИВО: жорстко заганяємо стрілку ПІД маркер */
 }
@@ -621,7 +621,7 @@
     align-items: center; /* Центруємо номер і рамку */
     margin-right: 12px;
   }
-  
+
   .dep-route-box {
     font-size: 24px; /* Трохи менший шрифт, щоб гарно вліз у рамку */
     font-weight: 700;
@@ -636,7 +636,7 @@
     line-height: 1;
     background: transparent;
     position: relative;
-  } 
+  }
   .live-label {
     position: absolute;
     bottom: 2px; /* Притискаємо до самого низу квадратика */
@@ -685,7 +685,7 @@
     font-weight: 600;
     letter-spacing: 0.5px; /* Трохи розширюємо цифри для читабельності */
   }
-  
+
   /* Щоб у "привидів" (минулих рейсів) рамка теж тьмяніла */
   .dep-card.ghost .dep-route-box {
     border-color: var(--text-muted);
@@ -695,11 +695,11 @@
   .dep-info { flex: 1; display: flex; flex-direction: column; }
   .dep-dir { font-size: 16px; font-weight: 600; color: var(--text); }
   .dep-times { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
-  
+
   .dep-min { font-size: 20px; font-weight: 700; color: var(--text); }
   .dep-min.live { color: #10b981; } /* Зелений для Real-Time */
   .dep-sched { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-  
+
   /* --- Статуси запізнень --- */
   .dep-status { font-size: 13px; font-weight: 500; margin-top: 3px; }
   .status-delay { color: var(--danger); }       /* Червоний для запізнень */
@@ -710,37 +710,37 @@
   .time-mod { margin-left: 4px; font-weight: 600; }
   .time-delay { color: var(--danger); }
   .time-early { color: var(--blue); }
-  
+
   /* Трохи приглушуємо закреслений час */
   .dep-sched s { color: var(--text-muted); text-decoration-color: var(--text-muted); opacity: 0.7; }
-  
+
   /* --- Візуал для "привидів" (рейси, що вже від'їхали) --- */
   .dep-card.ghost {
     opacity: 0.6; /* Робимо трохи помітнішою (було 0.6) */
     background: var(--card); /* Зберігаємо нормальний фон картки замість --bg */
   }
-  
+
   .dep-card.ghost .dep-route,
   .dep-card.ghost .dep-dir,
   .dep-card.ghost .dep-min,
   .dep-card.ghost .dep-status,
   .dep-card.ghost .dep-route-box {
-    color: var(--text-muted) !important; 
+    color: var(--text-muted) !important;
     border-color: var(--text-muted) !important;
   }
 
   /* Індикатори для свайпів (Вниз - Історія, Вверх - Майбутнє) */
   #ptr-indicator,
   #ptr-indicator-bottom {
-    text-align: center; 
-    color: var(--blue); 
-    font-size: 13px; 
+    text-align: center;
+    color: var(--blue);
+    font-size: 13px;
     font-weight: 600;
-    height: 0; 
-    overflow: hidden; 
+    height: 0;
+    overflow: hidden;
     transition: height 0.2s ease;
-    display: flex; 
-    align-items: center; 
+    display: flex;
+    align-items: center;
     justify-content: center;
   }
 
@@ -766,7 +766,7 @@
 /* --- БАЗОВИЙ СТИЛЬ ДЛЯ ВСІХ НОВИХ ІКОНОК --- */
 .svg-icon {
   display: inline-block;
-  width: 20px; 
+  width: 20px;
   height: 20px;
   background-color: currentColor; /* Іконка автоматично бере колір тексту поруч */
   -webkit-mask-size: contain; mask-size: contain;
@@ -844,7 +844,7 @@
   display: inline-block;
   width: 10px;
   height: 10px;
-  background-color: var(--blue); 
+  background-color: var(--blue);
   border-radius: 50%;
   vertical-align: middle;
   margin-right: 6px;
@@ -853,9 +853,9 @@
 .live-indicator::after {
   content: '';
   position: absolute;
-  left: 0; 
+  left: 0;
   top: 0;
-  width: 100%; 
+  width: 100%;
   height: 100%;
   background-color: var(--blue); /* Явно задаємо колір для хвилі */
   border-radius: 50%;
@@ -916,7 +916,7 @@
 /* --- СТИЛІ ДЛЯ НОВИХ КАРТОК TRASA (ПЛАВАЮЧА ЛЕГЕНДА) --- */
 ..trasa-wrapper {
   position: relative;
-  margin-top: 0px; 
+  margin-top: 0px;
   padding-top: 0px;
 }
 
@@ -947,23 +947,23 @@
 .trasa-card.fullscreen-expanded {
   position: fixed;
   /* Враховуємо "чубки" смартфонів та нижнє меню */
-  top: calc(15px + var(--safe-top)); 
-  bottom: calc(75px + var(--safe-bottom)); 
+  top: calc(15px + var(--safe-top));
+  bottom: calc(75px + var(--safe-bottom));
   left: 12px;
   right: 12px;
   z-index: 1000;
-  
+
   display: flex;
   flex-direction: column;
   margin: 0;
   max-height: none;
-  
+
   /* ВАЖЛИВО: додаємо відступ зверху, щоб новий список не наліз на хрестик закриття */
-  padding-top: 45px; 
-  
+  padding-top: 45px;
+
   box-shadow: 0 10px 40px rgba(0,0,0,0.4);
   border: 1px solid var(--border);
-  
+
   /* НОВЕ: Запускаємо анімацію при відкритті */
   animation: modalPopIn 0.45s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }
@@ -977,9 +977,9 @@
 
 /* Скрол-зона посередині */
 .trasa-middle-scroll {
-  flex-grow: 1; 
-  overflow-y: auto; 
-  
+  flex-grow: 1;
+  overflow-y: auto;
+
   /* Оскільки ми сховали старі елементи, рамки та відступи тут більше не потрібні */
   padding: 0;
   border: none;
@@ -993,7 +993,7 @@
 
 /* Забороняємо футеру стискатися */
 .trasa-card.fullscreen-expanded .trasa-details {
-  flex-shrink: 0; 
+  flex-shrink: 0;
 }
 
 /* ЕФЕКТ НАТИСКАННЯ (залишаємо, він супер!) */
@@ -1031,7 +1031,7 @@
 .trasa-card.fullscreen-expanded .close-trasa-btn {
   display: flex;
   /* НОВЕ: хрестик теж плавно з'являється */
-  animation: fadeIn 0.4s ease forwards; 
+  animation: fadeIn 0.4s ease forwards;
 }
 
 @keyframes fadeIn {
@@ -1061,7 +1061,7 @@
 
 .badge-bus { background-color: var(--danger); color: white; }
 .badge-trolley { background-color: var(--blue); color: white; }
-.badge-walk { background-color: #2d2e38; color: #a8aab0; } 
+.badge-walk { background-color: #2d2e38; color: #a8aab0; }
 
 /* Розміри для 32px квадратика (Детальний список зупинок у Trasa) */
 .trasa-detail-box {
@@ -1258,7 +1258,7 @@
     <h2>Zgłoś kanarów</h2>
     <p>Wybierz cel w pobliżu</p>
   </div>
-  
+
   <div class="quick-options" id="quick-options-list">
     <!-- За замовчуванням обрано перший варіант -->
     <button class="quick-option selected" onclick="selectQuickOption(this, 'Linia 14')">
@@ -1270,22 +1270,30 @@
     <button class="quick-option" onclick="selectQuickOption(this, 'Obecna lokalizacja')">
       <div class="svg-icon icon-map-pin"></div> Obecna lokalizacja
     </button>
-  </div> 
-  
+  </div>
+
   <div class="quick-actions">
     <button class="quick-action-btn btn-cancel" onclick="closeQuickModal()">Anuluj</button>
     <button class="quick-action-btn btn-confirm" id="quick-confirm-btn" onclick="sendQuickReport()">Potwierdzam</button>
   </div>
-  
+
   <div class="manual-link-wrap">
     <a href="#" class="manual-link" onclick="openManualFromQuick(); return false;">Wpisz ręcznie (inna lokalizacja)</a>
   </div>
-</div>
-
-<!-- --- Екран "Przystanek" (Розклад) --- -->
+</div><!-- --- Екран "Przystanek" (Розклад) --- -->
+<style>
+  /* Список пропозицій упирається в нижню навігацію:
+     висота шапки (~77px + safe-top) + відступ 4px + нижня навігація (~72px + safe-bottom) */
+  #stop-screen-suggestions {
+    max-height: calc(100vh - 153px - var(--safe-top) - var(--safe-bottom)) !important;
+    max-height: calc(100dvh - 153px - var(--safe-top) - var(--safe-bottom)) !important;
+  }
+</style>
 <div id="screen-stop" class="screen-container" style="display: none;">
   <div class="stop-search-header">
-    <input type="text" id="stop-screen-search" placeholder="Szukaj przystanku (np. Lotnicza)..." autocomplete="off">
+      <input type="text" id="stop-screen-search" placeholder="Wprowadź nazwę przystanku..." autocomplete="off">
+
+
     <div id="stop-screen-suggestions" class="autocomplete-list"></div>
   </div>
 
@@ -1301,16 +1309,17 @@
   </div>
 </div>
 
+
 <!-- --- Екран "Trasa" (Планувальник A-to-B) --- -->
 <div id="screen-route" class="screen-container" style="display: none;">
   <div class="stop-search-header" style="display: flex; flex-direction: column; gap: 6px;">
-    
+
     <!-- Поле "Звідки" -->
 <div style="position: relative;">
   <input type="text" id="route-input-from"
     style="width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 9px; padding: 9px 36px 9px 12px; font-size: 15px; background: var(--bg); color: var(--text);"
     placeholder="Skąd..." autocomplete="off">
-  
+
   <button id="route-clear-from" type="button" class="route-action-btn icon-location" title="Użyj mojej lokalizacji"></button>
   <div id="route-suggestions-from" class="autocomplete-list"></div>
 </div>
@@ -1320,7 +1329,7 @@
   <input type="text" id="route-input-to"
     style="width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 9px; padding: 9px 36px 9px 12px; font-size: 15px; background: var(--bg); color: var(--text);"
     placeholder="Dokąd..." autocomplete="off">
-  
+
   <button id="route-clear-to" type="button" class="route-action-btn icon-location" title="Użyj mojej lokalizacji"></button>
   <div id="route-suggestions-to" class="autocomplete-list"></div>
 </div>
@@ -1345,19 +1354,19 @@
 <!-- Нижня навігація -->
 <div id="bottom-nav">
   <button class="nav-item active" id="nav-map" onclick="switchScreen('map', this)">
-    <div class="nav-icon" style="-webkit-mask-image: url('map.svg'); mask-image: url('map.svg');"></div> 
+    <div class="nav-icon" style="-webkit-mask-image: url('map.svg'); mask-image: url('map.svg');"></div>
     Mapa
   </button>
   <button class="nav-item" id="nav-route" onclick="switchScreen('route', this)">
-    <div class="nav-icon" style="-webkit-mask-image: url('route.svg'); mask-image: url('route.svg');"></div> 
+    <div class="nav-icon" style="-webkit-mask-image: url('route.svg'); mask-image: url('route.svg');"></div>
     Trasa
   </button>
   <button class="nav-item" id="nav-stop" onclick="switchScreen('stop', this)">
-    <div class="nav-icon" style="-webkit-mask-image: url('stop.svg'); mask-image: url('stop.svg');"></div> 
+    <div class="nav-icon" style="-webkit-mask-image: url('stop.svg'); mask-image: url('stop.svg');"></div>
     Przystanek
   </button>
   <button class="nav-item" id="nav-reports" onclick="switchScreen('reports', this)">
-    <div class="nav-icon" style="-webkit-mask-image: url('reports.svg'); mask-image: url('reports.svg');"></div> 
+    <div class="nav-icon" style="-webkit-mask-image: url('reports.svg'); mask-image: url('reports.svg');"></div>
     Zgłoszenia
   </button>
 </div>

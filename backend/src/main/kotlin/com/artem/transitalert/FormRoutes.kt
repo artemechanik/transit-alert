@@ -41,7 +41,7 @@ fun Application.formRoutes() {
         get("/stops/search") {
             val queryParam = call.parameters["q"]?.trim()?.lowercase() ?: return@get call.respond(emptyList<StopSuggestion>())
             if (queryParam.length < 2) return@get call.respond(emptyList<StopSuggestion>())
-            
+
             val searchQ = queryParam.normalizePL()
 
             val results = transaction {
@@ -58,19 +58,19 @@ fun Application.formRoutes() {
                 }
 
                 val baseStops = cachedStops!!.filter {
-                    it.name.normalizePL().contains(searchQ) || 
+                    it.name.normalizePL().contains(searchQ) ||
                     it.code.normalizePL().contains(searchQ)
                 }.sortedBy { stop ->
                     val normName = stop.name.normalizePL()
                     val normCode = stop.code.normalizePL()
-                    
+
                     when {
                         normName.startsWith(searchQ) -> 1
                         normName.contains(" $searchQ") || normName.contains("-$searchQ") -> 2
                         normCode.startsWith(searchQ) -> 3
                         else -> 4
                     }
-                }.take(10)
+                }.take(20)
 
                 if (baseStops.isEmpty()) return@transaction emptyList<StopSuggestion>()
                 val stopIds = baseStops.map { it.stopId }
@@ -90,7 +90,7 @@ fun Application.formRoutes() {
                             val sId = row[StopDepartures.stopId]
                             val r = row[StopDepartures.route]
                             val h = java.text.Normalizer.normalize(row[TripHeadsigns.headsign], java.text.Normalizer.Form.NFC).trim()
-                            
+
                             stopRoutesMap.getOrPut(sId) { mutableSetOf() }.add(StopRouteDto(r, h))
                         }
                 }
@@ -100,13 +100,13 @@ fun Application.formRoutes() {
                         ?.toList()
                         ?.sortedBy { it.route.toIntOrNull() ?: 9999 }
                         ?: emptyList<StopRouteDto>()
-                        
+
                     stop.copy(routes = routesList)
                 }
             }
             call.respond(results)
         }
-        
+
         get("/route/search") {
             val fromParam = call.parameters["from"]
             val toParam = call.parameters["to"]
@@ -124,13 +124,13 @@ fun Application.formRoutes() {
             val today = java.time.LocalDate.now(LUBLIN_ZONE)
 
             val routes = transaction {
-                val activeServices = activeServiceIds(today) 
+                val activeServices = activeServiceIds(today)
                 findDirectTrips(fromIds, toIds, activeServices, currentMin)
             }
-            
+
             call.respond(routes)
         }
-        
+
         get("/route/complex") {
             val fromParam = call.request.queryParameters["from"]
             val toParam = call.request.queryParameters["to"]
@@ -138,7 +138,7 @@ fun Application.formRoutes() {
             val fromLon = call.request.queryParameters["fromLon"]?.toDoubleOrNull()
             val toLat = call.request.queryParameters["toLat"]?.toDoubleOrNull()
             val toLon = call.request.queryParameters["toLon"]?.toDoubleOrNull()
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 10 
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 10
 
             val starts: List<Pair<String, Int>> = when {
                 fromLat != null && fromLon != null -> TransitGraph.getNearbyStopsWalkTimes(fromLat, fromLon)
@@ -159,10 +159,10 @@ fun Application.formRoutes() {
 
             val now = LocalDateTime.now(LUBLIN_ZONE)
             val timeParam = call.request.queryParameters["time"]?.toIntOrNull()
-            
+
             val baseSearchDate = now.toLocalDate()
             var currentSearchMin = timeParam ?: (now.hour * 60 + now.minute)
-            
+
             val allJourneys = mutableListOf<JourneyResponse>()
             var attempts = 0
             val MAX_ATTEMPTS = 150
@@ -185,12 +185,12 @@ fun Application.formRoutes() {
 
                 // 1. Викликаємо нову функцію, ПЕРЕДАВШИ liveDelays
                 val alternatives = TransitGraph.findRouteAlternatives(
-                    starts = starts, 
-                    targets = targets, 
-                    searchTime = searchTime, 
+                    starts = starts,
+                    targets = targets,
+                    searchTime = searchTime,
                     maxAcceptableDelayMin = 15,
                     minTransferAlternatives = 3,
-                    liveDelays = currentDelays 
+                    liveDelays = currentDelays
                 )
 
                 if (alternatives.isEmpty()) {
@@ -221,9 +221,9 @@ fun Application.formRoutes() {
                         } else {
                             val first = currentLeg.first()
                             val last = currentLeg.last()
-                            
+
                             val liveData = try { LiveVehiclesCache.byTripId(first.tripId) } catch (e: Exception) { null }
-                            
+
                             legs.add(JourneyLeg(
                                 route = first.route,
                                 fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
@@ -233,18 +233,18 @@ fun Application.formRoutes() {
                                 tripId = first.tripId,
                                 fromStopId = first.fromStopId,
                                 toStopId = last.toStopId,
-                                isRealTime = liveData?.delaySeconds != null,            
-                                delayMinutes = (liveData?.delaySeconds ?: 0) / 60 
+                                isRealTime = liveData?.delaySeconds != null,
+                                delayMinutes = (liveData?.delaySeconds ?: 0) / 60
                             ))
                             currentLeg = mutableListOf(edge)
                         }
                     }
-                    
+
                     if (currentLeg.isNotEmpty()) {
                         val first = currentLeg.first()
                         val last = currentLeg.last()
                         val liveData = try { LiveVehiclesCache.byTripId(first.tripId) } catch (e: Exception) { null }
-                        
+
                         legs.add(JourneyLeg(
                             route = first.route,
                             fromStopName = stopNames[first.fromStopId] ?: first.fromStopId,
@@ -254,17 +254,17 @@ fun Application.formRoutes() {
                             tripId = first.tripId,
                             fromStopId = first.fromStopId,
                             toStopId = last.toStopId,
-                            isRealTime = liveData?.delaySeconds != null,            
+                            isRealTime = liveData?.delaySeconds != null,
                             delayMinutes = (liveData?.delaySeconds ?: 0) / 60
                         ))
                     }
-                    
+
                     if (legs.isNotEmpty() && legs.first().route == "Пішки" && legs.size > 1) {
                         val walkLeg = legs[0]
                         val firstBus = legs[1]
                         val walkDuration = walkLeg.arrivalMin - walkLeg.departureMin
                         val perfectDeparture = firstBus.departureMin - walkDuration - 2
-                        
+
                         if (perfectDeparture > walkLeg.departureMin) {
                             legs[0] = walkLeg.copy(
                                 departureMin = perfectDeparture,
@@ -272,9 +272,9 @@ fun Application.formRoutes() {
                             )
                         }
                     }
-                    
+
                     if (legs.isEmpty()) continue
-                    
+
                     val realTotalMinutes = legs.last().arrivalMin - legs.first().departureMin
                     val currentSignature = legs.filter { it.route != "Пішки" }.map { it.tripId }.joinToString("|")
 
@@ -282,7 +282,7 @@ fun Application.formRoutes() {
                         val existingSignature = journey.legs.filter { it.route != "Пішки" }.map { it.tripId }.joinToString("|")
                         existingSignature == currentSignature
                     }
-                    
+
                     if (!isDuplicate) {
                         allJourneys.add(
                             JourneyResponse(totalMinutes = realTotalMinutes, legs = legs)
@@ -303,15 +303,15 @@ fun Application.formRoutes() {
                         }
                     }
                 }
-                
+
                 // Застосовуємо розрахований зсув для наступної ітерації while
                 currentSearchMin = nextSearchMin
             }
 
-            
+
             call.respond(allJourneys.distinctBy { it.legs })
         }
-        
+
         get("/routes/{route}/directions") {
             val routeNum = call.parameters["route"] ?: return@get call.respondText("Missing route", status = HttpStatusCode.BadRequest)
             val now = Instant.now()

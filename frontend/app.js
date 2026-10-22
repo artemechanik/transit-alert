@@ -2845,24 +2845,35 @@ stopSearchInput.addEventListener('input', async (e) => {
     }
 
     // --- НОВА ЛОГІКА СОРТУВАННЯ ---
-    const lowerQuery = query.toLowerCase();
-    stops.sort((a, b) => {
-      // Заміни .name на те поле, де в тебе зберігається назва (наприклад, .stopName або .stop_name)
-      const nameA = (a.name || '').toLowerCase();
-      const nameB = (b.name || '').toLowerCase();
+        const lowerQuery = query.toLowerCase();
+        stops.sort((a, b) => {
+          const nameA = (a.name || '').toLowerCase();
+          const nameB = (b.name || '').toLowerCase();
 
-      const isExactA = nameA === lowerQuery;
-      const isExactB = nameB === lowerQuery;
+          const isExactA = nameA === lowerQuery;
+          const isExactB = nameB === lowerQuery;
 
-      // 1. Точний збіг іде наверх
-      if (isExactA && !isExactB) return -1;
-      if (!isExactA && isExactB) return 1;
+          // 1. Точний збіг іде наверх
+          if (isExactA && !isExactB) return -1;
+          if (!isExactA && isExactB) return 1;
 
-      // 2. Все інше за алфавітом (з урахуванням польських літер)
-      return nameA.localeCompare(nameB, 'pl');
-    });
-    // ------------------------------
+          // 2. Ті, що ПОЧИНАЮТЬСЯ з пошукового слова, йдуть вище
+          const startsWithA = nameA.startsWith(lowerQuery);
+          const startsWithB = nameB.startsWith(lowerQuery);
+          if (startsWithA && !startsWithB) return -1;
+          if (!startsWithA && startsWithB) return 1;
 
+          // 3. Якщо назви однакові, сортуємо за кодом (01, 02, 03)
+          if (nameA === nameB) {
+            const codeA = a.code || '';
+            const codeB = b.code || '';
+            return codeA.localeCompare(codeB);
+          }
+
+          // 4. Все інше за алфавітом
+          return nameA.localeCompare(nameB, 'pl');
+        });
+        // ------------------------------
     stopSuggestionsBox.innerHTML = '';
     stops.forEach(stop => {
       stopSuggestionsBox.appendChild(createStopSuggestionElement(stop));

@@ -1176,8 +1176,24 @@
     50% { opacity: 0; }
 }
 /*=====================*/
-/*=====================*/
-/*=====================*/
+/* Піднімаємо кнопки карти над нижнім меню */
+.maplibregl-ctrl-bottom-left {
+    bottom: 80px !important; /* Якщо меню вище, зроби 90px або 100px */
+    left: 15px !important;
+    z-index: 999 !important;
+}
+.maplibregl-ctrl-group .map-toggle-btn {
+    color: #333 !important;
+    background: transparent !important;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1;
+}
+.map-night { --map-btn-fg: #eee; }
+.map-night .maplibregl-ctrl-group { background: #2a2a33 !important; }
+.map-night .maplibregl-ctrl-group button + button { border-top: 1px solid #444 !important; }
+/* іконки зуму й прицілу (вони картинки) — інвертуємо у світлі */
+.map-night .maplibregl-ctrl-icon { filter: invert(1); }
 </style>
 </head>
 <body>

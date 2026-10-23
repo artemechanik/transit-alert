@@ -83,7 +83,8 @@ async function updateLiveCityMap() {
 
                 const arrowEl = marker.getElement().querySelector('.vehicle-arrow');
                 if (arrowEl) {
-                    arrowEl.style.transform = `rotate(${bearing}deg)`;
+                    arrowEl.dataset.bearing = bearing;
+                    arrowEl.style.transform = `rotate(${bearing - map.getBearing()}deg)`;
                 }
             } else {
                 const el = document.createElement('div');
@@ -92,7 +93,7 @@ async function updateLiveCityMap() {
                 // ТОЧНА копія твоєї HTML-структури з Leaflet
                 el.innerHTML = `
                     <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
-                        <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
+                        <svg class="vehicle-arrow" data-bearing="${bearing}" style="transform: rotate(${bearing - map.getBearing()}deg);" viewBox="0 0 100 100">
                             <polygon points="50,10 90,90 10,90" />
                         </svg>
                         <div class="vehicle-marker-dot">${vehicle.route || '🚌'}</div>
@@ -119,36 +120,171 @@ async function updateLiveCityMap() {
         console.warn('Не вдалося оновити живу карту:', e);
     }
 }
+// Стрілка = напрямок автобуса мінус поворот карти
+function refreshVehicleArrows() {
+    const mapBearing = map.getBearing();
+    map.getContainer().querySelectorAll('.vehicle-arrow').forEach(a => {
+        const b = parseFloat(a.dataset.bearing) || 0;
+        a.style.transform = `rotate(${b - mapBearing}deg)`;
+    });
+}
 // MapLibre хоче координати у форматі [Довгота, Широта]
 const LUBLIN_CENTER_MAPLIBRE = [22.5684, 51.2465];
+// ==================== Кнопки на карті: день/ніч, 3D ====================
+let mapIs3D = false;
+function getMapTheme() {
+    const saved = localStorage.getItem('mapTheme'); // 'day' | 'night' | null (= як в ОС)
+    if (saved) return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day';
+}
+function applyMapThemeClass() {
+    const night = getMapTheme() === 'night';
+    const c = map.getContainer();
+    c.classList.toggle('map-night', night);
+    c.style.setProperty('--map-btn-fg', night ? '#eee' : '#333');
 
+    c.querySelectorAll('.maplibregl-ctrl-group').forEach(g => {
+        g.style.setProperty('background', night ? '#2a2a33' : '#fff', 'important');
+        g.style.setProperty(
+            'box-shadow',
+            night
+                ? '0 0 0 1px rgba(255,255,255,0.3), 0 2px 10px rgba(0,0,0,0.7)'
+                : '0 0 0 2px rgba(0,0,0,0.1)',
+            'important'
+        );
+    });
+    c.querySelectorAll('.maplibregl-ctrl-group button + button').forEach(b => {
+        b.style.setProperty('border-top', night ? '1px solid #444' : '1px solid #ddd', 'important');
+    });
+    // рідні іконки MapLibre (зум, приціл) — картинки, їх інвертуємо
+    c.querySelectorAll('.maplibregl-ctrl-icon').forEach(i => {
+        i.style.setProperty('filter', night ? 'invert(1)' : 'none', 'important');
+    });
+}
+const ICON_SUN = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
+const ICON_MOON = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`;
+function mapStyleFor(theme) {
+    return theme === 'night' ? 'style-dark.json' : 'style-light.json';
+}
+
+// Проста кнопка у стилі рідних контролів MapLibre
+function addMapButton(label, title, onClick, position) {
+    const container = document.createElement('div');
+    container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = title;
+    btn.innerHTML = label;
+
+    // Інлайн !important — перебиває будь-який глобальний стиль для button
+    const force = {
+        color: 'var(--map-btn-fg, #333)',
+        background: 'transparent',   // фон тепер дає сама група, її перефарбує CSS
+        width: '29px',
+        height: '29px',
+        padding: '0',
+        border: '0',
+        display: 'flex',
+        'align-items': 'center',
+        'justify-content': 'center',
+        'font-size': '14px',
+        'font-weight': '700',
+        opacity: '1',
+        'text-indent': '0',
+    };
+    for (const [k, v] of Object.entries(force)) btn.style.setProperty(k, v, 'important');
+
+    btn.addEventListener('click', () => onClick(btn));
+    container.appendChild(btn);
+    map.addControl({ onAdd: () => container, onRemove: () => container.remove() }, position);
+    return btn;
+}
+// 3D-будівлі: джерело беремо з існуючого шару 'building' у поточному стилі
+function apply3D(on) {
+    const exists = map.getLayer('3d-buildings');
+    if (on && !exists) {
+        const layers = map.getStyle().layers;
+        const bld = layers.find(l => l['source-layer'] === 'building');
+        if (!bld) return; // стиль без будівель — буде лише нахил камери
+        const firstSymbol = layers.find(l => l.type === 'symbol')?.id;
+        map.addLayer({
+            id: '3d-buildings',
+            type: 'fill-extrusion',
+            source: bld.source,
+            'source-layer': 'building',
+            minzoom: 14,
+            paint: {
+                'fill-extrusion-color': getMapTheme() === 'night' ? '#2a2a33' : '#d9d6cf',
+                'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 10],
+                'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+                'fill-extrusion-opacity': 0.8,
+            },
+        }, firstSymbol);
+    } else if (!on && exists) {
+        map.removeLayer('3d-buildings');
+    }
+}
+
+function setMapMode3D(on) {
+    mapIs3D = on;
+    apply3D(on);
+    map.easeTo({ pitch: on ? 60 : 0, bearing: 0, duration: 600 });
+}
 function initMap() {
-    const isDarkOS = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
     map = new maplibregl.Map({
         container: 'map',
-        style: isDarkOS ? 'style-dark.json' : 'style-light.json',
+        style: mapStyleFor(getMapTheme()),
         center: LUBLIN_CENTER_MAPLIBRE,
         zoom: 14,
         attributionControl: false,
-
-        // --- ОСЬ ЦЯ МАГІЯ ПІДСТАВЛЯЄ ТВІЙ КЛЮЧ ---
         transformRequest: (url, resourceType) => {
             if (url.includes('api.maptiler.com') && url.includes('{key}')) {
-                return {
-                    url: url.replace('{key}', MAPTILER_KEY)
-                };
+                return { url: url.replace('{key}', MAPTILER_KEY) };
             }
             return { url };
         }
-        // ------------------------------------------
     });
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
 
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-        map.setStyle(e.matches ? 'style-dark.json' : 'style-light.json');
+  // 1. 3D / 2D
+    addMapButton('3D', '3D / 2D', (btn) => {
+        setMapMode3D(!mapIs3D);
+        btn.textContent = mapIs3D ? '2D' : '3D';
+    }, 'top-right');
+
+    map.on('style.load', () => {
+        if (mapIs3D) apply3D(true);
     });
+    map.on('rotate', refreshVehicleArrows);
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        if (!localStorage.getItem('mapTheme')) {
+            applyMapThemeClass();                               // <-- НОВЕ (місце 3)
+            map.setStyle(mapStyleFor(getMapTheme()));
+        }
+    });
+      applyMapThemeClass();
+
+  // 2. День / ніч
+    addMapButton(getMapTheme() === 'night' ? ICON_SUN : ICON_MOON, 'День / ніч', (btn) => {
+        const next = getMapTheme() === 'night' ? 'day' : 'night';
+        localStorage.setItem('mapTheme', next);
+        applyMapThemeClass();                                   // <-- НОВЕ (місце 2)
+        btn.innerHTML = next === 'night' ? ICON_SUN : ICON_MOON;
+        map.setStyle(mapStyleFor(next));
+    }, 'top-right');
+
+    applyMapThemeClass();                                       // <-- НОВЕ (місце 1, на старті)
+
+  // 3. Моя позиція
+    map.addControl(new maplibregl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
+        trackUserLocation: true,
+        showUserHeading: true,
+    }), 'top-right');
+
 }
 // ==================== Пошук зупинки (верхня панель) ====================
 let searchDebounce;
@@ -233,14 +369,15 @@ async function toggleDepExpand(card, panel, dep) {
   document.querySelectorAll('.dep-card.expandable.open').forEach(c => { if (c !== card) c.classList.remove('open'); });
 
   if (isOpen) {
-    panel.classList.remove('open');
-    card.classList.remove('open');
-    panel.innerHTML = '';
-    return;
-  }
+      history.back(); // Замість ручного закриття просто робимо крок назад
+      return;
+    }
 
-  card.classList.add('open');
-  panel.classList.add('open');
+    // ДОДАЄМО: записуємо відкриття акордеону в історію
+    history.pushState({ screen: 'stop', overlay: 'depAccordion' }, '');
+
+    card.classList.add('open');
+    panel.classList.add('open');
   panel.innerHTML = '<div class="dep-expand-loading">Ładowanie trasy...</div>';
 
   try {
@@ -274,6 +411,7 @@ async function showVehicleOnMap(tripId, routeContext = { mode: 'przystanek' }) {
     // 1. Відкриваємо модальне вікно
     const modal = document.getElementById('vehicle-modal');
     modal.style.display = 'flex';
+    history.pushState({ screen: 'vehicleMap' }, '');
     document.getElementById('modal-route-title').innerText = `Linia ${vehicle.route}`;
 
     if (modalInitTimeout) clearTimeout(modalInitTimeout);
@@ -401,9 +539,12 @@ async function showVehicleOnMap(tripId, routeContext = { mode: 'przystanek' }) {
   }
 }
 
-// ЛОГІКА ЗАКРИТТЯ
-document.getElementById('close-modal-btn').addEventListener('click', () => {
-  document.getElementById('vehicle-modal').style.display = 'none';
+// === ЛОГІКА ЗАКРИТТЯ ТА ОЧИЩЕННЯ ПАМ'ЯТІ ===
+function closeVehicleMapModal() {
+  const modal = document.getElementById('vehicle-modal');
+  if (!modal || modal.style.display === 'none') return;
+
+  modal.style.display = 'none';
   modalUserInteracted = false;
 
   if (modalTrackInterval) {
@@ -412,19 +553,22 @@ document.getElementById('close-modal-btn').addEventListener('click', () => {
   }
 
   if (modalMap) {
-    modalMap.remove(); // ВАЖЛИВО: фізично знищуємо карту, звільняючи пам'ять
+    modalMap.remove();
     modalMap = null;
   }
 
-  modalVehicleMarker = null; // Скидаємо пам'ять про маркер автобуса
+  modalVehicleMarker = null;
 
-  // === ДОДАНО: Скидаємо твій маркер ===
   if (modalUserMarker) {
     modalUserMarker.remove();
     modalUserMarker = null;
   }
-});
+}
 
+// Хрестик тепер просто імітує кнопку "Назад"
+document.getElementById('close-modal-btn').addEventListener('click', () => {
+  history.back();
+});
 // ==== МАЛЮВАННЯ МАРШРУТУ ТА ВУЗЛОВИХ ЦЯТОК ЗУПИНОК ====
 // ДОПОМІЖНА МАТЕМАТИКА
 // Знаходження найближчого індексу вершини в полілінії
@@ -668,12 +812,11 @@ function stopVehicleTracking() {
 
 // ==================== Нижня навігація ====================
 function switchScreen(screenId, btn, isBackAction = false) {
-  // --- ДОДАЄМО: ЗАКРИВАЄМО МІНІ-КАРТУ, ЯКЩО ВОНА ВІДКРИТА ---
-  const vehicleModal = document.getElementById('vehicle-modal');
-  if (vehicleModal && vehicleModal.style.display !== 'none') {
-    document.getElementById('close-modal-btn').click();
+  // --- ВИПРАВЛЕНО: Закриваємо міні-карту БЕЗ виклику history.back() ---
+  if (typeof closeVehicleMapModal === 'function') {
+    closeVehicleMapModal();
   }
-  // --------------------------------------------------------
+  // --------------------------------------------------------------------
 
   // Оновлюємо активну кнопку
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -681,7 +824,7 @@ function switchScreen(screenId, btn, isBackAction = false) {
   if (btn) {
       btn.classList.add('active');
   } else {
-      // Якщо this не передали в HTML, шукаємо кнопку по ID
+      // Якщо btn не передали, шукаємо кнопку по ID
       const activeBtn = document.getElementById(`nav-${screenId}`);
       if (activeBtn) activeBtn.classList.add('active');
   }
@@ -694,33 +837,31 @@ function switchScreen(screenId, btn, isBackAction = false) {
   const stopScreen = document.getElementById('screen-stop');
   if (stopScreen) stopScreen.style.display = 'none';
 
-  // ДОДАЄМО СЮДИ НАШУ ТРАСУ
   const routeScreen = document.getElementById('screen-route');
   if (routeScreen) routeScreen.style.display = 'none';
 
   // 3. Обробляємо логіку для кожної вкладки
   if (screenId === 'map') {
-    closeDrawer(false);
+    if (typeof closeDrawer === 'function') closeDrawer(false);
     if (mapSearchBar) mapSearchBar.style.display = 'flex';
     if (fabReport) fabReport.style.display = 'flex';
 
   } else if (screenId === 'stop') {
-    stopVehicleTracking();
-    closeDrawer(false);
+    if (typeof stopVehicleTracking === 'function') stopVehicleTracking();
+    if (typeof closeDrawer === 'function') closeDrawer(false);
     if (mapSearchBar) mapSearchBar.style.display = 'none';
     if (fabReport) fabReport.style.display = 'none';
     if (stopScreen) stopScreen.style.display = 'flex';
-
-    loadNearbyStopsDefault();
-
+    // Завантажуємо дефолтні зупинки ТІЛЬКИ якщо ми не повертаємося жестом "Назад"
+        if (!isBackAction && typeof loadNearbyStopsDefault === 'function') loadNearbyStopsDefault();
   } else if (screenId === 'reports') {
-    stopVehicleTracking();
-    openDrawer('Zgłoszenia', renderReportsList);
+    if (typeof stopVehicleTracking === 'function') stopVehicleTracking();
+    if (typeof openDrawer === 'function') openDrawer('Zgłoszenia', renderReportsList);
     if (mapSearchBar) mapSearchBar.style.display = 'flex';
     if (fabReport) fabReport.style.display = 'flex';
 
   } else if (screenId === 'route') {
-    stopVehicleTracking();
+    if (typeof stopVehicleTracking === 'function') stopVehicleTracking();
     if (typeof closeDrawer === 'function') closeDrawer(false);
     if (routeScreen) routeScreen.style.display = 'flex';
     if (mapSearchBar) mapSearchBar.style.display = 'none';
@@ -731,18 +872,17 @@ function switchScreen(screenId, btn, isBackAction = false) {
     }
     if (typeof renderRecentRoutes === 'function') {
       renderRecentRoutes();          // підтягує історію поїздок
-  }
+    }
+  } // <--- ВИПРАВЛЕНО: ЦЯ ДУЖКА ЗАКРИВАЄ БЛОК 'ROUTE'
 
-  // МАГІЯ ІСТОРІЇ: Якщо перемикання відбулося через клік юзера, записуємо крок
+  // МАГІЯ ІСТОРІЇ: Тепер це працює для ВСІХ вкладок
   if (!isBackAction) {
       const currentState = window.history.state;
       if (!currentState || currentState.screen !== screenId) {
           window.history.pushState({ screen: screenId }, "");
-       }
-     }
-   }
-} // <--- ВАЖЛИВО: Ось ця дужка закриває функцію!
-
+      }
+  }
+}
 
 function openDrawer(title, fillFn) {
   document.querySelector('#drawer-header h2').textContent = title;
@@ -2301,16 +2441,17 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
     });
 
     if (isOpen) {
-        card.classList.remove('fullscreen-expanded');
-        scrollPanel.style.display = 'none';
-        scrollPanel.innerHTML = '';
-        return;
-    }
+            // Якщо клікнули на відкритий акордеон — просто робимо крок назад
+            history.back();
+            return;
+        }
 
-    card.classList.add('fullscreen-expanded');
-    scrollPanel.style.display = 'block';
-    scrollPanel.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--text-muted);">Ładowanie trasy...</div>';
+        // ДОДАЄМО: записуємо відкриття акордеону в історію
+        history.pushState({ screen: 'route', overlay: 'accordion' }, '');
 
+        card.classList.add('fullscreen-expanded');
+        scrollPanel.style.display = 'block';
+        scrollPanel.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--text-muted);">Ładowanie trasy...</div>';
     try {
         const legStopsResults = await Promise.all(transitLegs.map(fetchLegStops));
 
@@ -3218,22 +3359,46 @@ departuresList.addEventListener('touchend', async (e) => {
   startY = 0;
 });
 window.addEventListener('popstate', (event) => {
-    if (event.state && event.state.screen) {
-        const targetScreenId = event.state.screen;
+  // 1. Закриваємо міні-карту, якщо вона відкрита
+  if (typeof closeVehicleMapModal === 'function') {
+    closeVehicleMapModal();
+  }
 
-        // Знаходимо HTML-кнопку, яка відповідає за цей екран
-        let targetButton;
-        switch(targetScreenId) {
-            case 'map': targetButton = document.getElementById('nav-map'); break;
-            case 'route': targetButton = document.getElementById('nav-route'); break;
-            case 'stop': targetButton = document.getElementById('nav-stop'); break;
-            case 'reports': targetButton = document.getElementById('nav-reports'); break;
-        }
+  // 2. ЗАКРИВАЄМО АКОРДЕОН ТРАСИ
+  if (!event.state || event.state.overlay !== 'accordion') {
+    document.querySelectorAll('.trasa-card.fullscreen-expanded').forEach(card => {
+       card.classList.remove('fullscreen-expanded');
+       const p = card.querySelector('.trasa-middle-scroll');
+       if (p) {
+           p.innerHTML = '';
+           p.style.display = 'none';
+       }
+    });
+  }
 
-        // Викликаємо твою ж функцію перемикання, але передаємо true,
-        // щоб вона знову не записала це в історію
-        if (targetButton) {
-            switchScreen(targetScreenId, targetButton, true);
-        }
+  // 3. ЗАКРИВАЄМО АКОРДЕОН ЗУПИНОК (НОВЕ)
+  if (!event.state || event.state.overlay !== 'depAccordion') {
+    document.querySelectorAll('.dep-expand.open').forEach(p => {
+        p.classList.remove('open');
+        p.innerHTML = '';
+    });
+    document.querySelectorAll('.dep-card.expandable.open').forEach(c => {
+        c.classList.remove('open');
+    });
+  }
+
+  // 4. Перемикання вкладок нижнього меню
+  if (event.state && event.state.screen) {
+    const targetScreenId = event.state.screen;
+    let targetButton;
+    switch(targetScreenId) {
+      case 'map': targetButton = document.getElementById('nav-map'); break;
+      case 'route': targetButton = document.getElementById('nav-route'); break;
+      case 'stop': targetButton = document.getElementById('nav-stop'); break;
+      case 'reports': targetButton = document.getElementById('nav-reports'); break;
     }
+    if (targetButton) {
+      switchScreen(targetScreenId, targetButton, true);
+    }
+  }
 });

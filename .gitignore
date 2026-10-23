@@ -11,6 +11,7 @@ out/
 .idea/
 *.iml
 .vscode/
+.zed/
 .DS_Store
 
 # Env / secrets

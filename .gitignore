@@ -33,9 +33,9 @@ frontend/config.js
 frontend/app.js1
 frontend/index.html1
 frontend/jsconfig.json
-	package-lock.json
-	package.json
-	transit-alert.geany
+package-lock.json
+package.json
+transit-alert.geany
 # Database
 *.db
 *.sqlite

@@ -9,12 +9,20 @@
 <meta name="theme-color" content="#1976d2">
 <meta name="color-scheme" content="light dark">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css" rel="stylesheet" />
+<script>
+(function () {
+  var pref = localStorage.getItem('themePref') || 'auto';
+  var dark = pref === 'night' ||
+    (pref === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+})();
+</script>
 <style>
   :root {
     --live-green: #22c55e; /* Можеш додати змінну для зручності */
 }
   :root {
-    color-scheme: light dark;
+      color-scheme: light;
     --blue: #1976d2;
     --blue-dark: #125499;
     --danger: #e53935;
@@ -29,8 +37,9 @@
     --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
+
+    :root[data-theme="dark"] {
+        color-scheme: dark;
       --blue: #4a9eff;
       --blue-dark: #2f7fd6;
       --danger: #ff5449;
@@ -59,7 +68,6 @@
         /* Інвертує кольори: чорне стає білим */
         filter: invert(1) brightness(1.2);
     }
-  }
 /* --- Маркер геолокації (MapLibre) --- */
 .user-marker-dom {
     width: 20px;
@@ -1140,6 +1148,7 @@
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
     background-color: currentColor;
+}
 /* Жорстко фіксуємо розмір квадратиків ТІЛЬКИ для плаваючої легенди */
 .trasa-legend .dep-route-box {
   width: 28px !important;
@@ -1176,24 +1185,28 @@
     50% { opacity: 0; }
 }
 /*=====================*/
-/* Піднімаємо кнопки карти над нижнім меню */
-.maplibregl-ctrl-bottom-left {
-    bottom: 80px !important; /* Якщо меню вище, зроби 90px або 100px */
-    left: 15px !important;
-    z-index: 999 !important;
+:root {
+  --map-btn-fg: #333;
+  --map-ctrl-bg: #fff;
+  --map-ctrl-border: #ddd;
+  --map-ctrl-shadow: 0 0 0 2px rgba(0,0,0,.1);
+  --map-icon-filter: none;
 }
-.maplibregl-ctrl-group .map-toggle-btn {
-    color: #333 !important;
-    background: transparent !important;
-    font-size: 16px;
-    font-weight: 600;
-    line-height: 1;
+:root[data-theme="dark"] {
+  --map-btn-fg: #eee;
+  --map-ctrl-bg: #2a2a33;
+  --map-ctrl-border: #444;
+  --map-ctrl-shadow: 0 0 0 1px rgba(255,255,255,.3), 0 2px 10px rgba(0,0,0,.7);
+  --map-icon-filter: invert(1) hue-rotate(180deg);
 }
-.map-night { --map-btn-fg: #eee; }
-.map-night .maplibregl-ctrl-group { background: #2a2a33 !important; }
-.map-night .maplibregl-ctrl-group button + button { border-top: 1px solid #444 !important; }
-/* іконки зуму й прицілу (вони картинки) — інвертуємо у світлі */
-.map-night .maplibregl-ctrl-icon { filter: invert(1); }
+.maplibregl-ctrl-group {
+  background: var(--map-ctrl-bg) !important;
+  box-shadow: var(--map-ctrl-shadow) !important;
+}
+.maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--map-ctrl-border) !important;
+}
+.maplibregl-ctrl-icon { filter: var(--map-icon-filter) !important; }
 </style>
 </head>
 <body>

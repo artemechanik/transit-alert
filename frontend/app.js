@@ -130,43 +130,75 @@ function refreshVehicleArrows() {
 }
 // MapLibre хоче координати у форматі [Довгота, Широта]
 const LUBLIN_CENTER_MAPLIBRE = [22.5684, 51.2465];
-// ==================== Кнопки на карті: день/ніч, 3D ====================
 let mapIs3D = false;
-function getMapTheme() {
-    const saved = localStorage.getItem('mapTheme'); // 'day' | 'night' | null (= як в ОС)
-    if (saved) return saved;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day';
-}
-function applyMapThemeClass() {
-    const night = getMapTheme() === 'night';
-    const c = map.getContainer();
-    c.classList.toggle('map-night', night);
-    c.style.setProperty('--map-btn-fg', night ? '#eee' : '#333');
+// ==================== Іконки теми ====================
+// Авто: залите сонце з вирізаною літерою A
+const ICON_AUTO = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <mask id="icoAutoMask">
+      <rect width="24" height="24" fill="#fff"/>
+      <path d="M9.3 15L12 8.8 14.7 15M10.2 13.2h3.6" stroke="#000" stroke-width="1.8"/>
+    </mask>
+  </defs>
+  <circle cx="12" cy="12" r="5" fill="currentColor" stroke="currentColor" stroke-width="2" mask="url(#icoAutoMask)"/>
+  <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2"/>
+</svg>`;
 
-    c.querySelectorAll('.maplibregl-ctrl-group').forEach(g => {
-        g.style.setProperty('background', night ? '#2a2a33' : '#fff', 'important');
-        g.style.setProperty(
-            'box-shadow',
-            night
-                ? '0 0 0 1px rgba(255,255,255,0.3), 0 2px 10px rgba(0,0,0,0.7)'
-                : '0 0 0 2px rgba(0,0,0,0.1)',
-            'important'
-        );
-    });
-    c.querySelectorAll('.maplibregl-ctrl-group button + button').forEach(b => {
-        b.style.setProperty('border-top', night ? '1px solid #444' : '1px solid #ddd', 'important');
-    });
-    // рідні іконки MapLibre (зум, приціл) — картинки, їх інвертуємо
-    c.querySelectorAll('.maplibregl-ctrl-icon').forEach(i => {
-        i.style.setProperty('filter', night ? 'invert(1)' : 'none', 'important');
-    });
-}
-const ICON_SUN = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
-const ICON_MOON = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`;
-function mapStyleFor(theme) {
-    return theme === 'night' ? 'style-dark.json' : 'style-light.json';
+// День: залите сонце
+const ICON_SUN = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="5" fill="currentColor" stroke="currentColor" stroke-width="2"/>
+  <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2"/>
+</svg>`;
+
+// Ніч: залитий місяць
+const ICON_MOON = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" fill="currentColor" stroke="currentColor" stroke-width="2"/>
+</svg>`;
+// ==================== Тема (Авто / День / Ніч) ====================
+const THEME_CYCLE = ['auto', 'day', 'night'];
+const THEME_LABELS = { auto: 'Auto', day: 'Dzień', night: 'Noc' };
+const THEME_ICONS = { auto: ICON_AUTO, day: ICON_SUN, night: ICON_MOON };
+const osDarkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+let appliedMapTheme = null;
+
+function getThemePref() {
+    const p = localStorage.getItem('themePref');
+    return THEME_CYCLE.includes(p) ? p : 'auto';
 }
 
+// 'light' | 'dark' — з вибору користувача або з ОС
+function getEffectiveTheme() {
+    const p = getThemePref();
+    if (p === 'day') return 'light';
+    if (p === 'night') return 'dark';
+    return osDarkQuery.matches ? 'dark' : 'light';
+}
+
+function mapStyleFor(effective) {
+    return effective === 'dark' ? 'style-dark.json' : 'style-light.json';
+}
+
+// Міняє стиль карти лише тоді, коли ефективна тема реально змінилась
+function syncMapStyle() {
+    if (!map) return;
+    const eff = getEffectiveTheme();
+    if (eff === appliedMapTheme) return;
+    appliedMapTheme = eff;
+    map.setStyle(mapStyleFor(eff));
+}
+
+function applyTheme() {
+    const eff = getEffectiveTheme();
+    document.documentElement.dataset.theme = eff;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = eff === 'dark' ? '#14161a' : '#eef2f6';
+    syncMapStyle();
+}
+
+// В режимі «Авто» слідуємо за ОС
+osDarkQuery.addEventListener('change', () => {
+    if (getThemePref() === 'auto') applyTheme();
+});
 // Проста кнопка у стилі рідних контролів MapLibre
 function addMapButton(label, title, onClick, position) {
     const container = document.createElement('div');
@@ -207,7 +239,8 @@ function apply3D(on) {
         const layers = map.getStyle().layers;
         const bld = layers.find(l => l['source-layer'] === 'building');
         if (!bld) return; // стиль без будівель — буде лише нахил камери
-        const firstSymbol = layers.find(l => l.type === 'symbol')?.id;
+      const baseColor = map.getPaintProperty(bld.id, 'fill-color') || '#d9d6cf';
+      const firstSymbol = layers.find(l => l.type === 'symbol')?.id;
         map.addLayer({
             id: '3d-buildings',
             type: 'fill-extrusion',
@@ -215,7 +248,7 @@ function apply3D(on) {
             'source-layer': 'building',
             minzoom: 14,
             paint: {
-                'fill-extrusion-color': getMapTheme() === 'night' ? '#2a2a33' : '#d9d6cf',
+                'fill-extrusion-color': baseColor,
                 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 10],
                 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
                 'fill-extrusion-opacity': 0.8,
@@ -232,9 +265,11 @@ function setMapMode3D(on) {
     map.easeTo({ pitch: on ? 60 : 0, bearing: 0, duration: 600 });
 }
 function initMap() {
+    appliedMapTheme = getEffectiveTheme();
+
     map = new maplibregl.Map({
         container: 'map',
-        style: mapStyleFor(getMapTheme()),
+        style: mapStyleFor(appliedMapTheme),
         center: LUBLIN_CENTER_MAPLIBRE,
         zoom: 14,
         attributionControl: false,
@@ -248,7 +283,24 @@ function initMap() {
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
 
-  // 1. 3D / 2D
+    // 1. Моя позиція
+    map.addControl(new maplibregl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
+        trackUserLocation: true,
+        showUserHeading: true,
+    }), 'top-right');
+
+    // 2. Тема: Авто → День → Ніч
+    addMapButton(THEME_ICONS[getThemePref()], `Motyw: ${THEME_LABELS[getThemePref()]}`, (btn) => {
+        const next = THEME_CYCLE[(THEME_CYCLE.indexOf(getThemePref()) + 1) % THEME_CYCLE.length];
+        localStorage.setItem('themePref', next);
+        btn.innerHTML = THEME_ICONS[next];
+        btn.title = `Motyw: ${THEME_LABELS[next]}`;
+        applyTheme();
+        showToast(`Motyw: ${THEME_LABELS[next]}`);
+    }, 'top-right');
+
+    // 3. 3D / 2D
     addMapButton('3D', '3D / 2D', (btn) => {
         setMapMode3D(!mapIs3D);
         btn.textContent = mapIs3D ? '2D' : '3D';
@@ -257,34 +309,8 @@ function initMap() {
     map.on('style.load', () => {
         if (mapIs3D) apply3D(true);
     });
+
     map.on('rotate', refreshVehicleArrows);
-
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-        if (!localStorage.getItem('mapTheme')) {
-            applyMapThemeClass();                               // <-- НОВЕ (місце 3)
-            map.setStyle(mapStyleFor(getMapTheme()));
-        }
-    });
-      applyMapThemeClass();
-
-  // 2. День / ніч
-    addMapButton(getMapTheme() === 'night' ? ICON_SUN : ICON_MOON, 'День / ніч', (btn) => {
-        const next = getMapTheme() === 'night' ? 'day' : 'night';
-        localStorage.setItem('mapTheme', next);
-        applyMapThemeClass();                                   // <-- НОВЕ (місце 2)
-        btn.innerHTML = next === 'night' ? ICON_SUN : ICON_MOON;
-        map.setStyle(mapStyleFor(next));
-    }, 'top-right');
-
-    applyMapThemeClass();                                       // <-- НОВЕ (місце 1, на старті)
-
-  // 3. Моя позиція
-    map.addControl(new maplibregl.GeolocateControl({
-        positionOptions: { enableHighAccuracy: true },
-        trackUserLocation: true,
-        showUserHeading: true,
-    }), 'top-right');
-
 }
 // ==================== Пошук зупинки (верхня панель) ====================
 let searchDebounce;
@@ -847,13 +873,20 @@ function switchScreen(screenId, btn, isBackAction = false) {
     if (fabReport) fabReport.style.display = 'flex';
 
   } else if (screenId === 'stop') {
-    if (typeof stopVehicleTracking === 'function') stopVehicleTracking();
-    if (typeof closeDrawer === 'function') closeDrawer(false);
-    if (mapSearchBar) mapSearchBar.style.display = 'none';
-    if (fabReport) fabReport.style.display = 'none';
-    if (stopScreen) stopScreen.style.display = 'flex';
-    // Завантажуємо дефолтні зупинки ТІЛЬКИ якщо ми не повертаємося жестом "Назад"
-        if (!isBackAction && typeof loadNearbyStopsDefault === 'function') loadNearbyStopsDefault();
+      if (typeof stopVehicleTracking === 'function') stopVehicleTracking();
+      if (typeof closeDrawer === 'function') closeDrawer(false);
+      if (mapSearchBar) mapSearchBar.style.display = 'none';
+      if (fabReport) fabReport.style.display = 'none';
+      if (stopScreen) stopScreen.style.display = 'flex';
+
+      // Завантажуємо дефолтні зупинки ТІЛЬКИ якщо не повертаємося назад
+      // І якщо зараз НЕМАЄ відкритої зупинки (currentStopIdForDepartures порожній)
+      if (!isBackAction && typeof loadNearbyStopsDefault === 'function') {
+          if (!currentStopIdForDepartures) {
+              loadNearbyStopsDefault();
+          }
+      }
+
   } else if (screenId === 'reports') {
     if (typeof stopVehicleTracking === 'function') stopVehicleTracking();
     if (typeof openDrawer === 'function') openDrawer('Zgłoszenia', renderReportsList);
@@ -883,7 +916,6 @@ function switchScreen(screenId, btn, isBackAction = false) {
       }
   }
 }
-
 function openDrawer(title, fillFn) {
   document.querySelector('#drawer-header h2').textContent = title;
   const drawer = document.getElementById('reports-drawer');

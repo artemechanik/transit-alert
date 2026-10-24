@@ -192,7 +192,11 @@ function applyTheme() {
     document.documentElement.dataset.theme = eff;
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = eff === 'dark' ? '#14161a' : '#eef2f6';
-    syncMapStyle();
+  syncMapStyle();
+  if (typeof modalMap !== 'undefined' && modalMap) {
+            modalMap.remove();
+            modalMap = null;
+    }
 }
 
 // В режимі «Авто» слідуємо за ОС
@@ -450,8 +454,7 @@ async function showVehicleOnMap(tripId, routeContext = { mode: 'przystanek' }) {
 
       // 3. Ініціалізуємо MapLibre для модалки, якщо її ще немає
       if (!modalMap) {
-        const isDarkOS = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
+        const isDarkOS = getEffectiveTheme() === 'dark';
         modalMap = new maplibregl.Map({
           container: 'modal-map',
           style: isDarkOS ? 'style-dark.json' : 'style-light.json',

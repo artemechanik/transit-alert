@@ -1500,7 +1500,7 @@ function saveRecentRoute(fromStop, toStop) {
     routes = routes.filter(r => `${r.from.name}-${r.to.name}` !== routeKey);
     routes.unshift({ from: fromStop, to: toStop });
 
-    if (routes.length > 3) routes.length = 3; // Зберігаємо 3 останні маршрути
+    if (routes.length > 10) routes.length = 10; // Зберігаємо 3 останні маршрути
     localStorage.setItem('ta_recent_routes', JSON.stringify(routes));
 }
 
@@ -1515,7 +1515,12 @@ function renderRecentRoutes() {
         return;
     }
 
-    let html = '<div style="padding: 10px; font-weight: bold; color: var(--text-muted); font-size: 0.9em;">OSTATNIE TRASY</div>';
+    // Робимо заголовок липким (sticky), щоб він не зникав при гортанні списку
+    let html = '<div style="padding: 10px; font-weight: bold; color: var(--text-muted); font-size: 0.9em; position: sticky; top: 0; background: var(--bg); z-index: 2;">OSTATNIE TRASY</div>';
+
+    // calc(100vh - 320px) вираховує висоту динамічно: весь екран МІНУС верхні інпути та нижнє меню
+    // Це дозволить списку ідеально вписатися на будь-якому телефоні
+    html += '<div class="recent-scroll-container" style="max-height: calc(100vh - 320px); overflow-y: auto; overscroll-behavior: contain; padding-bottom: 20px;">';
 
     routes.forEach(route => {
         html += `
@@ -1529,9 +1534,14 @@ function renderRecentRoutes() {
         </div>`;
     });
 
-    container.innerHTML = html;
-}
+    html += '</div>';
 
+    container.innerHTML = html;
+
+    // (Опціонально) Ховаємо текст "Wybierz przystanek...", якщо є історія, щоб не засмічувати екран
+    const helperText = document.querySelector('#screen-route > p, #screen-route .helper-text');
+    if (helperText) helperText.style.display = 'none';
+}
 // 4. Дія при кліку на маршрут з історії
 function applyRecentRoute(route) {
     document.getElementById('route-input-from').value = route.from.name;
@@ -2491,117 +2501,120 @@ async function toggleTrasaExpand(card, legs, transitLegs) {
         let transitIdx = 0;
 
         legs.forEach((leg, i) => {
-            const isWalk = leg.route === 'Пішки' || !leg.route;
+                    const isWalk = leg.route === 'Пішки' || !leg.route;
+                    const hasNextLeg = i < legs.length - 1; // Чи є наступний крок маршруту
 
-            // БЛОК 1: Пішохідний перехід
-            if (isWalk) {
-                const walkMinRaw = Math.max(0, leg.arrivalMin - leg.departureMin);
-                const walkMin = Math.round(walkMinRaw * 1.8);
+                    // БЛОК 1: Пішохідний перехід
+                    if (isWalk) {
+                        const walkMinRaw = Math.max(0, leg.arrivalMin - leg.departureMin);
+                        const walkMin = Math.round(walkMinRaw * 1.8);
 
-                // Якщо це найперший крок (старт з адреси)
-                if (i === 0) {
-                    html += `
-                    <div style="position: relative; padding: 10px 14px 10px 42px; display: flex; align-items: center;">
-                        <div style="position: absolute; left: 21px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--danger); z-index: 2;"></div>
-                        <div style="position: absolute; left: 26px; top: 50%; bottom: -50%; width: 2px; background: var(--border); z-index: 1;"></div>
-                        <span style="font-weight: 700; color: var(--text); font-size: 15px;">${routeFromStop.name}</span>
-                    </div>
-                    <div style="padding: 12px 14px; background: rgba(0,0,0,0.02); display: flex; align-items: center; border-left: 2px dashed var(--border); margin-left: 22px;">
-                        <div class="svg-icon icon-walk" style="width:16px; height:16px; margin-right:8px; color: var(--text-muted);"></div>
-                        <span style="font-weight: 600; font-size: 14px; color: var(--text-muted);">Przejście pieszo: ${walkMin} min</span>
-                    </div>`;
-                }
-                else {
-                    html += `
-                    <div style="padding: 12px 14px; background: rgba(0,0,0,0.02); display: flex; align-items: center; border-left: 2px dashed var(--border); margin-left: 22px;">
-                        <div class="svg-icon icon-walk" style="width:16px; height:16px; margin-right:8px; color: var(--text-muted);"></div>
-                        <span style="font-weight: 600; font-size: 14px; color: var(--text-muted);">Przejście pieszo: ${walkMin} min</span>
-                    </div>`;
+                        // Якщо це найперший крок (старт з адреси)
+                        if (i === 0) {
+                            html += `
+                            <div style="position: relative; padding: 10px 14px 10px 42px; display: flex; align-items: center;">
+                                <div style="position: absolute; left: 21px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--danger); z-index: 2;"></div>
+                                <div style="position: absolute; left: 26px; top: 50%; bottom: 0; border-left: 2px dashed var(--border); z-index: 1;"></div>                                <span style="font-weight: 700; color: var(--text); font-size: 15px;">${routeFromStop.name}</span>
+                            </div>`;
+                        }
 
-                    // Якщо це останній крок (фініш), малюємо червону крапку і назву адреси!
-                    if (i === legs.length - 1) {
+                        // Сам піший перехід (використовуємо абсолютну лінію для ідеального зшивання)
                         html += `
-                        <div style="position: relative; padding: 10px 14px 10px 42px; display: flex; align-items: center;">
-                            <div style="position: absolute; left: 21px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--danger); z-index: 2;"></div>
-                            <span style="font-weight: 700; color: var(--text); font-size: 15px;">${routeToStop.name}</span>
+                        <div style="position: relative; padding: 12px 14px 12px 42px; background: rgba(0,0,0,0.02); display: flex; align-items: center;">
+                            <div style="position: absolute; left: 26px; top: 0; bottom: 0; border-left: 2px dashed var(--border); z-index: 1;"></div>
+                            <div class="svg-icon icon-walk" style="width:16px; height:16px; margin-right:8px; color: var(--text-muted); position: relative; z-index: 2;"></div>
+                            <span style="font-weight: 600; font-size: 14px; color: var(--text-muted); position: relative; z-index: 2;">Przejście pieszo: ${walkMin} min</span>
                         </div>`;
+
+                        // Якщо це останній крок (фініш), малюємо червону крапку адреси
+                        if (!hasNextLeg) {
+                            html += `
+                            <div style="position: relative; padding: 10px 14px 10px 42px; display: flex; align-items: center;">
+                                <div style="position: absolute; left: 26px; top: 0; bottom: 50%; border-left: 2px dashed var(--border); z-index: 1;"></div>
+                                <div style="position: absolute; left: 21px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--danger); z-index: 2;"></div>
+                                <span style="font-weight: 700; color: var(--text); font-size: 15px;">${routeToStop.name}</span>
+                            </div>`;
+                        }
+                        return;
                     }
-                }
-                return;
-            }
 
-            const stops = legStopsResults[transitIdx] || [];
-            const routeNum = parseInt(leg.route, 10);
-            const trolleyClass = (routeNum >= 150) ? ' trolleybus' : '';
+                    // БЛОК 2: Транспорт
+                    const stops = legStopsResults[transitIdx] || [];
+                    const routeNum = parseInt(leg.route, 10);
+                    const trolleyClass = (routeNum >= 150) ? ' trolleybus' : '';
 
-            // Формуємо контекст Trasa для модалки мапи
-            let mapOnClick = `showVehicleOnMap('${leg.tripId}')`;
-            if (stops.length >= 2 && stops[0].lon && stops[stops.length - 1].lon) {
-                const fromCoord = [stops[0].lon, stops[0].lat];
-                const toCoord = [stops[stops.length - 1].lon, stops[stops.length - 1].lat];
-                const ctx = JSON.stringify({ mode: 'trasa', fromCoords: fromCoord, toCoords: toCoord }).replace(/"/g, '&quot;');
-                mapOnClick = `showVehicleOnMap('${leg.tripId}', ${ctx})`;
-            }
+                    let mapOnClick = `showVehicleOnMap('${leg.tripId}')`;
+                    if (stops.length >= 2 && stops[0].lon && stops[stops.length - 1].lon) {
+                        const fromCoord = [stops[0].lon, stops[0].lat];
+                        const toCoord = [stops[stops.length - 1].lon, stops[stops.length - 1].lat];
+                        const ctx = JSON.stringify({ mode: 'trasa', fromCoords: fromCoord, toCoords: toCoord }).replace(/"/g, '&quot;');
+                        mapOnClick = `showVehicleOnMap('${leg.tripId}', ${ctx})`;
+                    }
 
-            // БЛОК 2: Заголовок автобуса з акуратною кнопкою карти
-            html += `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg); position: sticky; top: 0; z-index: 10; border-bottom: 2px solid var(--border);">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div class="dep-route-box trasa-detail-box${trolleyClass}">${leg.route}</div>
-                    <span style="font-weight: 700; color: var(--text); font-size: 15px;">Wsiądź</span>
-                </div>
-                <button class="dep-expand-map-btn" onclick="${mapOnClick}" style="margin: 0; width: auto; background: rgba(25, 118, 210, 0.1); color: var(--blue); border: none; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
-                    <div class="svg-icon icon-map-pin" style="width: 14px; height: 14px;"></div> Mapa
-                </button>
-            </div>`;
+                    // МАГІЯ ЗШИВАННЯ: Прокидаємо лінію під заголовком "Wsiądź" від попереднього кроку
+                    let headerLine = '';
+                    if (i > 0) {
+                        const isPrevWalk = legs[i - 1].route === 'Пішки' || !legs[i - 1].route;
+                        const borderStyle = isPrevWalk ? 'border-left: 2px dashed var(--border);' : 'width: 2px; background: var(--border);';
+                        headerLine = `<div style="position: absolute; left: 26px; top: 0; bottom: 0; ${borderStyle} z-index: 1;"></div>`;
+                    }
 
-            // БЛОК 3: Список зупинок з лінією (Таймлайн)
-            // s.eta — статичний розклад, тож додаємо ПОТОЧНУ затримку саме цього рейсу
-            // (рядок таймлайну оновлюється updateTrasaCountdowns; fallback — затримка на момент пошуку)
-            const legRow = [...card.querySelectorAll('.trasa-row[data-trip-id]')].find(r => r.dataset.tripId === leg.tripId);
-            const delay = legRow ? parseInt(legRow.dataset.delay, 10) : (leg.delayMinutes || 0);
+                    html += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg); position: sticky; top: 0; z-index: 10; border-bottom: 2px solid var(--border);">
+                        ${headerLine}
+                        <div style="display: flex; align-items: center; gap: 10px; position: relative; z-index: 2; margin-left: 28px;">
+                            <div class="dep-route-box trasa-detail-box${trolleyClass}">${leg.route}</div>
+                            <span style="font-weight: 700; color: var(--text); font-size: 15px;">Wsiądź</span>
+                        </div>
+                        <button class="dep-expand-map-btn" onclick="${mapOnClick}" style="margin: 0; width: auto; background: rgba(25, 118, 210, 0.1); color: var(--blue); border: none; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; position: relative; z-index: 2;">
+                            <div class="svg-icon icon-map-pin" style="width: 14px; height: 14px;"></div> Mapa
+                        </button>
+                    </div>`;
 
-            const stopsHtml = stops.length ? stops.map((s, index) => {
-                const stopName = s.name || '';
-                const platformCode = s.platformCode || '';
+                    // БЛОК 3: Список зупинок
+                    const legRow = [...card.querySelectorAll('.trasa-row[data-trip-id]')].find(r => r.dataset.tripId === leg.tripId);
+                    const delay = legRow ? parseInt(legRow.dataset.delay, 10) : (leg.delayMinutes || 0);
 
-                const isFirst = index === 0;
-                const isLast = index === stops.length - 1;
-                const isImportant = isFirst || isLast;
+                    const stopsHtml = stops.length ? stops.map((s, index) => {
+                        const stopName = s.name || '';
+                        const platformCode = s.platformCode || '';
 
-                const fontWeight = isImportant ? '700' : '500';
-                const textColor = isImportant ? 'var(--text)' : 'var(--text-muted)';
-                const dotColor = isImportant ? 'var(--blue)' : 'var(--border)';
-                const dotSize = isImportant ? '12px' : '8px';
-                const dotLeft = isImportant ? '21px' : '23px';
+                        const isFirst = index === 0;
+                        const isLast = index === stops.length - 1;
+                        const isImportant = isFirst || isLast;
 
-                // МАГІЯ: коригуємо ETA за допомогою твоєї готової функції!
-                let realEta = s.eta;
-                if (delay !== 0 && s.eta.includes(':')) {
-                    realEta = addMinutesToTime(s.eta, delay);
-                }
+                        const fontWeight = isImportant ? '700' : '500';
+                        const textColor = isImportant ? 'var(--text)' : 'var(--text-muted)';
+                        const dotColor = isImportant ? 'var(--blue)' : 'var(--border)';
+                        const dotSize = isImportant ? '12px' : '8px';
+                        const dotLeft = isImportant ? '21px' : '23px';
 
-                return `
-                <div class="trasa-leg-stop${s.isPassed ? ' dep-expand-stop-passed' : ''}" style="position: relative; padding: 10px 14px 10px 42px; display: flex; justify-content: space-between; align-items: center;">
-                    <!-- Крапка -->
-                    <div style="position: absolute; left: ${dotLeft}; top: 50%; transform: translateY(-50%); width: ${dotSize}; height: ${dotSize}; border-radius: 50%; background: ${dotColor}; z-index: 2;"></div>
+                        let realEta = s.eta;
+                        if (delay !== 0 && s.eta.includes(':')) {
+                            realEta = addMinutesToTime(s.eta, delay);
+                        }
 
-                    <!-- Лінія вниз (не малюємо у найостаннішої зупинки) -->
-                    ${!isLast ? `<div style="position: absolute; left: 26px; top: 50%; bottom: -50%; width: 2px; background: var(--border); z-index: 1;"></div>` : ''}
+                        // Малюємо суцільну лінію вниз. Якщо це остання зупинка, але є наступний етап (напр. пішки), тягнемо лінію до низу блоку
+                        const drawLineDown = !isLast || hasNextLeg;
+                        const lineBottom = !isLast ? '-50%' : '0';
 
-                    <span style="font-weight: ${fontWeight}; color: ${textColor}; font-size: 15px;">
-                        ${stopName}
-                        <span class="stop-code" style="color:${textColor}; font-size:13px; font-weight: 500;">${platformCode}</span>
-                    </span>
-                    <!-- Виводимо вже скоригований реальний час -->
-                    <span style="font-weight: ${fontWeight}; color: ${textColor}; font-size: 15px;">${realEta}</span>
-                </div>`;
-            }).join('') : '<div style="padding: 10px; text-align: center; color: var(--text-muted);">Brak danych</div>';
-            // data-* — щоб refreshOpenTrasaPassedStops міг перезапитати цей відрізок
-            html += `<div class="trasa-leg-stops" data-trip-id="${leg.tripId || ''}" data-from-stop-id="${leg.fromStopId || ''}" data-to-stop-id="${leg.toStopId || ''}" style="padding-bottom: 4px;">${stopsHtml}</div>`;
-            transitIdx++;
-        });
+                        return `
+                        <div class="trasa-leg-stop${s.isPassed ? ' dep-expand-stop-passed' : ''}" style="position: relative; padding: 10px 14px 10px 42px; display: flex; justify-content: space-between; align-items: center;">
+                            <div style="position: absolute; left: ${dotLeft}; top: 50%; transform: translateY(-50%); width: ${dotSize}; height: ${dotSize}; border-radius: 50%; background: ${dotColor}; z-index: 2;"></div>
 
+                            ${drawLineDown ? `<div style="position: absolute; left: 26px; top: 50%; bottom: ${lineBottom}; width: 2px; background: var(--border); z-index: 1;"></div>` : ''}
+
+                            <span style="font-weight: ${fontWeight}; color: ${textColor}; font-size: 15px;">
+                                ${stopName}
+                                <span class="stop-code" style="color:${textColor}; font-size:13px; font-weight: 500;">${platformCode}</span>
+                            </span>
+                            <span style="font-weight: ${fontWeight}; color: ${textColor}; font-size: 15px;">${realEta}</span>
+                        </div>`;
+                    }).join('') : '<div style="padding: 10px; text-align: center; color: var(--text-muted);">Brak danych</div>';
+
+                    html += `<div class="trasa-leg-stops" data-trip-id="${leg.tripId || ''}" data-from-stop-id="${leg.fromStopId || ''}" data-to-stop-id="${leg.toStopId || ''}" style="padding-bottom: 0;">${stopsHtml}</div>`;
+                    transitIdx++;
+                });
         scrollPanel.innerHTML = html || '<div style="text-align:center; padding: 20px;">Błąd ładowania</div>';
 
         // Блокуємо згортання при кліках всередині списку (крім мапи)
@@ -2977,7 +2990,7 @@ async function showNearbyStops(lat, lon) {
         // === КІНЕЦЬ РОЗУМНОГО КЕШУ ===
 
         if (groups.length === 0) {
-            nearbyContainer.innerHTML = `<div style="padding: 10px; color: var(--text-muted);">Зупинок поруч не знайдено 😕</div>`;
+            nearbyContainer.innerHTML = `<div style="padding: 10px; color: var(--text-muted);">Brak przystanków w pobliżu lub GPS</div>`;
             return;
         }
 

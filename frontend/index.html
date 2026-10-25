@@ -23,7 +23,7 @@
 }
   :root {
       color-scheme: light;
-    --blue: #1976d2;
+    --blue: #4a9eff;
     --blue-dark: #125499;
     --danger: #e53935;
     --danger-dark: #b71c1c;
@@ -40,16 +40,16 @@
 
     :root[data-theme="dark"] {
         color-scheme: dark;
-      --blue: #4a9eff;
+      --blue: #b56100;
       --blue-dark: #2f7fd6;
       --danger: #ff5449;
       --danger-dark: #d32f2f;
       --confirm: #5cc363;
-      --bg: #14161a;
-      --card: #272c35;     /* <--- Змінили з #1e2126 на світліший відтінок */
-      --text: #e8eaed;
-      --text-muted: #8b95a1;
-      --border: #363d47;   /* Можна трохи підсвітити і бордюр, щоб він гарно обрамлював картку */
+      --bg: #1a1816;
+      --card: #2a2623;     /* <--- Змінили з #1e2126 на світліший відтінок */
+      --text: #ece7e1;
+      --text-muted: #9a9086;
+      --border: #3d3732;   /* Можна трохи підсвітити і бордюр, щоб він гарно обрамлював картку */
     }
     .rc-vote-btn.confirm { background: #1b3a1e; }
     .rc-vote-btn.deny { background: #3a1f1e; }
@@ -619,6 +619,15 @@
     display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
     border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.4); position: relative;
     z-index: 2;
+  }
+  .vehicle-cluster {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(34, 197, 94, 0.6);
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.25);
+    color: #fff; font-weight: 700; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    text-shadow: 0 1px 2px rgba(0,0,0,.5);
+    cursor: pointer;
   }
    /* --- Лівий блок з номером маршруту та ID --- */
   .dep-route-wrap {

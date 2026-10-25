@@ -60,13 +60,135 @@ let liveMapInterval = null;
 let activeVehicleMarkers = {};
 
 // Заглушки, щоб старий код не крашив додаток
-function trackUserLocation() {}
+function trackUserLocation() { }
+// ==================== Кластери автобусів ====================
+let clusterMarkers = [];
+const CLUSTER_RADIUS_PX = 34;     // менше значення = менше кластерів
+const CLUSTER_MAX_ZOOM = 14;    // на більшому зумі автобуси показуємо окремо
+const clusterByKey = new Map();
+
+function applyVehicleClustering() {
+    if (!map) return;
+    const entries = Object.entries(activeVehicleMarkers).map(([id, marker]) => {
+        const lngLat = marker.getLngLat();
+        return { id, marker, lngLat, pt: map.project(lngLat) };
+    });
+
+    const groups = [];
+    if (map.getZoom() >= CLUSTER_MAX_ZOOM) {
+        entries.forEach(e => groups.push([e]));
+    } else {
+        const used = new Set();
+        entries.forEach((e, i) => {
+            if (used.has(i)) return;
+            used.add(i);
+            const group = [e];
+            entries.forEach((o, j) => {
+                if (used.has(j)) return;
+                if (Math.hypot(e.pt.x - o.pt.x, e.pt.y - o.pt.y) < CLUSTER_RADIUS_PX) {
+                    used.add(j);
+                    group.push(o);
+                }
+            });
+            groups.push(group);
+        });
+    }
+
+    const aliveKeys = new Set();
+    groups.forEach(group => {
+        if (group.length === 1) {
+            group[0].marker.getElement().style.display = '';
+            return;
+        }
+        group.forEach(g => { g.marker.getElement().style.display = 'none'; });
+
+        const key = group.map(g => g.id).sort().join('|');
+        aliveKeys.add(key);
+        const lng = group.reduce((s, g) => s + g.lngLat.lng, 0) / group.length;
+        const lat = group.reduce((s, g) => s + g.lngLat.lat, 0) / group.length;
+
+        const existing = clusterByKey.get(key);
+        if (existing) {
+            existing.setLngLat([lng, lat]);
+        } else {
+            const el = document.createElement('div');
+            el.className = 'vehicle-cluster';
+            el.textContent = group.length;
+            const cm = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
+            el.addEventListener('click', () => {
+                const p = cm.getLngLat();
+                map.easeTo({ center: [p.lng, p.lat], zoom: Math.min(map.getZoom() + 2, 17) });
+            });
+            clusterByKey.set(key, cm);
+        }
+    });
+
+    for (const [key, cm] of clusterByKey) {
+        if (!aliveKeys.has(key)) { cm.remove(); clusterByKey.delete(key); }
+    }
+}
+// ==================== Плавний рух автобусів ====================
+const MOVE_SMOOTHING = 0.2;   // 1.0 = рух триває весь інтервал; 0.6 = швидше, але з паузами
+const MOVE_MIN_MS = 1000;
+const MOVE_MAX_MS = 20000;
+const TELEPORT_M = 600;       // стрибок далі за це — без анімації
+let lastLiveUpdateTs = 0;
+let lastLiveInterval = 15000;
+const animatingMarkers = new Set();
+let animLoopRunning = false;
+let lastClusterTs = 0;
+
+function animateMarkerTo(marker, lngLat, durationMs) {
+    const from = marker.getLngLat();             // під час руху це вже проміжна точка
+    const to = new maplibregl.LngLat(lngLat[0], lngLat[1]);
+    const d = from.distanceTo(to);
+    if (d < 0.5) return;
+    if (d > TELEPORT_M || document.hidden) {
+        marker.setLngLat(to);
+        marker._anim = null;
+        animatingMarkers.delete(marker);
+        return;
+    }
+    marker._anim = { from, to, start: performance.now(), duration: durationMs };
+    animatingMarkers.add(marker);
+    if (!animLoopRunning) {
+        animLoopRunning = true;
+        requestAnimationFrame(animStep);
+    }
+}
+
+function animStep(now) {
+    animatingMarkers.forEach(marker => {
+        const a = marker._anim;
+        if (!a) { animatingMarkers.delete(marker); return; }
+        const t = Math.min(1, (now - a.start) / a.duration);
+        const e = 1 - Math.pow(1 - t, 3);
+        marker.setLngLat([
+            a.from.lng + (a.to.lng - a.from.lng) * e,
+            a.from.lat + (a.to.lat - a.from.lat) * e,
+        ]);
+        if (t >= 1) { marker._anim = null; animatingMarkers.delete(marker); }
+    });
+    // Кластери перераховуємо раз на ~0.6 с, а не щокадру
+    if (now - lastClusterTs > 600) { lastClusterTs = now; applyVehicleClustering(); }
+    if (animatingMarkers.size) {
+        requestAnimationFrame(animStep);
+    } else {
+        animLoopRunning = false;
+        applyVehicleClustering();
+    }
+}
 // ==================== Живі Автобуси на Карті ====================
 async function updateLiveCityMap() {
     try {
         const res = await fetch(`${API_BASE_URL}/live-vehicles`);
         if (!res.ok) return;
-        const vehicles = await res.json();
+      const vehicles = await res.json();
+      const nowTs = performance.now();
+      if (lastLiveUpdateTs) {
+          lastLiveInterval = Math.max(MOVE_MIN_MS, Math.min(MOVE_MAX_MS, nowTs - lastLiveUpdateTs));
+      }
+      lastLiveUpdateTs = nowTs;
 
         // Сюди зберемо всі tripId, які зараз онлайн
         const currentTripIds = new Set();
@@ -79,8 +201,7 @@ async function updateLiveCityMap() {
 
             if (activeVehicleMarkers[vehicle.tripId]) {
                 const marker = activeVehicleMarkers[vehicle.tripId];
-                marker.setLngLat(lngLat);
-
+                animateMarkerTo(marker, lngLat, lastLiveInterval * MOVE_SMOOTHING);
                 const arrowEl = marker.getElement().querySelector('.vehicle-arrow');
                 if (arrowEl) {
                     arrowEl.dataset.bearing = bearing;
@@ -109,17 +230,20 @@ async function updateLiveCityMap() {
             }
         });
         for (const tripId in activeVehicleMarkers) {
-            if (!currentTripIds.has(tripId)) {
+          if (!currentTripIds.has(tripId)) {
+              animatingMarkers.delete(activeVehicleMarkers[tripId]);
                 // 1. Видаляємо маркер з карти Leaflet/MapLibre
                 activeVehicleMarkers[tripId].remove();
                 // 2. Видаляємо запис з нашого словника, щоб звільнити пам'ять
                 delete activeVehicleMarkers[tripId];
             }
         }
+        applyVehicleClustering();
     } catch (e) {
         console.warn('Не вдалося оновити живу карту:', e);
     }
 }
+
 // Стрілка = напрямок автобуса мінус поворот карти
 function refreshVehicleArrows() {
     const mapBearing = map.getBearing();
@@ -315,6 +439,8 @@ function initMap() {
     });
 
     map.on('rotate', refreshVehicleArrows);
+    map.on('zoomend', applyVehicleClustering);
+    map.on('pitchend', applyVehicleClustering);
 }
 // ==================== Пошук зупинки (верхня панель) ====================
 let searchDebounce;
@@ -1403,8 +1529,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- Додаємо запуск автобусів ---
         updateLiveCityMap();
-        liveMapInterval = setInterval(updateLiveCityMap, 15000);
-        // --------------------------------
+        clearInterval(liveMapInterval);
+        liveMapInterval = setInterval(updateLiveCityMap, 5000);        // --------------------------------
     });
 
     // ДОДАТИ ЦЕ: Плавний скрол поля вводу над клавіатурою

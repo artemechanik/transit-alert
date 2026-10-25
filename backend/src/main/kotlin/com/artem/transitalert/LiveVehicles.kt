@@ -9,7 +9,6 @@ import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import java.time.Instant
-import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
@@ -36,7 +35,6 @@ object LiveVehiclesCache {
     private val positionsByTrip = ConcurrentHashMap<String, VehiclePosition>()
     private val logger = LoggerFactory.getLogger("LiveVehicles")
     private val client = HttpClient(CIO)
-    private val LUBLIN_ZONE_LOCAL: ZoneId = ZoneId.of("Europe/Warsaw")
 
     fun byTripId(tripId: String): VehiclePosition? = positionsByTrip[tripId]
 
@@ -89,11 +87,10 @@ object LiveVehiclesCache {
      * кандидат до фактичного часу — надійніше, ніж вгадувати службову дату.
      */
     private fun computeDelaySeconds(scheduledMinutes: Int, actualUnix: Long): Int {
-        val refDate = Instant.ofEpochSecond(actualUnix).atZone(LUBLIN_ZONE_LOCAL).toLocalDate()
-        val candidates = listOf(refDate.minusDays(1), refDate, refDate.plusDays(1)).map { date ->
-            date.atStartOfDay(LUBLIN_ZONE_LOCAL).plusMinutes(scheduledMinutes.toLong()).toEpochSecond()
-        }
-        val closest = candidates.minByOrNull { abs(it - actualUnix) }!!
+        val refDate = Instant.ofEpochSecond(actualUnix).atZone(LUBLIN_ZONE).toLocalDate()
+        val closest = listOf(refDate.minusDays(1), refDate, refDate.plusDays(1))
+            .map { gtfsInstant(it, scheduledMinutes).epochSecond }
+            .minByOrNull { abs(it - actualUnix) }!!
         return (actualUnix - closest).toInt()
     }
 

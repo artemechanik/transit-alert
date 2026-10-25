@@ -140,9 +140,11 @@ fun Application.liveVehiclesRoutes() {
                 // сьогоднішнього service_id не потрапляють (minuteBase від'ємний, бо
                 // відлік хвилин іде від півночі саме тієї дати).
                 val localNow = now.atZone(LUBLIN_ZONE)
-                val minutesToday = localNow.hour * 60 + localNow.minute
                 val candidates = timeCandidates(now) +
-                    (1..2).map { k -> localNow.toLocalDate().plusDays(k.toLong()) to (minutesToday - 1440 * k) }
+                    (1..2).map { k ->
+                        val date = localNow.toLocalDate().plusDays(k.toLong())
+                        date to java.time.Duration.between(gtfsServiceStart(date).toInstant(), now).toMinutes().toInt()
+                    }
 
                 for ((date, minuteBase) in candidates) {
                     val serviceIds = activeServiceIds(date)

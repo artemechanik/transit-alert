@@ -119,9 +119,8 @@ fun Application.formRoutes() {
             val fromIds = fromParam.split(",")
             val toIds = toParam.split(",")
 
-            val now = java.time.LocalTime.now(LUBLIN_ZONE)
-            val currentMin = now.hour * 60 + now.minute
             val today = java.time.LocalDate.now(LUBLIN_ZONE)
+            val currentMin = java.time.Duration.between(gtfsServiceStart(today).toInstant(), Instant.now()).toMinutes().toInt()
 
             val routes = transaction {
                 val activeServices = activeServiceIds(today)

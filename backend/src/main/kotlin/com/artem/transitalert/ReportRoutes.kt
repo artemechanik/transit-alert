@@ -172,9 +172,8 @@ fun Application.reportRoutes() {
             val recentCutoff = Instant.now().minus(RATE_LIMIT_MINUTES, ChronoUnit.MINUTES)
             val now = Instant.now()
             val zoneId = ZoneId.of("Europe/Warsaw")
-            val localNow = LocalTime.now(zoneId)
             val todayString = LocalDate.now(zoneId).format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"))
-            val currentMinutes = localNow.hour * 60 + localNow.minute
+            val currentMinutes = java.time.Duration.between(gtfsServiceStart(LocalDate.now(zoneId)).toInstant(), now).toMinutes().toInt()
 
             val created = transaction {
                 // Rate limit: чи постив цей fingerprint нещодавно? (ВИКЛЮЧЕННЯ ДЛЯ БОТА ТУТ)

@@ -6,28 +6,37 @@ import org.jetbrains.exposed.sql.andWhere
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.innerJoin
 import org.jetbrains.exposed.sql.JoinType
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 
 val LUBLIN_ZONE: ZoneId = ZoneId.of("Europe/Warsaw")
 private val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd")
 
+/** Початок службової доби GTFS: «полудень мінус 12 годин» (в доби DST це не північ). */
+fun gtfsServiceStart(date: LocalDate): ZonedDateTime =
+    date.atTime(12, 0).atZone(LUBLIN_ZONE).minusHours(12)
+
+/** Абсолютний момент часу для (службова дата, хвилини від початку службової доби). */
+fun gtfsInstant(date: LocalDate, minutes: Int): Instant =
+    gtfsServiceStart(date).plusMinutes(minutes.toLong()).toInstant()
+
 /**
- * Для довільного моменту часу повертає можливі пари (дата, хвилина-від-півночі),
- * які варто перевірити в розкладі. Друга пара покриває "нічний хвіст" GTFS
- * (рейси 24:xx-27:xx що логічно належать попередній календарній даті).
+ * Для довільного моменту часу повертає можливі пари (службова дата, хвилини від
+ * початку службової доби), які варто перевірити в розкладі. Покриває "нічний хвіст"
+ * GTFS (рейси 24:xx-30:xx що логічно належать попередній даті).
  */
 fun timeCandidates(instant: Instant): List<Pair<LocalDate, Int>> {
-    val zonedTime = instant.atZone(LUBLIN_ZONE)
-    val minutes = zonedTime.hour * 60 + zonedTime.minute
-    val candidates = mutableListOf(zonedTime.toLocalDate() to minutes)
-    if (minutes < 4 * 60) {
-        candidates.add(zonedTime.toLocalDate().minusDays(1) to minutes + 24 * 60)
+    val local = instant.atZone(LUBLIN_ZONE).toLocalDate()
+    return listOf(local.plusDays(1), local, local.minusDays(1)).mapNotNull { date ->
+        val minutes = Duration.between(gtfsServiceStart(date).toInstant(), instant)
+            .toMinutes().toInt()
+        if (minutes in 0..(30 * 60)) date to minutes else null
     }
-    return candidates
 }
 
 /** Активні service_id на конкретну дату. Викликати всередині transaction {}. */

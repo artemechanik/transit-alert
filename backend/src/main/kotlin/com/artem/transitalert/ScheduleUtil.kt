@@ -9,6 +9,7 @@ import org.jetbrains.exposed.sql.JoinType
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -24,6 +25,11 @@ fun gtfsServiceStart(date: LocalDate): ZonedDateTime =
 /** Абсолютний момент часу для (службова дата, хвилини від початку службової доби). */
 fun gtfsInstant(date: LocalDate, minutes: Int): Instant =
     gtfsServiceStart(date).plusMinutes(minutes.toLong()).toInstant()
+
+/** Хвилини від початку службової доби GTFS для настінного часу Любліна (дата береться з самого часу). */
+fun gtfsMinutesOfDay(localTime: LocalDateTime): Int =
+    Duration.between(gtfsServiceStart(localTime.toLocalDate()).toInstant(), localTime.atZone(LUBLIN_ZONE).toInstant())
+        .toMinutes().toInt()
 
 /**
  * Для довільного моменту часу повертає можливі пари (службова дата, хвилини від

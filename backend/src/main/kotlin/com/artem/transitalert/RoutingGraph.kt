@@ -280,7 +280,8 @@ object TransitGraph {
         if (!isLoaded) return null
         
         val searchDate = searchTime.toLocalDate()
-        val startMin = searchTime.hour * 60 + searchTime.minute
+        // Хвилини від початку службової доби GTFS (полудень мінус 12 год), а не від північі
+        val startMin = gtfsMinutesOfDay(searchTime)
         
         // БЕРЕМО ГОТОВИЙ ГРАФ САМЕ НА ПОТРІБНУ ДАТУ
         val currentEdges = edgesByDate[searchDate] ?: return null

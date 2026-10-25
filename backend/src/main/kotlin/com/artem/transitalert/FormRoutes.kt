@@ -160,7 +160,10 @@ fun Application.formRoutes() {
             val timeParam = call.request.queryParameters["time"]?.toIntOrNull()
 
             val baseSearchDate = now.toLocalDate()
-            var currentSearchMin = timeParam ?: (now.hour * 60 + now.minute)
+            // Хвилини від початку службової доби GTFS (полудень мінус 12 год), а не від північі
+            var currentSearchMin = timeParam ?: java.time.Duration.between(
+                gtfsServiceStart(baseSearchDate).toInstant(), Instant.now()
+            ).toMinutes().toInt()
 
             val allJourneys = mutableListOf<JourneyResponse>()
             var attempts = 0
@@ -180,7 +183,8 @@ fun Application.formRoutes() {
             while (allJourneys.size < limit && attempts < MAX_ATTEMPTS) {
                 attempts++
 
-                val searchTime = baseSearchDate.atStartOfDay().plusMinutes(currentSearchMin.toLong())
+                // Настінний час Любліна для моменту "службова доба + хвилини" (в доби DST не збігається з північчю + хвилини)
+                val searchTime = gtfsInstant(baseSearchDate, currentSearchMin).atZone(LUBLIN_ZONE).toLocalDateTime()
 
                 // 1. Викликаємо нову функцію, ПЕРЕДАВШИ liveDelays
                 val alternatives = TransitGraph.findRouteAlternatives(
@@ -208,8 +212,11 @@ fun Application.formRoutes() {
                             .associate { it[Stops.stopId] to "${it[Stops.name]} ${it[Stops.code]}" }
                     }
 
-                    val daysOffset = (searchTime.toLocalDate().toEpochDay() - baseSearchDate.toEpochDay()).toInt()
-                    val offsetMins = daysOffset * 1440
+                    // Різниця між початками службових діб (в доби DST це не 1440 * daysOffset)
+                    val offsetMins = java.time.Duration.between(
+                        gtfsServiceStart(baseSearchDate).toInstant(),
+                        gtfsServiceStart(searchTime.toLocalDate()).toInstant()
+                    ).toMinutes().toInt()
 
                     val legs = mutableListOf<JourneyLeg>()
                     var currentLeg = mutableListOf<RouteEdge>()

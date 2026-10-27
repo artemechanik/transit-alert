@@ -128,7 +128,7 @@ function applyVehicleClustering() {
     }
 }
 // ==================== Плавний рух автобусів ====================
-const MOVE_SMOOTHING = 0.2;   // 1.0 = рух триває весь інтервал; 0.6 = швидше, але з паузами
+const MOVE_SMOOTHING = 0.4;   // 1.0 = рух триває весь інтервал; 0.6 = швидше, але з паузами
 const MOVE_MIN_MS = 1000;
 const MOVE_MAX_MS = 20000;
 const TELEPORT_M = 600;       // стрибок далі за це — без анімації

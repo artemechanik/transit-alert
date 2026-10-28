@@ -22,6 +22,7 @@ let modalMap = null;
 let modalUserMarker = null; // Додали маркер юзера для модалки
 let modalInitTimeout = null;
 let modalUserInteracted = false;
+let modalTrackingSession = null;
 let globalCachedNearbyStops = null;
 let globalCachedNearbyTime = 0;
 // ==================== Toast-повідомлення ====================
@@ -138,18 +139,22 @@ const animatingMarkers = new Set();
 let animLoopRunning = false;
 let lastClusterTs = 0;
 
-function animateMarkerTo(marker, lngLat, durationMs) {
+function animateMarkerTo(marker, lngLat, durationMs, onUpdate) {
     const from = marker.getLngLat();             // під час руху це вже проміжна точка
     const to = new maplibregl.LngLat(lngLat[0], lngLat[1]);
     const d = from.distanceTo(to);
-    if (d < 0.5) return;
+    if (d < 0.5) {
+        if (onUpdate) onUpdate(marker.getLngLat());
+        return;
+    }
     if (d > TELEPORT_M || document.hidden) {
         marker.setLngLat(to);
         marker._anim = null;
         animatingMarkers.delete(marker);
+        if (onUpdate) onUpdate(marker.getLngLat());
         return;
     }
-    marker._anim = { from, to, start: performance.now(), duration: durationMs };
+    marker._anim = { from, to, start: performance.now(), duration: durationMs, onUpdate };
     animatingMarkers.add(marker);
     if (!animLoopRunning) {
         animLoopRunning = true;
@@ -167,6 +172,7 @@ function animStep(now) {
             a.from.lng + (a.to.lng - a.from.lng) * e,
             a.from.lat + (a.to.lat - a.from.lat) * e,
         ]);
+        if (a.onUpdate) a.onUpdate(marker.getLngLat());
         if (t >= 1) { marker._anim = null; animatingMarkers.delete(marker); }
     });
     // Кластери перераховуємо раз на ~0.6 с, а не щокадру
@@ -246,8 +252,12 @@ async function updateLiveCityMap() {
 
 // Стрілка = напрямок автобуса мінус поворот карти
 function refreshVehicleArrows() {
-    const mapBearing = map.getBearing();
-    map.getContainer().querySelectorAll('.vehicle-arrow').forEach(a => {
+    refreshMapVehicleArrows(map);
+}
+
+function refreshMapVehicleArrows(mapInstance) {
+    const mapBearing = mapInstance.getBearing();
+    mapInstance.getContainer().querySelectorAll('.vehicle-arrow').forEach(a => {
         const b = parseFloat(a.dataset.bearing) || 0;
         a.style.transform = `rotate(${b - mapBearing}deg)`;
     });
@@ -555,168 +565,175 @@ async function toggleDepExpand(card, panel, dep) {
 
 // ==================== Модальна міні-карта (Показ конкретного автобуса) ====================
 async function showVehicleOnMap(tripId, routeContext = { mode: 'przystanek' }) {
-  try {
-    modalUserInteracted = false;
+  // Нове відкриття одразу скасовує попередній сеанс, навіть під час першого запиту.
+  closeVehicleMapModal();
+  const session = { controller: new AbortController(), inFlight: false };
+  modalTrackingSession = session;
+  const isCurrentSession = () => modalTrackingSession === session;
 
-    const vehicle = await fetchVehiclePosition(tripId);
+  try {
+    const vehicle = await fetchVehiclePosition(tripId, session.controller.signal);
+    if (!isCurrentSession()) return;
     if (!vehicle) {
+      closeVehicleMapModal();
       showToast('Brak danych GPS dla tego kursu');
       return;
     }
 
-    // 1. Відкриваємо модальне вікно
     const modal = document.getElementById('vehicle-modal');
     modal.style.display = 'flex';
     history.pushState({ screen: 'vehicleMap' }, '');
     document.getElementById('modal-route-title').innerText = `Linia ${vehicle.route}`;
 
-    if (modalInitTimeout) clearTimeout(modalInitTimeout);
-
-    // 2. Даємо невелику затримку на відмальовку DOM, щоб контейнер #modal-map мав розміри
+    // Чекаємо на розміри контейнера перед створенням карти.
     modalInitTimeout = setTimeout(() => {
-      if (modal.style.display === 'none') return;
+      modalInitTimeout = null;
+      if (!isCurrentSession() || modal.style.display === 'none') return;
 
       const lngLat = [vehicle.lon, vehicle.lat];
-
-      // 3. Ініціалізуємо MapLibre для модалки, якщо її ще немає
-      if (!modalMap) {
-        const isDarkOS = getEffectiveTheme() === 'dark';
-        modalMap = new maplibregl.Map({
-          container: 'modal-map',
-          style: isDarkOS ? 'style-dark.json' : 'style-light.json',
-          center: lngLat,
-          zoom: 16,
-          attributionControl: false,
-          transformRequest: (url) => {
-            if (url.includes('api.maptiler.com') && url.includes('{key}')) {
-              return { url: url.replace('{key}', MAPTILER_KEY) };
-            }
-            return { url };
+      const trackingMap = new maplibregl.Map({
+        container: 'modal-map',
+        style: mapStyleFor(getEffectiveTheme()),
+        center: lngLat,
+        zoom: 16,
+        attributionControl: false,
+        transformRequest: (url) => {
+          if (url.includes('api.maptiler.com') && url.includes('{key}')) {
+            return { url: url.replace('{key}', MAPTILER_KEY) };
           }
-        });
+          return { url };
+        }
+      });
+      modalMap = trackingMap;
+      const isCurrentMap = () => isCurrentSession() && modalMap === trackingMap;
+      trackingMap.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
 
-        modalMap.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
-
-        // Відстежуємо ручну взаємодію з картою
-        modalMap.on('dragstart', () => {
-          modalUserInteracted = true;
-        });
-        modalMap.on('zoomstart', (e) => {
-          if (e.originalEvent) {
-            modalUserInteracted = true;
-          }
-        });
-
-        modalMap.on('load', () => {
-          drawRouteShape(tripId, modalMap, routeContext); // передаємо routeContext
-        });
-      } else {
-        modalMap.resize();
-        drawRouteShape(tripId, modalMap, routeContext); // передаємо routeContext
-      }
+      // Програмні рухи не містять originalEvent і не вимикають стеження.
+      const stopFollowing = (e) => {
+        if (isCurrentMap() && e.originalEvent) modalUserInteracted = true;
+      };
+      ['movestart', 'dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach(event => {
+        trackingMap.on(event, stopFollowing);
+      });
+      trackingMap.on('rotate', () => {
+        if (isCurrentMap()) refreshMapVehicleArrows(trackingMap);
+      });
+      trackingMap.on('load', () => {
+        if (isCurrentMap()) drawRouteShape(tripId, trackingMap, routeContext, isCurrentMap);
+      });
 
       if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
-        const userPos = userLocationMarker.getLngLat();
-
-        if (!modalUserMarker) {
-          const userEl = document.createElement('div');
-          userEl.className = 'user-marker-dom';
-          modalUserMarker = new maplibregl.Marker({ element: userEl })
-            .setLngLat(userPos)
-            .addTo(modalMap);
-        } else {
-          modalUserMarker.setLngLat(userPos);
-        }
-
-        // Камера охоплює і автобус, і користувача
-        const bounds = new maplibregl.LngLatBounds()
-          .extend(lngLat)
-          .extend([userPos.lng, userPos.lat]);
-
-        modalMap.fitBounds(bounds, { padding: 50, maxZoom: 16, duration: 1000 });
-      } else {
-        modalMap.flyTo({ center: lngLat, zoom: 16 });
+        const userEl = document.createElement('div');
+        userEl.className = 'user-marker-dom';
+        modalUserMarker = new maplibregl.Marker({ element: userEl })
+          .setLngLat(userLocationMarker.getLngLat())
+          .addTo(trackingMap);
       }
 
-      // 4. Створюємо або оновлюємо маркер обраного автобуса
-      if (!modalVehicleMarker) {
-        const el = document.createElement('div');
-        el.className = 'vehicle-marker-icon';
-
-        const bearing = vehicle.bearing || 0;
-        el.innerHTML = `
-          <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
-            <svg class="vehicle-arrow" style="transform: rotate(${bearing}deg);" viewBox="0 0 100 100">
-              <polygon points="50,10 90,90 10,90" />
-            </svg>
-            <div class="vehicle-marker-dot">${vehicle.route || '🚌'}</div>
-          </div>
-        `;
-
-        modalVehicleMarker = new maplibregl.Marker({ element: el })
-          .setLngLat(lngLat)
-          .addTo(modalMap);
-      } else {
-        modalVehicleMarker.setLngLat(lngLat);
-        const arrowEl = modalVehicleMarker.getElement().querySelector('.vehicle-arrow');
-        if (arrowEl) {
-          arrowEl.style.transform = `rotate(${vehicle.bearing || 0}deg)`;
+      const el = document.createElement('div');
+      el.className = 'vehicle-marker-icon';
+      const bearing = vehicle.bearing || 0;
+      el.innerHTML = `
+        <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
+          <svg class="vehicle-arrow" data-bearing="${bearing}" style="transform: rotate(${bearing - trackingMap.getBearing()}deg);" viewBox="0 0 100 100">
+            <polygon points="50,10 90,90 10,90" />
+          </svg>
+          <div class="vehicle-marker-dot">${vehicle.route || '🚌'}</div>
+        </div>
+      `;
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat(lngLat)
+        .addTo(trackingMap);
+      modalVehicleMarker = marker;
+      let lastUpdateTs = performance.now();
+      const followMarker = (position) => {
+        if (isCurrentMap() && !modalUserInteracted) {
+          if (modalUserMarker) {
+            // Кадруємо обидва маркери за поточною позицією анімації автобуса.
+            const bounds = new maplibregl.LngLatBounds()
+              .extend(position)
+              .extend(modalUserMarker.getLngLat());
+            const camera = trackingMap.cameraForBounds(bounds, {
+              padding: { top: 100, bottom: 80, left: 50, right: 50 },
+              maxZoom: 16
+            });
+            if (camera) trackingMap.jumpTo(camera);
+          } else {
+            trackingMap.jumpTo({ center: position });
+          }
         }
-      }
+      };
+      followMarker(marker.getLngLat());
 
-      // 5. Періодичне оновлення позиції
-      if (modalTrackInterval) clearInterval(modalTrackInterval);
       modalTrackInterval = setInterval(async () => {
-        const updated = await fetchVehiclePosition(tripId);
-        if (updated && modalVehicleMarker) {
-          const updatedLngLat = [updated.lon, updated.lat];
-          modalVehicleMarker.setLngLat(updatedLngLat);
-
-          if (!modalUserInteracted) {
-            modalMap.easeTo({ center: updatedLngLat, duration: 1000 });
+        if (!isCurrentMap() || session.inFlight) return;
+        session.inFlight = true;
+        try {
+          const updated = await fetchVehiclePosition(tripId, session.controller.signal);
+          if (!isCurrentMap() || modalVehicleMarker !== marker) return;
+          if (typeof userLocationMarker !== 'undefined' && userLocationMarker && modalUserMarker) {
+            modalUserMarker.setLngLat(userLocationMarker.getLngLat());
           }
-
-          const arrowEl = modalVehicleMarker.getElement().querySelector('.vehicle-arrow');
-          if (arrowEl) {
-            arrowEl.style.transform = `rotate(${updated.bearing || 0}deg)`;
+          if (updated) {
+            const nowTs = performance.now();
+            const interval = Math.max(MOVE_MIN_MS, Math.min(MOVE_MAX_MS, nowTs - lastUpdateTs));
+            lastUpdateTs = nowTs;
+            animateMarkerTo(marker, [updated.lon, updated.lat], interval * MOVE_SMOOTHING, followMarker);
+            const arrowEl = marker.getElement().querySelector('.vehicle-arrow');
+            if (arrowEl) arrowEl.dataset.bearing = updated.bearing || 0;
+            refreshMapVehicleArrows(trackingMap);
           }
-        }
-        if (typeof userLocationMarker !== 'undefined' && userLocationMarker && modalUserMarker) {
-          modalUserMarker.setLngLat(userLocationMarker.getLngLat());
+        } catch (e) {
+          if (isCurrentMap() && e.name !== 'AbortError') {
+            console.warn('Не вдалося оновити позицію автобуса:', e);
+          }
+        } finally {
+          session.inFlight = false;
         }
       }, 5000);
-
     }, 200);
-
   } catch (e) {
-    console.error('Помилка міні-карти:', e);
-    showToast('Brak połączenia z serwerem');
+    if (!isCurrentSession()) return;
+    closeVehicleMapModal();
+    if (e.name !== 'AbortError') {
+      console.error('Помилка міні-карти:', e);
+      showToast('Brak połączenia z serwerem');
+    }
   }
 }
 
 // === ЛОГІКА ЗАКРИТТЯ ТА ОЧИЩЕННЯ ПАМ'ЯТІ ===
 function closeVehicleMapModal() {
-  const modal = document.getElementById('vehicle-modal');
-  if (!modal || modal.style.display === 'none') return;
-
-  modal.style.display = 'none';
-  modalUserInteracted = false;
-
+  if (modalTrackingSession) {
+    modalTrackingSession.controller.abort();
+    modalTrackingSession = null;
+  }
+  if (modalInitTimeout) {
+    clearTimeout(modalInitTimeout);
+    modalInitTimeout = null;
+  }
   if (modalTrackInterval) {
     clearInterval(modalTrackInterval);
     modalTrackInterval = null;
   }
 
-  if (modalMap) {
-    modalMap.remove();
-    modalMap = null;
+  const modal = document.getElementById('vehicle-modal');
+  if (modal) modal.style.display = 'none';
+  modalUserInteracted = false;
+
+  if (modalVehicleMarker) {
+    animatingMarkers.delete(modalVehicleMarker);
+    modalVehicleMarker._anim = null;
+    modalVehicleMarker.remove();
+    modalVehicleMarker = null;
   }
-
-  modalVehicleMarker = null;
-
   if (modalUserMarker) {
     modalUserMarker.remove();
     modalUserMarker = null;
+  }
+  if (modalMap) {
+    modalMap.remove();
+    modalMap = null;
   }
 }
 
@@ -788,11 +805,12 @@ function projectPointToLineString(point, coords) {
   return nearestPoint;
 }
 //====== сама функція малювання =====
-async function drawRouteShape(tripId, mapInstance, context = { mode: 'przystanek' }) {
+async function drawRouteShape(tripId, mapInstance, context = { mode: 'przystanek' }, isCurrent = () => true) {
   try {
     const res = await fetch(`${API_BASE_URL}/api/trip-stops/${tripId}`);
     if (!res.ok) return;
     const stops = await res.json();
+    if (!isCurrent()) return;
 
     if (!stops || stops.length < 2) return;
 
@@ -807,6 +825,7 @@ async function drawRouteShape(tripId, mapInstance, context = { mode: 'przystanek
     const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsString}?geometries=geojson&overview=full`;
     const osrmRes = await fetch(osrmUrl);
     const osrmData = await osrmRes.json();
+    if (!isCurrent()) return;
 
     let routeGeoJSON;
     if (osrmData.routes && osrmData.routes.length > 0) {
@@ -929,8 +948,8 @@ async function drawRouteShape(tripId, mapInstance, context = { mode: 'przystanek
   }
 }
 // БЕЗПЕЧНО: Це просто запит до бекенда, залишаємо!
-async function fetchVehiclePosition(tripId) {
-  const res = await fetch(`${API_BASE_URL}/live-vehicles/${tripId}`);
+async function fetchVehiclePosition(tripId, signal) {
+  const res = await fetch(`${API_BASE_URL}/live-vehicles/${tripId}`, { signal });
   if (!res.ok) return null;
   return res.json();
 }

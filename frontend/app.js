@@ -446,6 +446,7 @@ function initMap() {
 
     map.on('style.load', () => {
         if (mapIs3D) apply3D(true);
+        syncUserLocationAccuracyCircle(true);
     });
 
     map.on('rotate', refreshVehicleArrows);
@@ -1564,8 +1565,61 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ==================== Геолокація користувача (MapLibre) ====================
 userLocationMarker = null;
-let userLocationAccuracyCircle = null;
+let userLocationAccuracyCircle = { type: 'FeatureCollection', features: [] };
 let watchId = null; // Глобальна змінна для контролю трекера
+
+function updateUserLocationAccuracyCircle(lngLat, accuracy) {
+    userLocationAccuracyCircle = { type: 'FeatureCollection', features: [] };
+    if (Number.isFinite(accuracy) && accuracy >= 0) {
+        const radians = Math.PI / 180;
+        const lon = lngLat[0] * radians;
+        const lat = lngLat[1] * radians;
+        const distance = accuracy / 6371008.8;
+        const ring = [];
+        for (let i = 0; i < 64; i++) {
+            const bearing = i * 2 * Math.PI / 64;
+            const destLat = Math.asin(Math.max(-1, Math.min(1,
+                Math.sin(lat) * Math.cos(distance) +
+                Math.cos(lat) * Math.sin(distance) * Math.cos(bearing)
+            )));
+            const destLon = lon + Math.atan2(
+                Math.sin(bearing) * Math.sin(distance) * Math.cos(lat),
+                Math.cos(distance) - Math.sin(lat) * Math.sin(destLat)
+            );
+            ring.push([destLon / radians, destLat / radians]);
+        }
+        ring.push(ring[0].slice());
+        userLocationAccuracyCircle.features.push({
+            type: 'Feature', properties: {},
+            geometry: { type: 'Polygon', coordinates: [ring] }
+        });
+    }
+    syncUserLocationAccuracyCircle();
+}
+
+function syncUserLocationAccuracyCircle(styleLoaded = false) {
+    if (!map) return;
+    const sourceId = 'user-location-accuracy';
+    const source = map.getSource(sourceId);
+    // Під час завантаження нового стилю зберігаємо дані до style.load.
+    if (!source && !styleLoaded && !map.isStyleLoaded()) return;
+    if (source) source.setData(userLocationAccuracyCircle);
+    else map.addSource(sourceId, { type: 'geojson', data: userLocationAccuracyCircle });
+
+    const color = getComputedStyle(document.documentElement).getPropertyValue('--blue').trim();
+    if (!map.getLayer('user-location-accuracy-fill')) {
+        map.addLayer({
+            id: 'user-location-accuracy-fill', type: 'fill', source: sourceId,
+            paint: { 'fill-color': color, 'fill-opacity': 0.1, 'fill-antialias': false }
+        });
+    } else map.setPaintProperty('user-location-accuracy-fill', 'fill-color', color);
+    if (!map.getLayer('user-location-accuracy-outline')) {
+        map.addLayer({
+            id: 'user-location-accuracy-outline', type: 'line', source: sourceId,
+            paint: { 'line-color': color, 'line-opacity': 0.25, 'line-width': 1 }
+        });
+    } else map.setPaintProperty('user-location-accuracy-outline', 'line-color', color);
+}
 
 function trackUserLocation() {
     console.log("[GPS] Запит геолокації...");
@@ -1601,6 +1655,7 @@ function trackUserLocation() {
                 // Просто плавно рухаємо існуючий маркер
                 userLocationMarker.setLngLat(lngLat);
             }
+            updateUserLocationAccuracyCircle(lngLat, position.coords.accuracy);
         },
         (error) => {
             console.warn('[GPS] Помилка:', error.message);

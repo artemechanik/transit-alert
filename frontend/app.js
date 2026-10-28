@@ -426,6 +426,7 @@ function initMap() {
         positionOptions: { enableHighAccuracy: true },
         trackUserLocation: true,
         showUserHeading: true,
+        showUserLocation: false,
     }), 'top-right');
 
     // 2. Тема: Авто → День → Ніч

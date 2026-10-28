@@ -3096,11 +3096,6 @@ function loadNearbyStopsDefault() {
             (position) => {
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
-                if (!userLocationMarker) {
-                    userLocationMarker = L.marker([lat, lon], { icon: passengerIcon, zIndexOffset: 1000 }).addTo(map);
-                } else {
-                    userLocationMarker.setLatLng([lat, lon]);
-                }
                 showNearbyStops(lat, lon);
             },
             (error) => {

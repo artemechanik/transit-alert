@@ -275,7 +275,8 @@ object TransitGraph {
         minTransferAlternatives: Int = 0,
         requireDirectionalRelevance: Boolean = false,
         liveDelays: Map<String, Int> = emptyMap(),
-        excludedTripIds: Set<String> = emptySet()
+        excludedTripIds: Set<String> = emptySet(),
+        requireTransit: Boolean = false
     ): List<RouteEdge>? {
         if (!isLoaded) return null
         
@@ -301,15 +302,18 @@ object TransitGraph {
 
         while (pq.isNotEmpty()) {
             val state = pq.poll()
+            val hasUsedBus = state.path.any { it.tripId != "WALK" && it.tripId != "START_COORD" }
 
-            if (state.stopId == "FINISH_COORD") return state.path
-            if (targets.containsKey(state.stopId) && targets[state.stopId] == 0) return state.path
+            if (!requireTransit || hasUsedBus) {
+                if (state.stopId == "FINISH_COORD") return state.path
+                if (targets.containsKey(state.stopId) && targets[state.stopId] == 0) return state.path
+            }
 
-            val stateKey = "${state.stopId}_${state.tripId}"
+            val stateKey = "${state.stopId}_${state.tripId}_$hasUsedBus"
             if (!visited.add(stateKey)) continue
 
             val finalWalkMins = targets[state.stopId]
-            if (finalWalkMins != null && finalWalkMins > 0) {
+            if (finalWalkMins != null && finalWalkMins > 0 && (!requireTransit || hasUsedBus)) {
                 val finalArrivalTime = state.currentMin + finalWalkMins
                 val finalEdge = RouteEdge(state.stopId, "FINISH_COORD", "Пішки", "WALK", "WALK", state.currentMin, finalArrivalTime, 0)
                 
@@ -347,7 +351,6 @@ object TransitGraph {
                 val newLastTransferMin = if (!isSameTrip && state.tripId != null) state.currentMin else state.lastTransferMin
                 val newTransfers = if (state.tripId == null || isSameTrip) state.transfers else state.transfers + 1
                 if (newTransfers > maxTransfers) continue
-                val hasUsedBus = state.path.any { it.tripId != "WALK" && it.tripId != "START_COORD" }
 
                 if (isWalk) {
                     if (state.tripId == "WALK") continue 
@@ -432,14 +435,22 @@ object TransitGraph {
         minTransferAlternatives: Int = 3,
         liveDelays: Map<String, Int> = emptyMap()
     ): List<List<RouteEdge>> {
-        val optimal = findBestRoute(starts, targets, searchTime, maxTransfers = 2, liveDelays = liveDelays) ?: return emptyList()
+        val fastest = findBestRoute(starts, targets, searchTime, maxTransfers = 2, liveDelays = liveDelays) ?: return emptyList()
+        val optimalArrival = fastest.lastOrNull()?.arrivalMin ?: gtfsMinutesOfDay(searchTime)
+        // Піший переможець задає часовий допуск, але API повертає транспортні картки.
+        val optimal = if (fastest.any { it.tripId != "WALK" && it.tripId != "START_COORD" }) {
+            fastest
+        } else {
+            findBestRoute(starts, targets, searchTime, maxTransfers = 2, liveDelays = liveDelays, requireTransit = true)
+                ?: return emptyList()
+        }
+        if (optimal.last().arrivalMin - optimalArrival > maxAcceptableDelayMin) return emptyList()
         val results = mutableListOf(optimal)
 
         val optimalTripIds = optimal.map { it.tripId }
             .filter { it != "WALK" }
             .distinct()
         val optimalTripCount = optimalTripIds.size
-        val optimalArrival = optimal.last().arrivalMin
 
         // Якщо оптимальний маршрут прямий, шукаємо ще один прямий рейс,
         // виключивши лише ті tripId, які вже використані оптимальним маршрутом.
@@ -452,7 +463,8 @@ object TransitGraph {
                 searchTime = searchTime,
                 maxTransfers = 0,
                 liveDelays = liveDelays,
-                excludedTripIds = optimalTripIds.toSet()
+                excludedTripIds = optimalTripIds.toSet(),
+                requireTransit = true
             )
 
             if (
@@ -465,7 +477,7 @@ object TransitGraph {
             return results
         }
 
-        val direct = findBestRoute(starts, targets, searchTime, maxTransfers = 0, liveDelays = liveDelays)
+        val direct = findBestRoute(starts, targets, searchTime, maxTransfers = 0, liveDelays = liveDelays, requireTransit = true)
         if (direct != null && direct.last().arrivalMin - optimalArrival <= maxAcceptableDelayMin) {
             results.add(direct)
         }
@@ -475,7 +487,8 @@ object TransitGraph {
             maxTransfers = 2,
             minTransferAlternatives = minTransferAlternatives,
             requireDirectionalRelevance = true,
-            liveDelays = liveDelays
+            liveDelays = liveDelays,
+            requireTransit = true
         )
         if (reliable != null && reliable !in results &&
             reliable.last().arrivalMin - optimalArrival <= maxAcceptableDelayMin

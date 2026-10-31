@@ -3660,7 +3660,11 @@ function startLegacyApp() {
   initializeLegacyHistory();
 }
 
-if (document.readyState === 'loading') {
+const legacyStartupBridge = window.transitMigration;
+
+if (legacyStartupBridge?.mode === 'managed') {
+  legacyStartupBridge.start = startLegacyApp;
+} else if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', startLegacyApp, { once: true });
 } else {
   startLegacyApp();

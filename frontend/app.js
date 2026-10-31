@@ -23,8 +23,9 @@ let modalUserMarker = null; // Додали маркер юзера для мо�
 let modalInitTimeout = null;
 let modalUserInteracted = false;
 let modalTrackingSession = null;
-let globalCachedNearbyStops = null;
-let globalCachedNearbyTime = 0;
+function getNearbyStops(lat, lon, checkStatus = false) {
+    return window.transitMigration.getNearbyStops(API_BASE_URL, lat, lon, checkStatus);
+}
 // ==================== Toast-повідомлення ====================
 let toastTimeout;
 function showToast(msg) {
@@ -2198,20 +2199,8 @@ function loadRouteDefaultSuggestions(isFrom) {
 
   const fetchAndShow = async (lat, lon) => {
         try {
-            // === 1. ПЕРЕВІРКА КЕШУ (діє 2 хвилини = 120000 мс) ===
-            const now = Date.now();
-            if (globalCachedNearbyStops && (now - globalCachedNearbyTime < 120000)) {
-                renderNearby(globalCachedNearbyStops);
-                return;
-            }
-
-            // === 2. ЗАПИТ ДО СЕРВЕРА (якщо кешу немає або він старий) ===
-            const res = await fetch(`${API_BASE_URL}/stops/nearby?lat=${lat}&lon=${lon}`);
-            const apiGroups = await res.json();
-
-            // === 3. ЗБЕРІГАЄМО В ГЛОБАЛЬНИЙ КЕШ ===
-            globalCachedNearbyStops = apiGroups;
-            globalCachedNearbyTime = now;
+            const nearbyResult = getNearbyStops(lat, lon);
+            const apiGroups = nearbyResult instanceof Promise ? await nearbyResult : nearbyResult;
 
             // Відмальовуємо результати
             renderNearby(apiGroups);
@@ -3172,25 +3161,8 @@ async function showNearbyStops(lat, lon) {
     if (!nearbyContainer) return;
 
     try {
-        // === ПОЧАТОК РОЗУМНОГО КЕШУ ===
-        const now = Date.now();
-        let groups; // Сюди покладемо дані (з кешу або з сервера)
-
-        if (globalCachedNearbyStops && (now - globalCachedNearbyTime < 120000)) {
-            // 1. Беремо миттєво з кешу, якщо йому менше 2 хвилин
-            groups = globalCachedNearbyStops;
-        } else {
-            // 2. Якщо кешу немає, робимо запит до сервера
-            const res = await fetch(`${API_BASE_URL}/stops/nearby?lat=${lat}&lon=${lon}`);
-            if (!res.ok) throw new Error(`Код помилки: ${res.status}`);
-
-            groups = await res.json();
-
-            // 3. Зберігаємо новий результат у спільний кеш
-            globalCachedNearbyStops = groups;
-            globalCachedNearbyTime = now;
-        }
-        // === КІНЕЦЬ РОЗУМНОГО КЕШУ ===
+        const nearbyResult = getNearbyStops(lat, lon, true);
+        const groups = nearbyResult instanceof Promise ? await nearbyResult : nearbyResult;
 
         if (groups.length === 0) {
             nearbyContainer.innerHTML = `<div style="padding: 10px; color: var(--text-muted);">Brak przystanków w pobliżu lub GPS</div>`;

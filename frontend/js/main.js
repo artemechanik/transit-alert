@@ -1,3 +1,5 @@
+import { getNearbyStops } from './nearby.js';
+
 let startupPromise;
 
 function startManagedLegacy() {
@@ -17,7 +19,7 @@ function startManagedLegacy() {
       throw new Error('Міст запуску transit-alert уже існує');
     }
 
-    const bridge = { mode: 'managed' };
+    const bridge = { mode: 'managed', getNearbyStops };
     window.transitMigration = bridge;
 
     await new Promise((resolve, reject) => {

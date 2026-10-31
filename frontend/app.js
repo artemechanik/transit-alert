@@ -1553,15 +1553,6 @@ function initializeLegacyMap() {
         clearInterval(liveMapInterval);
         liveMapInterval = setInterval(updateLiveCityMap, 5000);        // --------------------------------
     });
-
-    // ДОДАТИ ЦЕ: Плавний скрол поля вводу над клавіатурою
-    document.querySelectorAll('#report-modal input').forEach(input => {
-        input.addEventListener('focus', function() {
-            setTimeout(() => {
-                this.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 300);
-        });
-    });
 }
 
 // ==================== Геолокація користувача (MapLibre) ====================
@@ -1664,15 +1655,28 @@ function trackUserLocation() {
         { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
     );
 }
-  // ДОДАТИ ЦЕ: Плавний скрол поля вводу над клавіатурою
-  document.querySelectorAll('#report-modal input').forEach(input => {
-    input.addEventListener('focus', function() {
-      // Затримка 300мс дає час клавіатурі повністю виїхати
-      setTimeout(() => {
-        this.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 300);
-    });
-  });
+// Прокручуємо лише форму, якщо активне поле виходить за її видимі межі.
+document.getElementById('report-modal').addEventListener('focusin', (event) => {
+  const modal = event.currentTarget;
+  const field = event.target;
+  if (!field.matches('input, textarea')) return;
+
+  setTimeout(() => {
+    if (!modal.classList.contains('show') || document.activeElement !== field || !modal.contains(field)) return;
+    if (modal.clientHeight === 0) return;
+
+    const modalRect = modal.getBoundingClientRect();
+    const fieldRect = field.getBoundingClientRect();
+    const visibleTop = modalRect.top + modal.clientTop;
+    const visibleBottom = visibleTop + modal.clientHeight;
+
+    if (fieldRect.top < visibleTop) {
+      modal.scrollTop += fieldRect.top - visibleTop - 8;
+    } else if (fieldRect.bottom > visibleBottom) {
+      modal.scrollTop += fieldRect.bottom - visibleBottom + 8;
+    }
+  }, 300);
+});
 
 // ==================== ПЛАНУВАЛЬНИК МАРШРУТУ (TRASA) ====================
 // ==================== ІСТОРІЯ МАРШРУТІВ ТА ЗУПИНОК (TRASA) ====================

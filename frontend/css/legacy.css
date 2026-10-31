@@ -297,11 +297,16 @@
   #quick-report-modal {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 750;
     background: var(--card); border-radius: 20px 20px 0 0; box-shadow: 0 -4px 24px rgba(0,0,0,.25);
-    transform: translateY(100%); transition: transform .2s ease-out;
+    transform: translateY(100%); transition: transform .2s ease-out, visibility 0s linear .2s;
+    visibility: hidden; pointer-events: none;
     padding-bottom: calc(16px + var(--safe-bottom));
     display: flex; flex-direction: column;
   }
-  #quick-report-modal.open { transform: translateY(0); }
+  #quick-report-modal.open {
+    transform: translateY(0);
+    visibility: visible; pointer-events: auto;
+    transition-delay: 0s;
+  }
 
   .quick-header { text-align: center; padding: 20px 20px 14px; position: relative; }
   .quick-header h2 { margin: 0 0 6px 0; font-size: 18px; color: var(--text); }
@@ -394,7 +399,7 @@
   .nav-item.active .nav-icon { background-color: var(--blue); }
  /* --- Drawer зі стрічкою --- */
   #reports-drawer {
-    position: absolute; left: 0; right: 0; bottom: 0; z-index: 600;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 600;
     background: var(--card); border-radius: 18px 18px 0 0; box-shadow: 0 -4px 20px rgba(0,0,0,.2);
     max-height: 75vh; display: flex; flex-direction: column;
     transform: translateY(100%); transition: transform .25s ease-out;
@@ -456,13 +461,13 @@
   }
   /* --- Overlay --- */
   #overlay {
-    position: absolute; inset: 0; background: rgba(0,0,0,.4); z-index: 550; display: none;
+    position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 550; display: none;
   }
   #overlay.show { display: block; }
 
   /* --- Модалка створення допису --- */
   #report-modal {
-    position: absolute; left: 0; right: 0; bottom: 0; z-index: 700;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 700;
     background: var(--card); border-radius: 18px 18px 0 0; box-shadow: 0 -4px 24px rgba(0,0,0,.25);
     max-height: 92vh; overflow-y: auto; display: none;
     padding-bottom: calc(16px + var(--safe-bottom));

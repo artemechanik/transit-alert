@@ -49,10 +49,10 @@ function getFingerprint() {
   }
   return fp;
 }
-window.addEventListener('DOMContentLoaded', () => {
+function initializeLegacyHistory() {
     // Фіксуємо початковий стан при завантаженні
     window.history.replaceState({ screen: 'map' }, "");
-});
+}
 // ==================== Карта (MapLibre GL) ====================
 let map, reportMarkersLayer, searchMarker, vehicleMarker;
 let userLocationMarker;
@@ -1540,7 +1540,7 @@ function resetForm() {
 }
 
 // ==================== Старт ====================
-document.addEventListener('DOMContentLoaded', () => {
+function initializeLegacyMap() {
     initMap();
 
     // ВАЖЛИВО: Чекаємо, поки карта повністю промалюється, перш ніж щось на неї додавати
@@ -1562,7 +1562,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 300);
         });
     });
-});
+}
 
 // ==================== Геолокація користувача (MapLibre) ====================
 userLocationMarker = null;
@@ -3018,9 +3018,9 @@ routeResultsBox.addEventListener('touchend', async (e) => {
 });
 
 // Запускаємо відмальовку останніх маршрутів при завантаженні сторінки
-document.addEventListener('DOMContentLoaded', () => {
+function initializeLegacyRecentRoutes() {
     renderRecentRoutes();
-});
+}
 
 // ==================== Вкладка "Przystanek" (Розклад) ====================
 
@@ -3646,3 +3646,22 @@ window.addEventListener('popstate', (event) => {
     }
   }
 });
+
+// Автозапуск лише після виконання всіх негайних прив'язок та оголошень стану.
+let legacyAppStarted = false;
+
+function startLegacyApp() {
+  if (legacyAppStarted) return;
+  legacyAppStarted = true;
+
+  // Раніше document-обробники виконувалися перед window-обробником історії.
+  initializeLegacyMap();
+  initializeLegacyRecentRoutes();
+  initializeLegacyHistory();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startLegacyApp, { once: true });
+} else {
+  startLegacyApp();
+}

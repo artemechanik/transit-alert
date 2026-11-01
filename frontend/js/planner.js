@@ -732,7 +732,7 @@ export function createPlanner({
             return { name: parts.join(' '), code: lastPart };
         }
 
-        // Якщо це адреса ("Biłgorajska 24") або системна мітка - повертаємо як є
+        // Якщо це адреса або системна мітка - повертаємо як є
         return { name: fullName, code: '' };
     }
 

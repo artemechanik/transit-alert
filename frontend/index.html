@@ -17,7 +17,13 @@
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 })();
 </script>
-<link rel="stylesheet" href="css/legacy.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/shared.css">
+<link rel="stylesheet" href="css/map.css">
+<link rel="stylesheet" href="css/planner.css">
+<link rel="stylesheet" href="css/stops.css">
+<link rel="stylesheet" href="css/reports.css">
+<link rel="stylesheet" href="css/compatibility.css">
 </head>
 <body>
 
@@ -120,7 +126,6 @@
     <a href="#" class="manual-link">Wpisz ręcznie (inna lokalizacja)</a>
   </div>
 </div><!-- --- Екран "Przystanek" (Розклад) --- -->
-<link rel="stylesheet" href="css/stop-overrides.css">
 <div id="screen-stop" class="screen-container" style="display: none;">
   <div class="stop-search-header">
       <input type="text" id="stop-screen-search" placeholder="Wprowadź nazwę przystanku..." autocomplete="off">

@@ -1,0 +1,180 @@
+/* Головна карта й мінікарта: GPS, маркери, кластери, пошук і контролери MapLibre. */
+
+/* --- Маркер геолокації (MapLibre) --- */
+.user-marker-dom {
+    width: 20px;
+    height: 20px;
+    background-color: var(--blue);
+    border: 3px solid #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    /* Додаємо пульсацію для краси */
+    animation: pulse-gps 2s infinite;
+}
+
+@keyframes pulse-gps {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 40%, transparent); }
+    70% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--blue) 0%, transparent); }
+    100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 0%, transparent); }
+}
+/* --- ПОВНОЕКРАННА КАРТА ДЛЯ АВТОБУСА --- */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    /* Відступаємо знизу місце для панелі навігації (як у звичайних екранів) */
+    bottom: 0;
+    background: var(--bg);
+    z-index: 450;
+}
+
+.modal-content {
+    background: var(--bg);
+    padding: 0; /* Жодних рамок і відступів */
+    border-radius: 0; /* Жодних заокруглень */
+    width: 100%;
+    height: 100%; /* Розтягуємо на всю висоту */
+    max-width: none;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+#modal-map {
+    width: 100%;
+    height: 100%; /* Карта займає 100% вікна */
+    flex: 1; /* Гарантує, що вона заповнить увесь доступний простір */
+    z-index: 1;
+}
+
+/* Красива плашка з номером маршруту поверх карти */
+#modal-route-title {
+    position: absolute;
+    top: calc(15px + var(--safe-top));
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+    z-index: 1000; /* Поверх карти */
+    background: var(--card);
+    color: var(--text);
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-size: 16px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+}
+
+/* Кнопка закриття (в правому верхньому куті) */
+.close-btn {
+    position: absolute;
+    top: calc(15px + var(--safe-top));
+    right: 15px;
+    z-index: 1000; /* Поверх карти */
+    background: var(--card);
+    color: var(--text);
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* Щоб хрестик гарно виглядав при натисканні */
+.close-btn:active {
+    background: var(--border);
+}
+  #map { position: absolute; inset: 0; z-index: 0; }
+
+  /* --- Верхня панель пошуку зупинки --- */
+  #search-bar {
+    position: absolute; top: calc(12px + var(--safe-top)); left: 12px; right: 12px;
+    z-index: 400; display: flex; flex-direction: column; gap: 6px;
+  }
+  #search-input-wrap {
+    background: var(--card); border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.15);
+    display: flex; align-items: center; padding: 4px 6px;
+  }
+  #search-input {
+    flex: 1; border: none; outline: none; font-size: 15px; padding: 10px 8px; background: transparent; color: var(--text);
+  }
+  #search-input::placeholder { color: var(--text-muted); }
+  #search-clear {
+    border: none; background: none; color: var(--text-muted); font-size: 18px; padding: 6px 10px; cursor: pointer; display: none;
+  }
+  #search-suggestions {
+    background: var(--card); border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.15);
+    max-height: 45vh; overflow-y: auto; display: none;
+  }
+  #search-suggestions div {
+    padding: 11px 14px; font-size: 14px; border-bottom: 1px solid var(--border); cursor: pointer;
+  }
+  #search-suggestions div:last-child { border-bottom: none; }
+  #search-suggestions div .code { color: var(--text-muted); font-size: 12px; margin-left: 6px; }
+  #search-suggestions div:active { background: #f2f5f9; }
+  #search-empty { padding: 14px; font-size: 13px; color: var(--text-muted); text-align: center; }
+
+  /* Стрілочка напрямку (компас) */
+  .vehicle-arrow {
+    position: absolute;
+    top: -14px; /* Витягуємо стрілочку вище з-під кружка */
+    left: 50%;
+    margin-left: -7px; /* Центруємо (половина від 20px) */
+    width: 14px;
+    height: 14px;
+    transform-origin: 7px 31px;
+    transition: transform 1s ease-out;
+    z-index: -1; /* ВАЖЛИВО: жорстко заганяємо стрілку ПІД маркер */
+}
+  .vehicle-arrow polygon {
+    fill: var(--live-green);
+    stroke: white;
+    stroke-width: 11px;
+    stroke-linejoin: round;
+}
+  .vehicle-marker-icon { background: transparent; border: none; }
+  .vehicle-marker-dot {
+    width: 34px; height: 34px; border-radius: 50%; background: var(--live-green); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+    border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.4); position: relative;
+    z-index: 2;
+  }
+  .vehicle-cluster {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(34, 197, 94, 0.6);
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.25);
+    color: #fff; font-weight: 700; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    text-shadow: 0 1px 2px rgba(0,0,0,.5);
+    cursor: pointer;
+  }
+
+/* --- КНОПКА ЛОКАЛІЗАЦІЇ (GPS) --- */
+.gps-locate-btn {
+  background: var(--card);
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: 8px; /* Зробимо її квадратною з круглими кутами, як кнопки зуму */
+  width: 34px;
+  height: 34px;
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gps-locate-btn:active {
+  background: var(--border);
+}
+.maplibregl-ctrl-group {
+  background: var(--map-ctrl-bg) !important;
+  box-shadow: var(--map-ctrl-shadow) !important;
+}
+.maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--map-ctrl-border) !important;
+}
+.maplibregl-ctrl-icon { filter: var(--map-icon-filter) !important; }

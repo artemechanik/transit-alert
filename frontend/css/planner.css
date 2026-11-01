@@ -1,0 +1,341 @@
+/* Trasa: пошук, кнопки полів, картки й повноекранне розгортання.
+   Повторні правила trolleybus збережено в початковому порядку. */
+
+  #route-search-btn {
+      background: linear-gradient(135deg, #1e88e5 0%, #1565c0 100%);
+      box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+      border: none;
+      /* і теж можна додати transform: scale(0.97) на :active */
+  }
+  #route-search-btn:active {
+  transform: scale(0.97);
+  }
+/* Базовий вигляд кнопок-дії в полі вводу */
+.route-action-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+/* Сама іконка через CSS-маску */
+.route-action-btn::before {
+  pointer-events: none;
+  content: '';
+  display: block;
+  width: 18px;
+  height: 18px;
+  background-color: var(--text-muted);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  transition: background-color 0.2s ease, transform 0.15s ease;
+}
+
+.route-action-btn:active::before {
+  transform: scale(0.88);
+}
+
+/* Стан: Локація (GPS з кружечком всередині) */
+.route-action-btn.icon-location::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8'/%3E%3Ccircle cx='12' cy='12' r='3' fill='black'/%3E%3Cline x1='12' y1='1' x2='12' y2='4'/%3E%3Cline x1='12' y1='20' x2='12' y2='23'/%3E%3Cline x1='1' y1='12' x2='4' y2='12'/%3E%3Cline x1='20' y1='12' x2='23' y2='12'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8'/%3E%3Ccircle cx='12' cy='12' r='3' fill='black'/%3E%3Cline x1='12' y1='1' x2='12' y2='4'/%3E%3Cline x1='12' y1='20' x2='12' y2='23'/%3E%3Cline x1='1' y1='12' x2='4' y2='12'/%3E%3Cline x1='20' y1='12' x2='23' y2='12'/%3E%3C/svg%3E");
+}
+
+/* Стан: Хрестик (Clear) */
+.route-action-btn.icon-clear::before {
+  width: 15px;
+  height: 15px;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E");
+}
+
+/* Стан: Реверс (Swap ⇅) */
+.route-action-btn.icon-swap::before {
+  background-color: var(--blue); /* Робимо кнопку swap синьою/акцентною */
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 16V4M7 4L3 8M7 4L11 8'/%3E%3Cpath d='M17 8V20M17 20L21 16M17 20L13 16'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 16V4M7 4L3 8M7 4L11 8'/%3E%3Cpath d='M17 8V20M17 20L21 16M17 20L13 16'/%3E%3C/svg%3E");
+}
+
+/* 9. Індикатори статусу LIVE (Trasa) */
+.icon-fast {
+  -webkit-mask-image: url('../fast.svg');
+}
+
+.icon-slow {
+  -webkit-mask-image: url('../slow.svg');
+}
+
+.icon-ok {
+  -webkit-mask-image: url('../ok.svg');
+}
+
+.trasa-card {
+  position: relative;
+  background-color: var(--card);
+  border-radius: 12px;
+  padding: 12px 14px; /* Компактні внутрішні відступи */
+  /*box-shadow: 0 2px 8px rgba(0,0,0,0.08);*/
+  /*transition: all 0.25s ease-in-out;*/
+    border: none; /* або залишити дуже-дуже світлий border */
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.02);
+    transform: translateY(0);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+
+/* ========================================= */
+/* МАГІЯ ПОВНОЕКРАННОГО РОЗГОРТАННЯ          */
+/* ========================================= */
+
+/* НОВЕ: Плавна анімація появи (як в iPhone) */
+@keyframes modalPopIn {
+  0% { opacity: 0; transform: scale(0.05) translateY(10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.trasa-card.fullscreen-expanded {
+  position: fixed;
+  /* Враховуємо "чубки" смартфонів та нижнє меню */
+  top: calc(15px + var(--safe-top));
+  bottom: calc(75px + var(--safe-bottom));
+  left: 12px;
+  right: 12px;
+  z-index: 1000;
+
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  max-height: none;
+
+  /* ВАЖЛИВО: додаємо відступ зверху, щоб новий список не наліз на хрестик закриття */
+  padding-top: 45px;
+
+  box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  border: 1px solid var(--border);
+
+  /* НОВЕ: Запускаємо анімацію при відкритті */
+  animation: modalPopIn 0.45s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+/* ВАЖЛИВО: ПРИХОВУЄМО ДУБЛІКАТИ при розгортанні */
+.trasa-card.fullscreen-expanded .trasa-legend,
+.trasa-card.fullscreen-expanded .trasa-timeline,
+.trasa-card.fullscreen-expanded .trasa-walk-note {
+  display: none !important;
+}
+
+/* Скрол-зона посередині */
+.trasa-middle-scroll {
+  flex-grow: 1;
+  overflow-y: auto;
+
+  /* Оскільки ми сховали старі елементи, рамки та відступи тут більше не потрібні */
+  padding: 0;
+  border: none;
+  margin: 0;
+}
+
+/* Ховаємо скролбар для краси */
+.trasa-middle-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Забороняємо футеру стискатися */
+.trasa-card.fullscreen-expanded .trasa-details {
+  flex-shrink: 0;
+}
+
+/* ЕФЕКТ НАТИСКАННЯ (залишаємо, він супер!) */
+.trasa-card:active {
+    transform: scale(0.98);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* Кнопка закриття (Хрестик) */
+.close-trasa-btn {
+  display: none; /* За замовчуванням схована */
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--text-muted);
+  cursor: pointer;
+  z-index: 10;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.close-trasa-btn:active {
+  background: var(--border);
+}
+
+/* Показуємо хрестик тільки в розгорнутому стані */
+.trasa-card.fullscreen-expanded .close-trasa-btn {
+  display: flex;
+  /* НОВЕ: хрестик теж плавно з'являється */
+  animation: fadeIn 0.4s ease forwards;
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+/* ========================================= */
+.trasa-legend {
+  position: absolute;
+  top: -14px;
+  left: 16px;
+  display: flex;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  background-color: var(--card);
+}
+
+.trasa-badge {
+  padding: 4px 8px;
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badge-bus { background-color: var(--danger); color: white; }
+.badge-trolley { background-color: var(--blue); color: white; }
+.badge-walk { background-color: #2d2e38; color: #a8aab0; }
+
+/* Розміри для 32px квадратика (Детальний список зупинок у Trasa) */
+.trasa-detail-box {
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 15px !important;
+  border-width: 2px !important;
+}
+
+/* Калібруємо ріжки тролейбуса під розмір 32px (розгорнута картка) */
+.trasa-detail-box.trolleybus::before,
+.trasa-detail-box.trolleybus::after {
+  height: 6px !important;
+  top: -6px !important;
+  width: 2px !important;
+}
+
+/* Калібруємо ріжки для розміру 28px (згорнута картка в шапці) */
+.trasa-compact-header .dep-route-box.trolleybus::before,
+.trasa-compact-header .dep-route-box.trolleybus::after {
+  height: 5px !important;
+  top: -5px !important;
+  width: 2px !important;
+}
+
+.trasa-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.trasa-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.trasa-row .stop-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.trasa-row .stop-code { font-size: 13px; color: var(--text); font-weight: 600; margin-left: 2px; }
+.trasa-row .time { font-size: 13px; font-weight: 700; color: var(--text); }
+
+/* Блок пересадки: тепер лише стрілочка */
+.trasa-transfer {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 10px;
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+  line-height: 1.3;
+}
+
+.trasa-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.trasa-footer .highlight { color: var(--text); font-weight: 700; }
+.trasa-footer .time-live { color: #10b981; font-weight: 700; }
+
+/* НОВА класична іконка пішохода (силует людини) */
+.icon-walk {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7'/%3E%3C/svg%3E");
+}
+.icon-bus-ride {
+    -webkit-mask-image: url('../bus.svg');
+    mask-image: url('../bus.svg');
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    background-color: currentColor;
+}
+/* Жорстко фіксуємо розмір квадратиків ТІЛЬКИ для плаваючої легенди */
+.trasa-legend .dep-route-box {
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 13px !important;
+  border-width: 1.5px !important;
+  background-color: var(--card) !important;
+}
+
+/* Калібруємо ріжки тролейбуса під розмір 32px (розгорнута картка) */
+.trasa-detail-box.trolleybus::before,
+.trasa-detail-box.trolleybus::after {
+  height: 6px !important;
+  top: -6px !important;
+  width: 2px !important;
+}
+
+/* Калібруємо ріжки для розміру 28px (згорнута картка в шапці) */
+.trasa-compact-header .dep-route-box.trolleybus::before,
+.trasa-compact-header .dep-route-box.trolleybus::after {
+  height: 5px !important;
+  top: -5px !important;
+  width: 2px !important;
+}
+
+/* Трохи зменшуємо пішохода, щоб красиво вліз у 28px рамку */
+.trasa-legend .icon-walk {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+@keyframes trasaLiveBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}

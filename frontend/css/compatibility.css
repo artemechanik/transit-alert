@@ -1,0 +1,43 @@
+/* Збережені винятки без виправлення поведінки.
+   Leaflet і user-marker-icon: старі стилі без активного створення цих елементів.
+   ..trasa-wrapper: початковий некоректний селектор залишено дослівно.
+   Завершальне правило stop-screen-suggestions: колишній stop-overrides.css,
+   має лишатися після stops.css зі своїм vh/dvh fallback та !important. */
+
+    .leaflet-control-attribution {
+      background: rgba(20, 22, 26, .75) !important;
+      color: var(--text-muted) !important;
+    }
+    .leaflet-control-attribution a { color: var(--blue) !important; }
+    .leaflet-bar a {
+      background: var(--card) !important;
+      color: var(--text) !important;
+      border-color: var(--border) !important;
+    }
+    .user-marker-icon {
+        /* Інвертує кольори: чорне стає білим */
+        filter: invert(1) brightness(1.2);
+    }
+
+  /* Нижня навігація перекриває стандартну позицію зум-контролу Leaflet — піднімаємо його вище */
+  .leaflet-bottom.leaflet-left {
+    bottom: calc(72px + var(--safe-bottom)) !important;
+  }
+/*=====================*/
+/*=====================*/
+/*=====================*/
+/*=====================*/
+/* --- СТИЛІ ДЛЯ НОВИХ КАРТОК TRASA (ПЛАВАЮЧА ЛЕГЕНДА) --- */
+..trasa-wrapper {
+  position: relative;
+  margin-top: 0px;
+  padding-top: 0px;
+}
+/* Завершальне перевизначення висоти підказок Przystanek. */
+
+  /* Список пропозицій упирається в нижню навігацію:
+     висота шапки (~77px + safe-top) + відступ 4px + нижня навігація (~72px + safe-bottom) */
+  #stop-screen-suggestions {
+    max-height: calc(100vh - 153px - var(--safe-top) - var(--safe-bottom)) !important;
+    max-height: calc(100dvh - 153px - var(--safe-top) - var(--safe-bottom)) !important;
+  }

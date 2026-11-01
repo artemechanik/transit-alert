@@ -1,7 +1,0 @@
-
-  /* Список пропозицій упирається в нижню навігацію:
-     висота шапки (~77px + safe-top) + відступ 4px + нижня навігація (~72px + safe-bottom) */
-  #stop-screen-suggestions {
-    max-height: calc(100vh - 153px - var(--safe-top) - var(--safe-bottom)) !important;
-    max-height: calc(100dvh - 153px - var(--safe-top) - var(--safe-bottom)) !important;
-  }

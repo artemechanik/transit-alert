@@ -1,0 +1,220 @@
+/* Звіти: FAB, drawer, голосування, основна та quick-форми.
+   Ранні й пізні кольори rc-vote-btn збережено в початковому порядку; теми не виправляються. */
+
+    .rc-vote-btn.confirm { background: #1b3a1e; }
+    .rc-vote-btn.deny { background: #3a1f1e; }
+    .rc-vote-btn.update { background: #1a2c3d; }
+
+  /* --- Кнопка "Kanar obok" (Жовта, напівпрозора, скляна) --- */
+  #fab-report {
+    position: absolute;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    bottom: calc(85px + var(--safe-bottom));
+    width: max-content;
+    z-index: 400;
+
+    /* Жовтий напівпрозорий фон */
+    background: rgba(255, 204, 0, 0.55);
+    /* Ефект розмиття того, що під кнопкою (карта) */
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+
+    /* Темний текст для ідеального контрасту на жовтому */
+    color: #1c2530;
+    border: none;
+    border-radius: 24px;
+    padding: 12px 24px;
+    font-size: 15px;
+    font-weight: 800; /* Зробив шрифт трохи жирнішим для читабельності */
+    box-shadow: 0 4px 14px rgba(255, 204, 0, 0.4); /* Жовтувата тінь */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  #fab-report:active {
+    /* При натисканні стає повністю яскравою і непрозорою */
+    background: rgba(255, 204, 0, 1);
+    transform: translateX(-50%) scale(0.96);
+  }
+
+  #fab-report .icon { font-size: 18px; }
+ /* --- Швидка модалка (Kanar obok) --- */
+  #quick-report-modal {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 750;
+    background: var(--card); border-radius: 20px 20px 0 0; box-shadow: 0 -4px 24px rgba(0,0,0,.25);
+    transform: translateY(100%); transition: transform .2s ease-out, visibility 0s linear .2s;
+    visibility: hidden; pointer-events: none;
+    padding-bottom: calc(16px + var(--safe-bottom));
+    display: flex; flex-direction: column;
+  }
+  #quick-report-modal.open {
+    transform: translateY(0);
+    visibility: visible; pointer-events: auto;
+    transition-delay: 0s;
+  }
+
+  .quick-header { text-align: center; padding: 20px 20px 14px; position: relative; }
+  .quick-header h2 { margin: 0 0 6px 0; font-size: 18px; color: var(--text); }
+  .quick-header p { margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.4; }
+
+  .quick-options { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* Жорстко стилізуємо кнопки вибору (вбиваємо системний дизайн) */
+  .quick-option {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 15px;
+    color: var(--text);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start; /* Текст строго зліва */
+    gap: 12px;
+    cursor: pointer;
+    width: 100%; /* Розтягуємо на всю ширину */
+    appearance: none;
+    -webkit-appearance: none; /* Вимикаємо дизайн браузера */
+    outline: none;
+  }
+
+  /* Обраний варіант */
+  .quick-option.selected {
+    background: rgba(229, 57, 53, 0.1);
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  /* Кнопки Anuluj / Potwierdzam */
+  .quick-actions { display: flex; gap: 12px; padding: 0 16px; }
+  .quick-action-btn {
+    flex: 1; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700;
+    cursor: pointer; appearance: none; -webkit-appearance: none; border: none; outline: none;
+  }
+  .btn-cancel { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+  .btn-cancel:active { background: var(--border); }
+
+  .btn-confirm { background: var(--danger); color: #fff; }
+  .btn-confirm:active { background: var(--danger-dark); }
+
+  /* Посилання "Wpisz ręcznie" */
+  .manual-link-wrap { text-align: center; margin-top: 16px; }
+  .manual-link {
+    color: var(--blue);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none !important; /* Жорстко забираємо підкреслення */
+    padding: 10px;
+    display: inline-block;
+  }
+ /* --- Drawer зі стрічкою --- */
+  #reports-drawer {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 600;
+    background: var(--card); border-radius: 18px 18px 0 0; box-shadow: 0 -4px 20px rgba(0,0,0,.2);
+    max-height: 75vh; display: flex; flex-direction: column;
+    transform: translateY(100%); transition: transform .25s ease-out;
+    padding-bottom: var(--safe-bottom);
+  }
+  #reports-drawer.open { transform: translateY(0); }
+  #drawer-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 10px auto 4px; }
+
+  #drawer-header { display: flex; justify-content: space-between; align-items: center; padding: 4px 18px 10px; }
+  #drawer-header h2 { font-size: 16px; margin: 0; }
+
+  .drawer-actions { display: flex; align-items: center; gap: 12px; }
+  #drawer-add {
+    border: none; background: none;
+    font-size: 28px; font-weight: 300;
+    color: var(--blue); cursor: pointer;
+    padding: 0 4px; line-height: 1;
+  }
+  #drawer-close { border: none; background: none; font-size: 20px; color: var(--text-muted); cursor: pointer; padding: 4px 8px; }
+
+  #drawer-list { overflow-y: auto; padding: 0 14px 14px; }
+  #drawer-empty { text-align: center; color: var(--text-muted); font-size: 13px; padding: 30px 10px; }
+
+  .report-card {
+    background: var(--bg); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
+  }
+  .report-card .rc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .report-card .rc-stop { font-weight: 600; font-size: 14px; }
+  .report-card .rc-time { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .report-card .rc-route { font-size: 12px; color: var(--blue); margin-top: 2px; }
+  .report-card .rc-comment { font-size: 13px; margin-top: 6px; color: var(--text); }
+  .report-card .rc-votes { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .rc-vote-btn {
+    border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .rc-vote-btn.confirm { background: #e8f5e9; color: var(--confirm); }
+  .rc-vote-btn.deny { background: #ffebee; color: var(--danger); }
+  .rc-vote-btn.update { background: #e3f0fd; color: var(--blue); }
+  .rc-vote-btn.active.confirm { background: var(--confirm); color: #fff; }
+  .rc-vote-btn.active.deny { background: var(--danger); color: #fff; }
+  .rc-update-badge { font-size: 11px; color: var(--blue); font-weight: 600; margin-bottom: 6px; }
+/* --- Стилі для блоку оновлення (Update Quote) --- */
+  .rc-update-block {
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .rc-update-header {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .rc-update-comment {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-style: italic;
+    line-height: 1.3;
+  }
+
+  /* --- Модалка створення допису --- */
+  #report-modal {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 700;
+    background: var(--card); border-radius: 18px 18px 0 0; box-shadow: 0 -4px 24px rgba(0,0,0,.25);
+    max-height: 92vh; overflow-y: auto; display: none;
+    padding-bottom: calc(16px + var(--safe-bottom));
+  }
+  #report-modal.show { display: block; }
+  #modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px 6px; }
+  #modal-header h2 { font-size: 17px; margin: 0; }
+  #modal-close { border: none; background: none; font-size: 20px; color: var(--text-muted); cursor: pointer; padding: 4px 8px; }
+
+  .tabs { display: flex; gap: 8px; padding: 4px 18px 14px; }
+  .tab-btn {
+    flex: 1; border: 1px solid var(--border); background: var(--bg); border-radius: 10px;
+    padding: 10px; font-size: 14px; font-weight: 600; color: var(--text-muted); cursor: pointer;
+  }
+  .tab-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+  .form-body { padding: 0 18px; }
+  .form-tab { display: none; }
+  .form-tab.active { display: block; }
+  .field { margin-bottom: 14px; position: relative; }
+  .field label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; font-weight: 600; }
+  .field input, .field textarea {
+    width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px;
+    font-size: 15px; font-family: inherit; color: var(--text); background: var(--bg);
+  }
+  .field input:focus, .field textarea:focus { outline: none; border-color: var(--blue); background: var(--card); }
+  .field textarea { resize: none; height: 64px; }
+  #direction-select {
+    width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px;
+    font-size: 15px; font-family: inherit; color: var(--text); background: var(--bg);
+  }
+  #direction-select:disabled { color: var(--text-muted); }
+
+  #submit-btn {
+    width: 100%; background: var(--danger); color: #fff; border: none; border-radius: 12px;
+    padding: 14px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 4px;
+  }
+  #submit-btn:active { background: var(--danger-dark); }
+  #submit-btn:disabled { background: #c7c9cc; }
+  #form-hint { font-size: 12px; color: var(--text-muted); text-align: center; margin: 8px 0 2px; min-height: 16px; }

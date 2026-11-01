@@ -1,4 +1,5 @@
 import { getNearbyStops } from './nearby.js';
+import * as markerAnimation from './marker-animation.js';
 
 let startupPromise;
 
@@ -19,7 +20,8 @@ function startManagedLegacy() {
       throw new Error('Міст запуску transit-alert уже існує');
     }
 
-    const bridge = { mode: 'managed', getNearbyStops };
+    markerAnimation.initAnimations({ maplibregl: window.maplibregl });
+    const bridge = { mode: 'managed', getNearbyStops, markerAnimation };
     window.transitMigration = bridge;
 
     await new Promise((resolve, reject) => {

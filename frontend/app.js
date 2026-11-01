@@ -57,6 +57,7 @@ function initializeLegacyHistory() {
 // ==================== Карта (MapLibre GL) ====================
 let map, reportMarkersLayer, searchMarker, vehicleMarker;
 let userLocationMarker;
+const locationService = window.transitMigration.location;
 let allVehiclesClusterGroup = null;
 let liveMapInterval = null;
 let activeVehicleMarkers = {};
@@ -582,11 +583,12 @@ async function showVehicleOnMap(tripId, routeContext = { mode: 'przystanek' }) {
         if (isCurrentMap()) drawRouteShape(tripId, trackingMap, routeContext, isCurrentMap);
       });
 
-      if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
+      const userPosition = locationService.getPosition();
+      if (userPosition) {
         const userEl = document.createElement('div');
         userEl.className = 'user-marker-dom';
         modalUserMarker = new maplibregl.Marker({ element: userEl })
-          .setLngLat(userLocationMarker.getLngLat())
+          .setLngLat([userPosition.lon, userPosition.lat])
           .addTo(trackingMap);
       }
 
@@ -631,8 +633,9 @@ async function showVehicleOnMap(tripId, routeContext = { mode: 'przystanek' }) {
         try {
           const updated = await fetchVehiclePosition(tripId, session.controller.signal);
           if (!isCurrentMap() || modalVehicleMarker !== marker) return;
-          if (typeof userLocationMarker !== 'undefined' && userLocationMarker && modalUserMarker) {
-            modalUserMarker.setLngLat(userLocationMarker.getLngLat());
+          const userPosition = locationService.getPosition();
+          if (userPosition && modalUserMarker) {
+            modalUserMarker.setLngLat([userPosition.lon, userPosition.lat]);
           }
           if (updated) {
             const nowTs = performance.now();
@@ -1516,7 +1519,6 @@ function initializeLegacyMap() {
 // ==================== Геолокація користувача (MapLibre) ====================
 userLocationMarker = null;
 let userLocationAccuracyCircle = { type: 'FeatureCollection', features: [] };
-let watchId = null; // Глобальна змінна для контролю трекера
 
 function updateUserLocationAccuracyCircle(lngLat, accuracy) {
     userLocationAccuracyCircle = { type: 'FeatureCollection', features: [] };
@@ -1574,44 +1576,40 @@ function syncUserLocationAccuracyCircle(styleLoaded = false) {
 function trackUserLocation() {
     console.log("[GPS] Запит геолокації...");
 
-    if (!('geolocation' in navigator)) {
+    if (!locationService.isSupported()) {
         showToast('Geolokalizacja nie jest wspierana');
         return;
     }
 
-    // ВБИВАЄМО старих клонів: якщо функція викликалась двічі, зупиняємо попередній трекер
-    if (watchId) {
-        navigator.geolocation.clearWatch(watchId);
-    }
-
-    watchId = navigator.geolocation.watchPosition(
-        (position) => {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            const lngLat = [lon, lat];
-
-            if (!userLocationMarker) {
-                // Створюємо елемент лише ОДИН раз
-                const el = document.createElement('div');
-                el.className = 'user-marker-dom';
-
-                userLocationMarker = new maplibregl.Marker({ element: el })
-                    .setLngLat(lngLat)
-                    .addTo(map);
-
-                map.flyTo({ center: lngLat, zoom: 16 });
-                console.log("[GPS] Маркер створено!");
-            } else {
-                // Просто плавно рухаємо існуючий маркер
-                userLocationMarker.setLngLat(lngLat);
-            }
-            updateUserLocationAccuracyCircle(lngLat, position.coords.accuracy);
-        },
+    locationService.startLocation(
+        renderUserLocation,
         (error) => {
             console.warn('[GPS] Помилка:', error.message);
-        },
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+        }
     );
+}
+
+function renderUserLocation(position) {
+    const lat = position.lat;
+    const lon = position.lon;
+    const lngLat = [lon, lat];
+
+    if (!userLocationMarker) {
+        // Створюємо елемент лише ОДИН раз
+        const el = document.createElement('div');
+        el.className = 'user-marker-dom';
+
+        userLocationMarker = new maplibregl.Marker({ element: el })
+            .setLngLat(lngLat)
+            .addTo(map);
+
+        map.flyTo({ center: lngLat, zoom: 16 });
+        console.log("[GPS] Маркер створено!");
+    } else {
+        // Просто плавно рухаємо існуючий маркер
+        userLocationMarker.setLngLat(lngLat);
+    }
+    updateUserLocationAccuracyCircle(lngLat, position.accuracy);
 }
 // Прокручуємо лише форму, якщо активне поле виходить за її видимі межі.
 document.getElementById('report-modal').addEventListener('focusin', (event) => {
@@ -1783,7 +1781,7 @@ function applyMyCurrentLocation(isFrom) {
   const inputEl = document.getElementById(isFrom ? 'route-input-from' : 'route-input-to');
   const boxEl = document.getElementById(isFrom ? 'route-suggestions-from' : 'route-suggestions-to');
 
-  if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
+  if (locationService.getPosition()) {
     if (inputEl) inputEl.value = 'Moja lokalizacja';
     if (boxEl) {
       boxEl.innerHTML = '';
@@ -2193,13 +2191,13 @@ function loadRouteDefaultSuggestions(isFrom) {
         });
     };
     // 3. ПЕРЕВІРКА GPS ТА ЗАПУСК
-        if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
-        const pos = userLocationMarker.getLngLat(); // Виправлено з getLatLng()
-        fetchAndShow(pos.lat, pos.lng);
+    const pos = locationService.getPosition();
+    if (pos) {
+        fetchAndShow(pos.lat, pos.lon);
     } else {
         nearbyContainer.innerHTML = '<div style="padding: 10px; color: var(--text-muted); display: flex; align-items: center; gap: 12px;"><div class="svg-icon icon-map-pin"></div>Szukam lokalizacji...</div>';
-        if ('geolocation' in navigator) {
-            navigator.geolocation.getCurrentPosition(
+        if (locationService.isSupported()) {
+            locationService.requestPosition(
                 (pos) => fetchAndShow(pos.coords.latitude, pos.coords.longitude),
                 () => { nearbyContainer.innerHTML = '<div style="padding: 10px; color: red;">Włącz GPS, aby zobaczyć pobliskie przystanki</div>'; },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -2791,10 +2789,10 @@ if (searchRouteBtn && routeResultsBox) {
     searchRouteBtn.addEventListener('click', async () => {
 
         if (routeFromStop && routeFromStop.isDynamicGps) {
-            if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
-                const pos = userLocationMarker.getLngLat();
+            const pos = locationService.getPosition();
+            if (pos) {
                 routeFromStop.lat = pos.lat;
-                routeFromStop.lon = pos.lng;
+                routeFromStop.lon = pos.lon;
             } else {
                 showToast('Błąd: Brak sygnału GPS. Poczekaj chwilę.');
                 return;
@@ -2802,10 +2800,10 @@ if (searchRouteBtn && routeResultsBox) {
         }
 
         if (routeToStop && routeToStop.isDynamicGps) {
-            if (typeof userLocationMarker !== 'undefined' && userLocationMarker) {
-                const pos = userLocationMarker.getLngLat();
+            const pos = locationService.getPosition();
+            if (pos) {
                 routeToStop.lat = pos.lat;
-                routeToStop.lon = pos.lng;
+                routeToStop.lon = pos.lon;
             } else {
                 showToast('Błąd: Brak sygnału GPS. Poczekaj chwilę.');
                 return;
@@ -3088,17 +3086,18 @@ function loadNearbyStopsDefault() {
     stopSuggestionsBox.style.display = 'block';
 
     // 3. ЗАПУСКАЄМО GPS ЛОГІКУ
-    if (userLocationMarker) {
-        const lat = userLocationMarker.getLngLat().lat;
-        const lon = userLocationMarker.getLngLat().lng;
+    const position = locationService.getPosition();
+    if (position) {
+        const lat = position.lat;
+        const lon = position.lon;
         showNearbyStops(lat, lon);
         return;
     }
 
     nearbyContainer.innerHTML = '<div style="padding: 10px; color: var(--text-muted);"><div class="svg-icon icon-walk"></div>Szukam lokalizacji...</div>';
 
-    if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition(
+    if (locationService.isSupported()) {
+        locationService.requestPosition(
             (position) => {
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;

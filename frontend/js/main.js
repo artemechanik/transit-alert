@@ -1,5 +1,6 @@
 import { getNearbyStops } from './nearby.js';
 import * as markerAnimation from './marker-animation.js';
+import * as locationService from './location.js';
 
 let startupPromise;
 
@@ -21,7 +22,7 @@ function startManagedLegacy() {
     }
 
     markerAnimation.initAnimations({ maplibregl: window.maplibregl });
-    const bridge = { mode: 'managed', getNearbyStops, markerAnimation };
+    const bridge = { mode: 'managed', getNearbyStops, markerAnimation, location: locationService };
     window.transitMigration = bridge;
 
     await new Promise((resolve, reject) => {

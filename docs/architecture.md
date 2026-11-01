@@ -1,6 +1,6 @@
 # Поточна архітектура transit-alert
 
-Стан звірено з кодом 30.10.2026. Документ описує наявну реалізацію, включно
+Стан звірено з кодом 01.11.2026. Документ описує наявну реалізацію, включно
 з її обмеженнями. Плану рефакторингу тут немає. Інструкції запуску — у
 [README.md](../README.md).
 
@@ -13,11 +13,12 @@
 
 Є два окремі процеси: HTTP-сервер статичних файлів фронтенду та Kotlin/Ktor
 API на порту 8080. Бекенд використовує PostgreSQL. Фронтенд не збирається:
-браузер завантажує HTML, CSS у цьому HTML і один класичний `app.js`.
+браузер завантажує `index.html`, сім статичних CSS-файлів та ES-модуль
+`frontend/js/main.js`.
 
 ```mermaid
 flowchart LR
-    UI[Браузер: index.html + app.js] --> API[Ktor API]
+    UI[Браузер: index.html + js/main.js] --> API[Ktor API]
     API --> DB[(PostgreSQL)]
     STATIC[GTFS static: lublin.zip] --> SYNC[GtfsStaticSync]
     SYNC --> DB
@@ -34,8 +35,11 @@ flowchart LR
 
 | Місце | Відповідальність |
 |---|---|
-| `frontend/index.html` | Розмітка екранів, два блоки CSS, ранній вибір теми, підключення скриптів |
-| `frontend/app.js` | Стан, HTTP-запити, генерація DOM, події, карти, GPS, таймери й історія браузера |
+| `frontend/index.html` | Розмітка екранів, ранній вибір теми, підключення CSS, MapLibre, `config.js` і точки входу |
+| `frontend/js/main.js` | ES-модуль-точка входу: читає конфігурацію, створює модулі та з'єднує їхні залежності |
+| `frontend/js/{city-map,trip-map,planner,stops,reports,navigation}.js` | Модулі головної карти, мінікарти рейсу, планувальника, табло зупинок, звітів і навігації; стан кожного екрана локальний для його фабрики |
+| `frontend/js/{config,location,nearby,theme,ui,marker-animation}.js` | Спільні сервіси конфігурації, геолокації, nearby-кешу, теми, UI та анімації маркерів |
+| `frontend/css/*.css` | Розділені стилі базових правил, спільних компонентів, карти, планувальника, зупинок, звітів і сумісності |
 | `frontend/config.example.js` | Шаблон `window.MAPTILER_KEY`; локальний `config.js` виключений із Git |
 | `frontend/style-light.json`, `style-dark.json` | Стилі MapLibre на основі OSM Liberty |
 | `frontend/manifest.json` | Назва, стартова сторінка, standalone-відображення, кольори; service worker відсутній |
@@ -49,7 +53,7 @@ MapLibre JS і CSS завантажуються з cdnjs, версія 4.7.1.
 
 ## 2. Фронтенд: HTML, стан і залежності
 
-### 2.1. Екрани та спосіб виконання
+### 2.1. Екрани та модулі
 
 У [frontend/index.html](../frontend/index.html) карта `#map` є постійною основою. Над нею показуються
 `#screen-route` (Trasa), `#screen-stop` (Przystanek), панель звітів
@@ -57,33 +61,32 @@ MapLibre JS і CSS завантажуються з cdnjs, версія 4.7.1.
 та окрема карта `#vehicle-modal` із контейнером `#modal-map`.
 Нижнє меню — `#bottom-nav`. Спільне затемнення — `#overlay`.
 
-[frontend/app.js](../frontend/app.js) підключений без `type="module"`, `defer` чи `async` наприкінці HTML.
-Немає import/export, класів компонентів, окремого шару API або єдиного
-об'єкта стану. Функції безпосередньо викликають одна одну та змінюють DOM.
-Оголошення функцій верхнього рівня доступні inline-обробникам `onclick`.
-Глобальні `let`/`const` доступні за іменем у цьому середовищі, але не стають
-автоматично властивостями `window`.
+[frontend/js/main.js](../frontend/js/main.js) підключений із `type="module"`
+наприкінці HTML. Він імпортує усі фронтенд-модулі, але сам не містить логіки
+екранів. `createCityMap`, `createTripMap`, `createPlanner`, `createStops`,
+`createReports` і `createNavigation` повертають обмежений публічний інтерфейс.
+`main.js` передає їм потрібні функції й сервіси як залежності, зокрема
+навігаційні callback-и для планувальника та табло.
 
-### 2.2. Де зберігається стан
+Фронтенд не має центрального store або окремого шару API: кожен модуль виконує
+свої `fetch`-запити й володіє власним станом. Обробники подій реєструються в
+`init…()` модулів через `addEventListener`; inline-обробників у поточній
+розмітці немає.
 
-| Група | Основні змінні в `app.js` | Хто їх використовує |
-|---|---|---|
-| Конфігурація | `API_BASE_URL`, `REPORT_TTL_MS`; зовнішній `MAPTILER_KEY` | Запити, карти, вік звітів |
-| Головна карта | `map`, `mapIs3D`, `appliedMapTheme` | `initMap`, тема, 3D, GPS, LIVE |
-| LIVE-маркери | `activeVehicleMarkers`, `clusterByKey`, `liveMapInterval` | `updateLiveCityMap`, `applyVehicleClustering` |
-| Анімація | `animatingMarkers`, `animLoopRunning`, `lastClusterTs`, `lastLiveUpdateTs`, `lastLiveInterval` | `animateMarkerTo`, `animStep`; обидві карти |
-| GPS | `userLocationMarker`, `watchId`, `userLocationAccuracyCircle` | Відстеження позиції, nearby-пошук, планувальник, мінікарта |
-| Мінікарта | `modalMap`, `modalVehicleMarker`, `modalUserMarker`, `modalTrackingSession`, `modalTrackInterval`, `modalInitTimeout`, `modalUserInteracted` | `showVehicleOnMap`, `closeVehicleMapModal` |
-| Звіти | `reportsById`, `allRoutesCache`, `selectedPrzystanekStopId`, `isStopLiniaSelected`, `updateContext`, `currentQuickSelection` | Стрічка, голосування та форми |
-| Планувальник | `routeFromStop`, `routeToStop`, `lastJourneyDepartureMin`, `trasaStartY`, `trasaIsAtBottom`, `trasaIsRefreshing` | Вибір точок, пошук, історія та свайп пізніших поїздок |
-| Табло зупинки | `currentStopIdForDepartures`, `currentDeparturesData`, `topTimeOffset`, `bottomTimeOffset`, `departuresRefreshInterval`, `startY`, `isRefreshing`, `startScrollTop`, `isAtBottom` | Завантаження табло, фонове оновлення та свайпи |
-| Nearby-кеш | `globalCachedNearbyStops`, `globalCachedNearbyTime` | Спільний для Trasa й Przystanek, термін 120000 мс |
-| Повідомлення | `toastTimeout` | `showToast`, динамічний `#toast` |
+### 2.2. Власники стану
 
-Додатково `window.trasaCountdownInterval` явно зберігає таймер планувальника.
-DOM-посилання на поля та списки також оголошені на верхньому рівні:
-`routeInput`, `stopNameInput`, `stopIdInput`, `searchRouteBtn`, `routeResultsBox`,
-`stopSearchInput`, `departuresList` та інші.
+| Модуль | Основний локальний стан |
+|---|---|
+| `config.js` | Обчислена адреса API; ключ MapTiler читається з класичного `config.js` через глобальний `MAPTILER_KEY` |
+| `city-map.js` | Головна MapLibre-карта, LIVE-маркери й кластери, 2D/3D, GPS-маркер, коло точності та інтервал LIVE |
+| `trip-map.js` | Карта рейсу, її маркери, `AbortController`, інтервал опитування та стан ручної взаємодії з картою |
+| `marker-animation.js` | Набір маркерів в анімації та спільний цикл `requestAnimationFrame` |
+| `location.js` | Єдиний `watchPosition`, остання позиція й помилка геолокації |
+| `planner.js` | Вибрані точки, історія маршрутів, таймер LIVE-часу, відкриті картки й стан свайпу |
+| `stops.js` | Вибрана платформа, відправлення, часові зсуви, інтервал оновлення та стан свайпу |
+| `reports.js` | Індекс звітів, кеш ліній, вибір форми, контекст оновлення й fingerprint |
+| `navigation.js` | Ініціалізація History API та стану drawer/overlay через DOM |
+| `nearby.js`, `ui.js`, `theme.js` | Спільний двохвилинний nearby-кеш, timeout toast і налаштування теми відповідно |
 
 Частина стану міститься в самому DOM: класи `open`, `show`, `active`,
 `fullscreen-expanded`, `style.display`, `data-trip-id`, `data-min`,
@@ -108,29 +111,27 @@ DOM-посилання на поля та списки також оголоше
 
 1. У `<head>` HTML виконується коротка функція з `localStorage.getItem('themePref')`:
    до показу сторінки встановлює `document.documentElement.dataset.theme`.
-2. Після розмітки послідовно підключаються MapLibre, `config.js`, `app.js`.
-3. Під час виконання `app.js` визначається `API_BASE_URL`, створюються змінні,
-   читаються DOM-посилання та реєструються обробники. Тут же викликаються
-   `setupRouteAutocomplete` для двох полів і `updateRouteButtonState`.
-   Створюються індикатори свайпів і додаються в DOM.
-4. Перший обробник `DOMContentLoaded` записує `{ screen: 'map' }` через `replaceState`.
-5. Інший обробник `DOMContentLoaded`, після коментаря `Старт`, викликає `initMap`
-   і підписується на `map.on('load', ...)`.
-6. Після завантаження карти запускаються `trackUserLocation`, перший
-   `updateLiveCityMap` та інтервал LIVE-карти 5000 мс.
-7. Ще один `DOMContentLoaded` викликає `renderRecentRoutes`.
+2. Після розмітки послідовно підключаються MapLibre, класичний `config.js` і
+   `js/main.js` із `type="module"`.
+3. `startApp` у `main.js` за потреби чекає `DOMContentLoaded`, перевіряє
+   MapLibre, ініціалізує анімацію та читає `apiBaseUrl` через `readConfig`.
+4. Точка входу створює фабрики карти, мінікарти й навігації, налаштовує тему,
+   після чого створює та ініціалізує звіти, планувальник, табло і навігацію.
+5. Далі викликаються `cityMap.initCityMap()`, `planner.renderRecentRoutes()` і
+   `navigation.initializeHistory()`.
+6. Після `map.load` модуль головної карти запускає GPS, перше завантаження
+   LIVE-транспорту та інтервал 5000 мс.
 
-Табло та пошук поїздок завантажуються за діями користувача. `initSearchBar`
-оголошений, але не викликається. Стартового виклику `applyTheme` немає:
-початковий колір HTML задає функція в `<head>`, стиль карти вибирає `initMap`.
-GPS-відстеження та опитування LIVE-карти залежать від події завантаження карти.
+Табло та пошук поїздок завантажуються за діями користувача. Початковий колір
+HTML і далі задає короткий скрипт у `<head>`; `theme.js` не викликає
+`applyTheme` на старті, а головна карта читає актуальну тему під час створення.
 
 ### 2.4. Події та навігація
 
-Події підключаються трьома способами: inline `onclick` у HTML,
-`addEventListener` у JavaScript та присвоєння `.onclick` створеним елементам.
-Генеровані HTML-шаблони також містять inline-виклики `vote`, `openUpdateModal`,
-`applyRecentRoute`, `showVehicleOnMap`.
+Події статичної розмітки підключаються через `addEventListener` в
+`navigation.js`, `planner.js`, `stops.js` та `reports.js`. Динамічно створені
+картки отримують слухачі безпосередньо після вставлення в DOM; це замінило
+колишні inline-виклики.
 
 `switchScreen(screenId, btn, isBackAction)` перемикає видимість екранів,
 активну кнопку меню, закриває мінікарту й панель звітів за потреби.
@@ -155,7 +156,7 @@ GPS-відстеження та опитування LIVE-карти залеж�
 
 ### 3.1. Головна карта
 
-`initMap` створює `maplibregl.Map` у `#map`: центр `[22.5684, 51.2465]`,
+`initMap` у `frontend/js/city-map.js` створює `maplibregl.Map` у `#map`: центр `[22.5684, 51.2465]`,
 zoom 14, локальний JSON-стиль за темою. `transformRequest` підставляє
 `MAPTILER_KEY` замість `{key}` у MapTiler URL. Координати MapLibre мають
 порядок `[lon, lat]`; відповіді API зазвичай містять окремі `lat` і `lon`.
@@ -168,9 +169,8 @@ zoom 14, локальний JSON-стиль за темою. `transformRequest` 
 
 ### 3.2. GPS
 
-Робоче визначення `trackUserLocation` розміщене після коментаря
-`Геолокація користувача (MapLibre)`; раніше в файлі є однойменна заглушка.
-Воно запускає `navigator.geolocation.watchPosition` із `enableHighAccuracy`,
+`trackUserLocation` у `city-map.js` делегує стеження модулю `location.js`.
+Той запускає `navigator.geolocation.watchPosition` із `enableHighAccuracy`,
 `maximumAge: 5000`, `timeout: 10000`. Попередній watch за наявності очищається.
 Перша позиція створює DOM-маркер `.user-marker-dom` і переміщує камеру,
 наступні позиції пересувають цей маркер.
@@ -203,7 +203,7 @@ zoom 14, локальний JSON-стиль за темою. `transformRequest` 
 
 ### 3.4. Мінікарта конкретного рейсу
 
-`showVehicleOnMap(tripId, routeContext)` спочатку викликає повне очищення
+`showVehicleOnMap(tripId, routeContext)` у `trip-map.js` спочатку викликає повне очищення
 `closeVehicleMapModal`, створює сесію з `AbortController` і запитує
 `fetchVehiclePosition`. Без LIVE-позиції показує повідомлення та не відкриває карту.
 Після відкриття чекає 200 мс для розміру контейнера й створює окрему MapLibre-карту.
@@ -233,7 +233,7 @@ zoom 14, локальний JSON-стиль за темою. `transformRequest` 
 |---|---|---|
 | Головна LIVE-карта | 5000 мс після `map.load` | При переході вкладок не вимикається; немає `inFlight` |
 | Мінікарта | 5000 мс після її створення | Повне очищення при закритті, перевірка сесії та `inFlight` |
-| Таймери Trasa | 15000 мс після успішного пошуку | Один `window.trasaCountdownInterval`; явного очищення немає |
+| Таймери Trasa | 15000 мс після успішного пошуку | Один локальний `trasaCountdownInterval` у `planner.js`; явного очищення немає |
 | Табло | 15000 мс після завантаження | Інтервал залишається, але запит робиться лише при видимому `screen-stop` і вибраній зупинці |
 | GPS | Події `watchPosition` | Попередній watch очищається при повторному запуску; при зміні вкладки не зупиняється |
 
@@ -242,7 +242,7 @@ zoom 14, локальний JSON-стиль за темою. `transformRequest` 
 
 ## 4. Планувальник Trasa
 
-`setupRouteAutocomplete` одночасно шукає зупинки через `/stops/search`
+`setupRouteAutocomplete` у `planner.js` одночасно шукає зупинки через `/stops/search`
 та адреси через MapTiler Geocoding API, використовуючи `Promise.all`.
 Геокодинг обмежений bbox `22.35,51.11,22.75,51.36`, мовою `pl`;
 відображаються до 4 адрес. Точки зберігаються як `{name, ids}` для групи
@@ -286,7 +286,7 @@ zoom 14, локальний JSON-стиль за темою. `transformRequest` 
 
 ## 5. Зупинки Przystanek
 
-`loadNearbyStopsDefault` показує останні платформи та запускає nearby-пошук.
+`loadNearbyStopsDefault` у `stops.js` показує останні платформи та запускає nearby-пошук.
 `showNearbyStops` використовує спільний двохвилинний кеш або `/stops/nearby`.
 Введення від двох символів у `#stop-screen-search` викликає `/stops/search`;
 клієнт додатково сортує точні збіги, початки назв, назви та коди платформ.
@@ -309,7 +309,7 @@ zoom 14, локальний JSON-стиль за темою. `transformRequest` 
 
 ## 6. Звіти та модальні форми
 
-Стрічка відкривається через `switchScreen` → `openDrawer` → `renderReportsList`
+Стрічка відкривається через `switchScreen` у `navigation.js` → `openDrawer` → `renderReportsList` у `reports.js`
 → `fetchReports` → `/reports`. `reportsById` індексує дописи; відсутні оригінали
 для цитат оновлень завантажує `fetchReportById`. `reportCardHtml` генерує HTML.
 `vote` надсилає fingerprint у `/reports/{id}/confirm` або `/deny`
@@ -334,21 +334,21 @@ zoom 14, локальний JSON-стиль за темою. `transformRequest` 
 
 ## 7. CSS і теми
 
-Основний CSS — перший `<style>` у `index.html`; другий, перед `screen-stop`,
-повторно задає висоту `#stop-screen-suggestions` із `vh`/`dvh` та safe-area.
-Додаткові стилі є в атрибутах HTML і шаблонах `app.js`, а деякі значення
-JavaScript установлює через `.style` та `setProperty(..., 'important')`.
+Стилі завантажуються з `css/base.css`, `shared.css`, `map.css`, `planner.css`,
+`stops.css`, `reports.css` і `compatibility.css`. У розмітці та шаблонах модулів
+досі є окремі inline-стилі; JavaScript також установлює частину значень через
+`.style` та `setProperty(..., 'important')`.
 
-| Частина | Орієнтири в `index.html` | Зв'язок із JavaScript |
+| Частина | Основний CSS | Зв'язок із JavaScript |
 |---|---|---|
-| Палітра | `:root`, `:root[data-theme="dark"]`, `--blue`, `--bg`, `--card`, `--text` | `applyTheme`, коло точності читає `--blue` |
-| Карта | `.user-marker-dom`, `.vehicle-arrow`, `.vehicle-marker-dot`, `.vehicle-cluster`, `.maplibregl-ctrl-group` | DOM-маркери та MapLibre-контроли |
-| Екрани й навігація | `.screen-container`, `#bottom-nav`, `.nav-item.active` | `switchScreen` і `style.display` |
-| Зупинки | `.stop-suggestion-item`, `.stop-routes-carousel`, `.route-pill`, `.dep-card`, `.dep-expand.open`, `.ghost` | Генератори підказок і `loadDepartures` |
-| Планувальник | `.trasa-card`, `.fullscreen-expanded`, `.trasa-row`, `.trasa-middle-scroll` | `buildJourneyCard`, `toggleTrasaExpand`, таймери читають цю структуру |
-| Звіти й форми | `.report-card`, `.rc-vote-btn`, `#reports-drawer.open`, `#report-modal.show`, `.form-tab.active` | Відкриття, закриття, вкладки, голоси |
-| Модальна карта | `.modal-overlay`, `.modal-content`, `#modal-map`, `.close-btn` | `showVehicleOnMap`, `closeVehicleMapModal` |
-| Повідомлення | `#toast.show` | `showToast` створює елемент за потреби |
+| Палітра | `base.css`: `:root`, `:root[data-theme="dark"]`, `--blue`, `--bg`, `--card`, `--text` | `theme.js`; коло точності читає `--blue` |
+| Карта | `map.css`: `.user-marker-dom`, `.vehicle-arrow`, `.vehicle-marker-dot`, `.vehicle-cluster`, `.maplibregl-ctrl-group` | `city-map.js` і `trip-map.js` |
+| Екрани й навігація | `shared.css`: `.screen-container`, `#bottom-nav`, `.nav-item.active` | `navigation.js` і `style.display` |
+| Зупинки | `stops.css`: `.stop-suggestion-item`, `.stop-routes-carousel`, `.route-pill`, `.dep-card`, `.dep-expand.open`, `.ghost` | `stops.js` |
+| Планувальник | `planner.css`: `.trasa-card`, `.fullscreen-expanded`, `.trasa-row`, `.trasa-middle-scroll` | `planner.js` |
+| Звіти й форми | `reports.css`: `.report-card`, `.rc-vote-btn`, `#reports-drawer.open`, `#report-modal.show`, `.form-tab.active` | `reports.js`, `navigation.js` |
+| Модальна карта | `map.css`: `.modal-overlay`, `.modal-content`, `#modal-map`, `.close-btn` | `trip-map.js` |
+| Повідомлення | `shared.css`: `#toast.show` | `ui.js` створює елемент за потреби |
 
 CSS використовує абсолютне/fixed-позиціонування, вкладені селектори,
 `z-index`, safe-area та приховування загального скролу `html, body`.
@@ -499,7 +499,7 @@ GPS-позиція може існувати без відомої затрим�
 ### 8.6. Фактичний API та його споживачі
 
 Усі шляхи нижче зареєстровані в коді. «Немає виклику» означає відсутність
-запиту саме в поточному `frontend/app.js`, а не недоступність ендпоінта.
+запиту в поточних фронтенд-модулях, а не недоступність ендпоінта.
 
 | Метод і шлях | Реалізація | Дані / параметри та споживач |
 |---|---|---|
@@ -508,7 +508,7 @@ GPS-позиція може існувати без відомої затрим�
 | `POST /reports` | `ReportRoutes.kt` | `CreateReportRequest`; `submitReport` |
 | `POST /reports/{id}/confirm` | `ReportRoutes.kt` | `VoteRequest` із fingerprint; `vote` |
 | `POST /reports/{id}/deny` | `ReportRoutes.kt` | Той самий контракт; `vote` |
-| `GET /stops/dictionary` | `ReportRoutes.kt` | Словник назва з платформою → ID; немає виклику з app.js |
+| `GET /stops/dictionary` | `ReportRoutes.kt` | Словник назва з платформою → ID; фронтенд не викликає |
 | `GET /reports/{id}/risk-routes` | `RiskRoutes.kt` | Лінії/напрямки за розкладом у межах ±10 хв від допису; немає виклику |
 | `GET /reports/{id}/upcoming-stops` | `UpcomingStops.kt` | Зупинки прив'язаного до допису рейсу; немає виклику |
 | `GET /trips/{tripId}/upcoming-stops` | `UpcomingStops.kt` | Потрібен `fromStopId`; `renderDepExpand`, `fetchLegStops` |
@@ -545,42 +545,23 @@ Rate limit — 5 хв на fingerprint для звичайного нового 
 
 ## 9. Де шукати потрібний код
 
-Для пошуку в редакторі відкрийте вказаний файл і скопіюйте орієнтир у пошук
+Для пошуку в редакторі відкрийте вказаний модуль і скопіюйте орієнтир у пошук
 (зазвичай Ctrl+F). Назви надійніші за номери рядків: рядки зсуваються після змін.
 DOM — це елементи сторінки; `id="..."` знаходить розмітку елемента,
-а назва функції — його поведінку. Рядки таблиці описують поточні місця реалізації.
+а назва функції — його поведінку.
 
-| Що потрібно знайти | `frontend/app.js`: точні орієнтири, функції та стан | `frontend/index.html`: орієнтири |
+| Що потрібно знайти | Файл і орієнтир | DOM / CSS |
 |---|---|---|
-| Адреса бекенда | `let API_BASE_URL`, `trycloudflare.com` на початку | Підключення `src="config.js"`, `src="app.js"` наприкінці |
-| Порядок запуску | `DOMContentLoaded`, коментар `Старт`, `initMap` | Скрипт із `themePref` у head та три нижні script-теги |
-| Перемикання вкладок | `function switchScreen`, `popstate`, `history.pushState` | `id="bottom-nav"`, `onclick="switchScreen` |
-| Головна карта, її кнопки та 3D | `initMap`, `addMapButton`, `apply3D`, `setMapMode3D`, `mapIs3D` | `id="map"`, `.maplibregl-ctrl-group` |
-| Палітра й тема карти | `THEME_CYCLE`, `getThemePref`, `getEffectiveTheme`, `applyTheme`, `syncMapStyle`, `appliedMapTheme` | `:root[data-theme="dark"]`, `--blue`, `--map-ctrl-bg`; окремо style-light/dark.json |
-| GPS-маркер і точність | Робочий `trackUserLocation` після `Геолокація користувача`, `watchId`, `updateUserLocationAccuracyCircle`, `syncUserLocationAccuracyCircle` | `.user-marker-dom`, `@keyframes pulse-gps` |
-| Автобуси на карті | `updateLiveCityMap`, `activeVehicleMarkers`, `liveMapInterval` | `.vehicle-marker-dot`, `.vehicle-arrow` |
-| Кластери та плавний рух | `applyVehicleClustering`, `clusterByKey`, `animateMarkerTo`, `animStep`, `animatingMarkers`, `TELEPORT_M` | `.vehicle-cluster` |
-| Відкрити/закрити карту рейсу | `showVehicleOnMap`, `closeVehicleMapModal`, `modalTrackingSession`, `modalMap`, `modalUserInteracted` | `id="vehicle-modal"`, `id="modal-map"`, `id="close-modal-btn"` |
-| Лінія дороги й активний відрізок | `drawRouteShape`, `sliceLineString`, `projectPointToLineString`, `route-active-segment` | Контейнер `modal-map`; лінія малюється JS, не CSS |
-| Поля «звідки/куди», адреси | `setupRouteAutocomplete`, `mapTilerUrl`, `routeFromStop`, `routeToStop` | `id="route-input-from"`, `id="route-input-to"`, `route-suggestions-from/to` |
-| GPS, очищення й обмін полів | `updateRouteButtonState`, `applyMyCurrentLocation`, `swapRoutePoints` | `route-clear-from/to`, `.icon-location`, `.icon-clear`, `.icon-swap` |
-| Історія поїздок і точок | `getRecentRoutes`, `saveRecentRoute`, `renderRecentRoutes`, `applyRecentRoute`, `getRecentRouteStops`, `saveRecentRouteStop` | `id="recent-routes-list"` |
-| Пошук поїздки | `searchRouteBtn.addEventListener`, `/route/complex`, `lastJourneyDepartureMin` | `id="route-search-btn"`, `id="route-results-list"` |
-| Вигляд картки поїздки | `buildJourneyCard`, `splitStopName`, `getLiveStatusBadge` | `.trasa-card`, `.trasa-row`, `.trasa-legend` |
-| LIVE-час і пересадки | `updateTrasaCountdowns`, `rowLiveMin`, `coloredTimeHtml`, `trasa-transfer-warn`, `window.trasaCountdownInterval` | `.time-delay`, `.time-early`; частина стилів у шаблонах app.js |
-| Розгорнута поїздка, зупинки | `toggleTrasaExpand`, `fetchLegStops`, `refreshOpenTrasaPassedStops` | `.trasa-card.fullscreen-expanded`, `.trasa-middle-scroll` |
-| Пізніші поїздки свайпом | Коментар `СВАЙПИ ДЛЯ МАРШРУТІВ`, `trasaIsRefreshing`, `nextSearchMin` | `route-results-list`; індикатор створюється JS |
-| Nearby-пошук обох екранів | `loadRouteDefaultSuggestions`, `loadNearbyStopsDefault`, `showNearbyStops`, `globalCachedNearbyStops` | `route-suggestions-from/to`, `stop-screen-suggestions` |
-| Пошук платформи й її вибір | `stopSearchInput.addEventListener`, `createStopSuggestionElement`, `currentStopIdForDepartures` | `id="stop-screen-search"`, `id="stop-name-display"` |
-| Табло, затримки та його оновлення | `loadDepartures`, `currentDeparturesData`, `departuresRefreshInterval`, `addMinutesToTime` | `id="departures-list"`, `.dep-card`, `.dep-min`, `.dep-status`, `.ghost` |
-| Історія/майбутнє табло свайпами | Коментар `Ручне оновлення`, `topTimeOffset`, `bottomTimeOffset`, `isRefreshing` | `departures-list`; індикатори створюються JS |
-| Деталі відправлення | `toggleDepExpand`, `renderDepExpand` | `.dep-expand.open`, `.dep-expand-stop-passed`, `.dep-expand-map-btn` |
-| Стрічка й голосування | `openDrawer`, `renderReportsList`, `fetchReports`, `reportCardHtml`, `vote`, `reportsById` | `id="reports-drawer"`, `id="drawer-list"`, `.report-card`, `.rc-vote-btn` |
-| Створення/оновлення звіту | `openModal`, `openUpdateModal`, `submitReport`, `updateContext`, `resetForm` | `id="report-modal"`, `id="submit-btn"`, `id="form-hint"` |
-| Поля основної форми | `switchFormTab`, `loadRoutesForAutocomplete`, `loadDirectionsForRoute`, `selectedPrzystanekStopId`, `isStopLiniaSelected` | `tab-linia/przystanek`, `route-input`, `stop-name-input`, `stop-id-input`, `direction-select` |
-| Швидка форма-заглушка | `openQuickModal`, `selectQuickOption`, `sendQuickReport`, `currentQuickSelection` | `id="quick-report-modal"`, `id="quick-options-list"` |
-| Затемнення, закриття та toast | `overlay` у `getElementById`, `closeDrawer`, `closeModal`, `showToast`, `toastTimeout` | `id="overlay"`, `#toast.show` |
-| Старий пошук на карті | `initSearchBar`, `runStopSearch`, `flyToStop` | `.leaflet-`, `#search-bar` у CSS; відповідної HTML-панелі немає |
+| Запуск і адреса API | `js/main.js`: `startApp`; `js/config.js`: `readConfig` | `config.js`, `js/main.js` наприкінці `index.html` |
+| Перемикання вкладок і History API | `js/navigation.js`: `switchScreen`, `handlePopState`, `push…History` | `#bottom-nav`, `#overlay` |
+| Головна карта, 2D/3D, GPS і LIVE | `js/city-map.js`: `initMap`, `setMapMode3D`, `trackUserLocation`, `updateLiveCityMap` | `#map`, `css/map.css` |
+| Кластери й рух маркерів | `js/city-map.js`: `applyVehicleClustering`; `js/marker-animation.js`: `animateMarkerTo` | `.vehicle-cluster`, `.vehicle-arrow` |
+| Карта конкретного рейсу | `js/trip-map.js`: `showVehicleOnMap`, `closeVehicleMapModal`, `drawRouteShape` | `#vehicle-modal`, `#modal-map` |
+| Тема | `js/theme.js`: `getEffectiveTheme`, `applyTheme`, `cycleTheme`; `city-map.js`: `syncMapStyle` | `css/base.css`, `style-light.json`, `style-dark.json` |
+| Планувальник і історія маршрутів | `js/planner.js`: `setupRouteAutocomplete`, `renderRecentRoutes`, `buildJourneyCard`, `updateTrasaCountdowns` | `#route-input-from`, `#route-input-to`, `#route-results-list`, `css/planner.css` |
+| Пошук зупинки й табло | `js/stops.js`: `loadNearbyStopsDefault`, `loadDepartures`, `toggleDepExpand` | `#stop-screen-search`, `#departures-list`, `css/stops.css` |
+| Звіти, голосування й форми | `js/reports.js`: `renderReportsList`, `vote`, `submitReport`, `openUpdateModal` | `#reports-drawer`, `#report-modal`, `css/reports.css` |
+| Спільні сервіси | `js/location.js`, `js/nearby.js`, `js/ui.js` | `#toast`, `css/shared.css` |
 
 Для API шукайте точний шлях у Kotlin, наприклад `get("/route/complex")`
 або `post("/reports")`. Відповіді описані переважно в `Dtos.kt`;
@@ -594,21 +575,13 @@ DOM — це елементи сторінки; `id="..."` знаходить р
 
 ### 10.1. Вимкнені й незавершені гілки
 
-- `refreshMapMarkers` одразу виконує `return`; нижче лишився недосяжний
-  Leaflet-код `L.circleMarker`. Звіти на головній карті не малюються.
-- `drawVehicleMarker` також є заглушкою. Робочі LIVE-маркери створюють
-  `updateLiveCityMap` та `showVehicleOnMap`, а не ця функція.
+- `refreshMapMarkers` у `reports.js` одразу виконує `return`; нижче лишився
+  недосяжний Leaflet-код `L.circleMarker`. Звіти на головній карті не малюються.
+  Робочі LIVE-маркери створюють `city-map.js` і `trip-map.js`.
 - `initSearchBar` не викликається, а `search-bar`, `search-input`,
   `search-clear`, `search-suggestions` відсутні в HTML. `flyToStop`
   використовує `L.marker` та старий виклик `flyTo`, хоча Leaflet не підключений.
 - `sendQuickReport` не виконує POST, попри повідомлення про успіх.
-- `trackedTripId` не оголошений: `stopVehicleTracking` присвоює його як
-  неявну глобальну змінну в класичному скрипті. `refreshTrackedVehicle`
-  читає її; `vehicleTrackInterval` також не має оголошення. Ця стара гілка
-  не є поточним механізмом мінікарти. У строгому режимі неоголошене
-  присвоєння спричинить помилку.
-- `trackUserLocation` визначено двічі; у класичному скрипті використовується
-  пізніше робоче визначення. Порожнє раннє визначення не є окремим GPS-сервісом.
 
 ### 10.2. DOM, CSS і обробники
 
@@ -616,20 +589,18 @@ DOM — це елементи сторінки; `id="..."` знаходить р
 - CSS містить невалідний селектор `..trasa-wrapper`.
 - Правила `.trasa-detail-box.trolleybus::before/::after` та
   `.trasa-compact-header .dep-route-box.trolleybus::before/::after`
-  повторюються; `#stop-screen-suggestions` перевизначається другим style-блоком.
+  повторюються; `#stop-screen-suggestions` визначається в `stops.css` і
+  фінально перевизначається у `compatibility.css`.
 - Початкові темні фони `.rc-vote-btn.confirm/deny/update` не обмежені
   dark-селектором і нижче перекриваються світлими правилами з тією самою
   специфічністю. Старі `.leaflet-*` правила лишилися без підключеної бібліотеки.
-- `focus`-обробники прокручування полів `#report-modal input` додаються
-  і одразу в коді, і в `DOMContentLoaded`, тобто реєструються двічі.
 - DOM-структура є частиною логіки: наприклад, збереження відкритої панелі
   табло використовує `nextElementSibling`, а таймери Trasa — конкретні
   класи та `data-*`. Зміна розмітки може змінити поведінку.
-- `renderRecentRoutes` вставляє `JSON.stringify(route)` в одинарні лапки
-  inline-атрибута без HTML-екранування. Апостроф у назві здатен пошкодити
-  атрибут. Інші шаблони також вставляють зовнішні назви через `innerHTML`;
-  `escapeHtml` застосовується не до всіх даних. Це підтверджений спосіб
-  побудови HTML; експлуатація чи конкретний збій не перевірялися.
+- `renderRecentRoutes` уже прив'язує кліки через `addEventListener`, але інші
+  шаблони все ще вставляють зовнішні назви через `innerHTML`; `escapeHtml`
+  застосовується не до всіх даних. Це підтверджений спосіб побудови HTML;
+  експлуатація чи конкретний збій не перевірялися.
 
 ### 10.3. Час, асинхронність і кеші
 
@@ -664,7 +635,7 @@ DOM — це елементи сторінки; `id="..."` знаходить р
 - `backend/README.md` застарів щодо відсутнього wrapper, `/flag`,
   автоприховування та TTL стрічки. Приклад створення
   допису з `stopId + route` без `stopName` не відповідає поточній валідації.
-- Коментарі та порожній стан стрічки в `app.js` говорять про 45 хв,
+- Коментарі та порожній стан стрічки в `reports.js` говорять про 45 хв,
   але `GET /reports` фільтрує від останньої 05:00. Межа 45 хв діє для
   оновлення оригіналу й старої логіки кольору маркера.
 - `CLAUDE.md` правильно описує основний стек, геокодинг та API, але слово

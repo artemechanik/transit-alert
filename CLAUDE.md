@@ -15,10 +15,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Frontend**: PWA, MapLibre GL. Локальні стилі `frontend/style-light.json` і
   `frontend/style-dark.json` на основі OSM Liberty перемикаються по темі;
   векторні тайли — MapTiler (`v3-openmaptiles`). Клієнтський ключ `MAPTILER_KEY`
-  задається у `frontend/config.js`, який підключається перед `app.js`;
+  задається у `frontend/config.js`, який підключається перед `js/main.js`;
   шаблон — `frontend/config.example.js`.
+- **Frontend-модулі**: точка входу — `frontend/js/main.js` (ES-модуль). Вона
+  створює модулі карти, мінікарти рейсу, планувальника, зупинок, звітів і
+  навігації та передає їм спільні залежності. Стилі розділені між
+  `frontend/css/*.css`.
 - **Геокодинг адрес**: робиться напряму з фронтенду через MapTiler Geocoding API
-  (`app.js`, автокомпліт полів "звідки/куди"), НЕ через бекенд-проксі. При вводі
+  (`frontend/js/planner.js`, автокомпліт полів "звідки/куди"), НЕ через
+  бекенд-проксі. При вводі
   паралельно (`Promise.all`) летять запит до свого `/stops/search` (зупинки) і
   запит до `api.maptiler.com/geocoding/...` (адреси, обмежено bbox Любліна
   `22.35,51.11,22.75,51.36`). Результати показуються в одному дропдауні:
@@ -66,7 +71,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   Окремий клас: `./gradlew test --tests "com.artem.transitalert.GtfsTimeTest"`.
 - **Frontend:** статика, віддається будь-яким HTTP-сервером:
   `cd frontend && python3 -m http.server 8000` → `http://localhost:8000`.
-  `frontend/app.js` б'є у бекенд напряму (CORS `anyHost()`).
+  `frontend/js/main.js` б'є у бекенд напряму (CORS `anyHost()`).
 - **Дані GTFS:** seed-файлів немає — `GtfsStaticSync` сам заповнює `stops`, `service_calendar`,
   `trip_headsigns`, `stop_departures`, `trip_stops` з фіду при першому старті. Щоб примусово
   перезалити: `DELETE FROM gtfs_feed_meta;` і перезапуск бекенда.

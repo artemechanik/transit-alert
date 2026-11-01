@@ -48,8 +48,8 @@
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" id="tab-btn-linia" onclick="switchFormTab('linia', this)">Linia</button>
-    <button class="tab-btn" id="tab-btn-przystanek" onclick="switchFormTab('przystanek', this)">Przystanek</button>
+    <button class="tab-btn active" id="tab-btn-linia">Linia</button>
+    <button class="tab-btn" id="tab-btn-przystanek">Przystanek</button>
   </div>
 
   <div class="form-body">
@@ -100,24 +100,24 @@
 
   <div class="quick-options" id="quick-options-list">
     <!-- За замовчуванням обрано перший варіант -->
-    <button class="quick-option selected" onclick="selectQuickOption(this, 'Linia 14')">
+    <button class="quick-option selected" data-report-value="Linia 14">
       <div class="svg-icon icon-bus"></div> Linia 14 (w pobliżu)
     </button>
-    <button class="quick-option" onclick="selectQuickOption(this, 'Lotnicza 01')">
+    <button class="quick-option" data-report-value="Lotnicza 01">
       <div class="svg-icon icon-bus-stop"></div> Lotnicza 01 (30m)
     </button>
-    <button class="quick-option" onclick="selectQuickOption(this, 'Obecna lokalizacja')">
+    <button class="quick-option" data-report-value="Obecna lokalizacja">
       <div class="svg-icon icon-map-pin"></div> Obecna lokalizacja
     </button>
   </div>
 
   <div class="quick-actions">
-    <button class="quick-action-btn btn-cancel" onclick="closeQuickModal()">Anuluj</button>
-    <button class="quick-action-btn btn-confirm" id="quick-confirm-btn" onclick="sendQuickReport()">Potwierdzam</button>
+    <button class="quick-action-btn btn-cancel">Anuluj</button>
+    <button class="quick-action-btn btn-confirm" id="quick-confirm-btn">Potwierdzam</button>
   </div>
 
   <div class="manual-link-wrap">
-    <a href="#" class="manual-link" onclick="openManualFromQuick(); return false;">Wpisz ręcznie (inna lokalizacja)</a>
+    <a href="#" class="manual-link">Wpisz ręcznie (inna lokalizacja)</a>
   </div>
 </div><!-- --- Екран "Przystanek" (Розклад) --- -->
 <link rel="stylesheet" href="css/stop-overrides.css">

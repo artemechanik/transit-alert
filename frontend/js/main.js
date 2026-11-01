@@ -6,6 +6,7 @@ import { createCityMap } from './city-map.js';
 import { createTripMap } from './trip-map.js';
 import { createStops } from './stops.js';
 import { createPlanner } from './planner.js';
+import { createReports } from './reports.js';
 
 let startupPromise;
 
@@ -47,7 +48,8 @@ function startManagedLegacy() {
       createPlanner: legacyDeps => createPlanner({
         ...legacyDeps,
         locationService, getNearbyStops
-      })
+      }),
+      createReports
     };
     window.transitMigration = bridge;
 

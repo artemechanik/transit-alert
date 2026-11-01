@@ -4,6 +4,7 @@ import * as locationService from './location.js';
 import * as themeService from './theme.js';
 import { createCityMap } from './city-map.js';
 import { createTripMap } from './trip-map.js';
+import { createStops } from './stops.js';
 
 let startupPromise;
 
@@ -37,6 +38,10 @@ function startManagedLegacy() {
         ...legacyDeps,
         maplibregl: window.maplibregl,
         themeService, locationService, animation: markerAnimation
+      }),
+      createStops: legacyDeps => createStops({
+        ...legacyDeps,
+        locationService, getNearbyStops
       })
     };
     window.transitMigration = bridge;

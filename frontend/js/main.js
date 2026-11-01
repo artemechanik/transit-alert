@@ -5,6 +5,7 @@ import * as themeService from './theme.js';
 import { createCityMap } from './city-map.js';
 import { createTripMap } from './trip-map.js';
 import { createStops } from './stops.js';
+import { createPlanner } from './planner.js';
 
 let startupPromise;
 
@@ -40,6 +41,10 @@ function startManagedLegacy() {
         themeService, locationService, animation: markerAnimation
       }),
       createStops: legacyDeps => createStops({
+        ...legacyDeps,
+        locationService, getNearbyStops
+      }),
+      createPlanner: legacyDeps => createPlanner({
         ...legacyDeps,
         locationService, getNearbyStops
       })

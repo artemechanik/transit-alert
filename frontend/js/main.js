@@ -3,6 +3,7 @@ import * as markerAnimation from './marker-animation.js';
 import * as locationService from './location.js';
 import * as themeService from './theme.js';
 import { createCityMap } from './city-map.js';
+import { createTripMap } from './trip-map.js';
 
 let startupPromise;
 
@@ -28,6 +29,11 @@ function startManagedLegacy() {
       mode: 'managed', getNearbyStops, markerAnimation,
       location: locationService, theme: themeService,
       createCityMap: legacyDeps => createCityMap({
+        ...legacyDeps,
+        maplibregl: window.maplibregl,
+        themeService, locationService, animation: markerAnimation
+      }),
+      createTripMap: legacyDeps => createTripMap({
         ...legacyDeps,
         maplibregl: window.maplibregl,
         themeService, locationService, animation: markerAnimation

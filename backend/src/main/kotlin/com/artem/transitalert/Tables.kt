@@ -4,7 +4,7 @@ import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.javatime.timestamp
 
 object Stops : Table("stops") {
-    val stopId = varchar("stop_id", 16)
+    val stopId = varchar("stop_id", 64)
     val name = varchar("name", 128)
     val code = varchar("code", 8)
     val lat = double("lat")
@@ -14,7 +14,7 @@ object Stops : Table("stops") {
 
 object Reports : Table("reports") {
     val id = integer("id").autoIncrement()
-    val stopId = varchar("stop_id", 16).references(Stops.stopId)
+    val stopId = varchar("stop_id", 64).references(Stops.stopId)
     val comment = varchar("comment", 200).nullable()
     val route = varchar("route", 16).nullable()
     val direction = varchar("direction", 128).nullable()
@@ -42,7 +42,7 @@ object ReportVotes : Table("report_votes") {
 
 object StopDepartures : Table("stop_departures") {
     val id = integer("id").autoIncrement()
-    val stopId = varchar("stop_id", 16)
+    val stopId = varchar("stop_id", 64)
     val route = varchar("route", 16)
     val departureMinutes = integer("departure_minutes")
     val serviceId = varchar("service_id", 32)
@@ -74,7 +74,7 @@ object TripStops : Table("trip_stops") {
     val id = integer("id").autoIncrement()
     val tripId = varchar("trip_id", 32)
     val stopSequence = integer("stop_sequence")
-    val stopId = varchar("stop_id", 16)
+    val stopId = varchar("stop_id", 64)
     val stopName = varchar("stop_name", 128)
     val departureMinutes = integer("departure_minutes")
     override val primaryKey = PrimaryKey(id)

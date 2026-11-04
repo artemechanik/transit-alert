@@ -22,13 +22,34 @@ import java.sql.Connection
 import java.time.Instant
 import java.util.zip.ZipInputStream
 
-private const val GTFS_STATIC_ZIP_URL = "https://cdn.zbiorkom.live/gtfs/lublin.zip"
+private const val GTFS_STATIC_ZIP_URL = "https://api.zbiorkom.live/api6-open/lublin/gtfs/default"
 
 // zbiorkom.live перегенеровує статичний фід (і trip_id разом з ним) раз на 1-2 тижні,
 // тому перевірки раз на 6 год більш ніж достатньо, щоб підхопити зміну без ручного втручання.
 private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
 
 private const val META_ROW_ID = 1
+
+private val PLATFORM_SUFFIX = Regex("""^(.+)\s+(\d{2})$""")
+
+/** Приводить новий фід до наявних полів name/code, не змінюючи зовнішній stop_id. */
+internal fun normalizeGtfsStop(stop: Map<String, String>, onDemand: Boolean = false): Map<String, String> {
+    val rawName = stop.getValue("stop_name").trim()
+    // Старий формат уже має окремий stop_code, включно з порожнім кодом депо.
+    val suffix = if (stop.containsKey("stop_code")) null else PLATFORM_SUFFIX.matchEntire(rawName)
+    val code = stop["stop_code"] ?: stop["platform_code"]?.takeIf { it.isNotBlank() }
+        ?: suffix?.groupValues?.get(2).orEmpty()
+    val name = if (suffix != null && suffix.groupValues[2] == code) {
+        suffix.groupValues[1].trimEnd()
+    } else {
+        rawName
+    }
+    val displayName = if (onDemand && !name.endsWith(" NŻ")) "$name NŻ" else name
+    return stop + mapOf("stop_name" to displayName, "stop_code" to code)
+}
+
+internal fun isGtfsOnDemandStop(pickupType: String?, dropOffType: String?): Boolean =
+    pickupType == "3" || dropOffType == "3"
 
 /**
  * Фоновий синхронізатор статичного GTFS (аналог LiveVehiclesCache, тільки для
@@ -115,6 +136,10 @@ object GtfsStaticSync {
         if (response.status == HttpStatusCode.NotModified) {
             logger.info("GTFS static: 304 Not Modified — фід не змінився")
             return
+        }
+
+        check(response.status == HttpStatusCode.OK) {
+            "GTFS static: HTTP ${response.status} замість GTFS ZIP"
         }
 
         val zipBytes = response.readBytes()
@@ -227,7 +252,7 @@ object GtfsStaticSync {
 
     private fun importFeed(zipBytes: ByteArray) {
         // Малі довідники — повністю в пам'ять (stops ~1.5к рядків, routes ~50, trips ~15-20к).
-        val stopsById = readCsvEntry(zipBytes, "stops.txt")!!.associateBy { it["stop_id"]!! }
+        val rawStopsById = readCsvEntry(zipBytes, "stops.txt")!!.associateBy { it["stop_id"]!! }
         val routeShortNameById = readCsvEntry(zipBytes, "routes.txt")!!
             .associate { it["route_id"]!! to it["route_short_name"]!! }
         val tripsById = readCsvEntry(zipBytes, "trips.txt")!!.associateBy { it["trip_id"]!! }
@@ -237,19 +262,29 @@ object GtfsStaticSync {
         // Прохід 1 по stop_times.txt: знаходимо останній stop_sequence кожного trip_id -> headsign.
         val lastStopIdByTrip = HashMap<String, String>()
         val lastSeqByTrip = HashMap<String, Int>()
+        val onDemandStops = HashSet<String>()
         withCsvEntry(zipBytes, "stop_times.txt") { header, lines ->
             val tripIdx = header.indexOf("trip_id")
             val seqIdx = header.indexOf("stop_sequence")
             val stopIdx = header.indexOf("stop_id")
+            val pickupIdx = header.indexOf("pickup_type")
+            val dropOffIdx = header.indexOf("drop_off_type")
             for (row in lines) {
                 val tripId = row[tripIdx]
                 val seq = row[seqIdx].toIntOrNull() ?: continue
                 val stopId = row[stopIdx]
+                if (isGtfsOnDemandStop(row.getOrNull(pickupIdx), row.getOrNull(dropOffIdx))) {
+                    onDemandStops.add(stopId)
+                }
                 if (seq >= (lastSeqByTrip[tripId] ?: -1)) {
                     lastSeqByTrip[tripId] = seq
                     lastStopIdByTrip[tripId] = stopId
                 }
             }
+        }
+
+        val stopsById = rawStopsById.mapValues { (stopId, stop) ->
+            normalizeGtfsStop(stop, stopId in onDemandStops)
         }
 
         val rawConn = DatabaseFactory.dataSource.connection

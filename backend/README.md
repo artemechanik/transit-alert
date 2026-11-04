@@ -1,5 +1,9 @@
 # transit-alert — Етап 1: бекенд-основа
 
+Історичний опис етапів; актуальні запуск і контракти API див. у
+[головному README](../README.md) та [архітектурі](../docs/architecture.md).
+Нижче оновлено джерела GTFS, але старі приклади форм не є актуальною специфікацією API.
+
 ## Що тут є
 - Ktor-сервер (Netty), Kotlin
 - Exposed + Postgres (через HikariCP)
@@ -71,11 +75,19 @@ curl "http://localhost:8080/live-vehicles?route=153"
 ```
 
 ## Live GPS (zbiorkom.live)
-Фоновий сервіс раз на 15 сек тягне `https://cdn.zbiorkom.live/gtfs-rt/lublin.pb`
+Фоновий сервіс із паузою 15 сек тягне
+`https://api.zbiorkom.live/api6-open/lublin/gtfsRealtime/default/vehiclePositions,tripUpdates`
 (стандартний GTFS-Realtime), кешує позиції в пам'яті за `trip_id` — той самий
 формат ID, що і в нашому статичному GTFS, тому мапиться напряму без конвертації.
 Перші кілька секунд після старту застосунку `/live-vehicles` може бути порожнім,
 поки не відбудеться перший поллінг.
+
+Статичний ZIP: `https://api.zbiorkom.live/api6-open/lublin/gtfs/default`.
+Обидва завантаження перевіряють HTTP 200; static також обробляє 304.
+Новий `stop_name` розділяється на базову назву й код платформи, а NŻ
+відновлюється за pickup/drop-off типу `3`. `stop_id` має ліміт 64 символи
+в усіх чотирьох таблицях, що його зберігають; старій БД потрібна окрема міграція.
+Bearing залишається відкритою проблемою; його алгоритм у цьому переході не змінено.
 
 ## Наступні кроки (не зараз, для контексту)
 - Етап 2: ендпоінт ризикових ліній (`stop_departures.json` + `service_calendar.json` → Postgres)

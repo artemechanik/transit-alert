@@ -1,4 +1,5 @@
 import { readConfig } from './config.js';
+import { resetLegacyTransportHistory } from './transport-history.js';
 import { showToast, refreshMapVehicleArrows } from './ui.js';
 import { getNearbyStops } from './nearby.js';
 import * as markerAnimation from './marker-animation.js';
@@ -22,6 +23,8 @@ function startApp() {
         document.addEventListener('DOMContentLoaded', resolve, { once: true });
       });
     }
+
+    resetLegacyTransportHistory();
 
     if (typeof window.maplibregl?.Map !== 'function') {
       throw new Error('MapLibre не завантажено');

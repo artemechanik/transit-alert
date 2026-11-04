@@ -5,6 +5,7 @@ import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
+import io.ktor.http.*
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
@@ -12,7 +13,8 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
-private const val ZBIORKOM_LUBLIN_PB_URL = "https://cdn.zbiorkom.live/gtfs-rt/lublin.pb"
+private const val ZBIORKOM_LUBLIN_PB_URL =
+    "https://api.zbiorkom.live/api6-open/lublin/gtfsRealtime/default/vehiclePositions,tripUpdates"
 private const val POLL_INTERVAL_MS = 15_000L
 
 data class VehiclePosition(
@@ -99,7 +101,11 @@ object LiveVehiclesCache {
         // яку спіймає наш catch у startPolling і перезапустить цикл.
        // Якщо сервер мовчить 10 секунд - поверне null, і ми кинемо звичайний Exception
 	val bytes: ByteArray = withTimeoutOrNull(10_000L) {
-  	  client.get(ZBIORKOM_LUBLIN_PB_URL).readBytes()
+        val response = client.get(ZBIORKOM_LUBLIN_PB_URL)
+        check(response.status == HttpStatusCode.OK) {
+            "GTFS-RT: HTTP ${response.status} замість protobuf"
+        }
+        response.readBytes()
 	} ?: throw Exception("Таймаут 10с при запиті до GTFS-RT")
         val feed = GtfsRealtime.FeedMessage.parseFrom(bytes)
 

@@ -11,6 +11,9 @@ import kotlin.math.*
 
 data class TempStop(val stopId: String, val name: String, val code: String, val distance: Double)
 
+internal val nearbyPlatformOrder = compareBy<TempStop> { it.code.toIntOrNull() ?: Int.MAX_VALUE }
+    .thenBy { it.code }
+
 fun Application.stopRoutes() {
     routing {
 
@@ -106,7 +109,7 @@ fun Application.stopRoutes() {
                         NearbyGroupDto(
                             name = groupName,
                             distance = minDistance.roundToLong(),
-                            stops = stopsInGroup.map { tempStop ->
+                            stops = stopsInGroup.sortedWith(nearbyPlatformOrder).map { tempStop ->
                                 
                                 val platformRoutes = (routesByStop[tempStop.stopId] ?: emptySet())
                                     .distinctBy { it.route to it.direction.trim() }

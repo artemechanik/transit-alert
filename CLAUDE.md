@@ -29,9 +29,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   `22.35,51.11,22.75,51.36`). Результати показуються в одному дропдауні:
   зупинки → `{name, ids}` (масив stopId), адреси → `{name, lat, lon}`
   (з `feature.center`).
-- **GTFS дані**: реальний час через zbiorkom.live (`lublin.pb`, ~80–190 позицій
-  кожні 15с, MIT-ліцензія, легально). Статичні дані GTFS синхронізуються
-  через `GtfsStaticSync.kt` (idempotent, 304-aware, FK-safe UPSERT).
+- **GTFS дані**: zbiorkom.live api6-open, оператор `default`:
+  static — `https://api.zbiorkom.live/api6-open/lublin/gtfs/default`,
+  realtime — `https://api.zbiorkom.live/api6-open/lublin/gtfsRealtime/default/vehiclePositions,tripUpdates`.
+  LIVE опитується з паузою 15с, static — 6 годин через `GtfsStaticSync.kt`
+  (idempotent, 304-aware, FK-safe UPSERT). Обидва завантаження вимагають HTTP 200;
+  для static HTTP 304 пропускає імпорт. Окремої перевірки Content-Type немає.
+- **Назви платформ**: новий фід не має `stop_code`; імпортер виділяє кінцевий
+  двозначний номер із `stop_name`, зберігаючи API `name`/`code` та початкові нулі.
+  Явний `stop_code` старого формату має пріоритет; інакше використовується
+  непорожній `platform_code` або суфікс назви. NŻ додається за
+  `pickup_type == "3"` або `drop_off_type == "3"` у stop_times, без дублювання.
+  Одна назва використовується в `stops`, `trip_stops` та напрямках.
 - **Роутинг**: Dijkstra-based (`RoutingGraph.kt`) — свідомо не мігрували на
   RAPTOR, бо мережа Любліна невелика і немає ресурсів на повну реалізацію
 - **Report-скрапер**: `fb.py` (google-genai SDK, модель `gemini-3.5-flash-lite`)
@@ -40,8 +49,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Важливі нюанси / "гострі кути"
 
-- `zbiorkom.live` регенерує trip_id префікси кожні 1–2 тижні — це ламає
-  статичні join'и в БД, якщо забути про auto-sync job
+- `stop_id` і `trip_id` використовуються напряму з фіда, без таблиці відповідностей.
+  Static і realtime мають бути узгоджені; зміна ID рейсів без static sync ламає join'и.
+- `stop_id` має довжину 64 у `stops`, `reports`, `stop_departures`, `trip_stops`.
+  `SchemaUtils.create()` не розширює старі колонки: наявна БД потребує окремої
+  міграції з 16 до 64. Звичайний імпорт не видаляє відсутні зупинки або звіти.
+- **Відкрито: bearing.** Алгоритм не виправлений: відсутнє protobuf-поле зараз
+  читається як 0, а частина наявних значень джерела не узгоджується з GPS-рухом.
+  Не додавати кутову корекцію, фільтр за моделлю або заміну на GPS-курс без погодження.
 - MUNICOM/sip.zdtm.lublin.eu (live GPS) — навмисно НЕ використовується:
   обфускований anti-bot JS, юридичний ризик. Не пропонувати як рішення.
 - Dworzec Lublin (залізничний вокзал) має нестандартну нумерацію платформ
@@ -69,9 +84,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   є класи `GtfsTimeTest` і `GtfsSearchStartTest`: перевіряють час GTFS та старт
   пошуку маршрутів, зокрема в дні переходу між літнім і зимовим часом.
   Окремий клас: `./gradlew test --tests "com.artem.transitalert.GtfsTimeTest"`.
+  `GtfsStopTest` перевіряє формати назв/платформ і NŻ;
+  `NearbyPlatformOrderTest` — числове сортування платформ у групі nearby.
 - **Frontend:** статика, віддається будь-яким HTTP-сервером:
   `cd frontend && python3 -m http.server 8000` → `http://localhost:8000`.
   `frontend/js/main.js` б'є у бекенд напряму (CORS `anyHost()`).
+  `transport-history.js` один раз скидає три `ta_recent_*` історії зі старими ID;
+  маркер `ta_gtfs_id_format=zbiorkom-api6` зберігає нову історію при наступних стартах.
 - **Дані GTFS:** seed-файлів немає — `GtfsStaticSync` сам заповнює `stops`, `service_calendar`,
   `trip_headsigns`, `stop_departures`, `trip_stops` з фіду при першому старті. Щоб примусово
   перезалити: `DELETE FROM gtfs_feed_meta;` і перезапуск бекенда.

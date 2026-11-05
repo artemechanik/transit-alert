@@ -35,6 +35,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   LIVE опитується з паузою 15с, static — 6 годин через `GtfsStaticSync.kt`
   (idempotent, 304-aware, FK-safe UPSERT). Обидва завантаження вимагають HTTP 200;
   для static HTTP 304 пропускає імпорт. Окремої перевірки Content-Type немає.
+- **Довіра до LIVE**: `updatePositions()` не додає до спільного live-кешу
+  записи з розрахованою `delaySeconds > 7200`. Рівно 7200 с і `null`
+  залишаються. Відсікаються GPS, затримка та поточний sequence для всіх
+  споживачів кешу; статичний рейс і граф зберігаються. Bearing і нерухомість
+  не є критеріями: підтверджено рухомий транспорт без bearing.
 - **Назви платформ**: новий фід не має `stop_code`; імпортер виділяє кінцевий
   двозначний номер із `stop_name`, зберігаючи API `name`/`code` та початкові нулі.
   Явний `stop_code` старого формату має пріоритет; інакше використовується
@@ -86,6 +91,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   Окремий клас: `./gradlew test --tests "com.artem.transitalert.GtfsTimeTest"`.
   `GtfsStopTest` перевіряє формати назв/платформ і NŻ;
   `NearbyPlatformOrderTest` — числове сортування платформ у групі nearby.
+  `LiveVehiclesBearingTest` перевіряє збереження позицій без bearing,
+  явного нуля й звичайного кута; `LiveVehiclesDelayTest` — межу 7200 с,
+  відсутні дані, оновлення кешу, GPS/delays API та вплив на перший рейс і пересадки.
+  Загалом — 35 backend-тестів.
+- **Frontend-тести:** `node frontend/tests/planner-polling.test.mjs` і
+  `node frontend/tests/trip-map.test.mjs` — 12 тестів із контрольованими API,
+  таймерами та замінами DOM/MapLibre, без живого фіда. Це не браузерні тести.
+- **Життєвий цикл LIVE фронтенду:** вихід із Trasa зупиняє її таймер і
+  скасовує запит delays; повернення одразу оновлює дані й відновлює polling.
+  HTTP 404 у відкритій мінікарті видаляє лише транспортний маркер; наступний
+  200 відновлює його. Мережеві та інші HTTP-помилки зберігають маркер.
+  Відкрито: зміна теми мінікарти видаляє карту без повного очищення сесії й таймера.
 - **Frontend:** статика, віддається будь-яким HTTP-сервером:
   `cd frontend && python3 -m http.server 8000` → `http://localhost:8000`.
   `frontend/js/main.js` б'є у бекенд напряму (CORS `anyHost()`).

@@ -40,9 +40,12 @@ export function createTripMap({
           if (!isCurrentSession() || modal.style.display === 'none') return;
 
           const lngLat = [vehicle.lon, vehicle.lat];
+          let appliedTheme = getEffectiveTheme();
+          let styleReady = false;
+          let routeGeometry = null;
           const trackingMap = new maplibregl.Map({
             container: 'modal-map',
-            style: mapStyleFor(getEffectiveTheme()),
+            style: mapStyleFor(appliedTheme),
             center: lngLat,
             zoom: 16,
             attributionControl: false,
@@ -67,8 +70,26 @@ export function createTripMap({
           trackingMap.on('rotate', () => {
             if (isCurrentMap()) refreshMapVehicleArrows(trackingMap);
           });
+          const restoreRoute = () => {
+            if (!isCurrentMap() || !trackingMap.isStyleLoaded()) return;
+            styleReady = true;
+            if (routeGeometry) renderRouteShape(trackingMap, routeGeometry);
+          };
+          trackingMap.on('style.load', restoreRoute);
+          session.applyTheme = () => {
+            if (!isCurrentMap()) return;
+            const theme = getEffectiveTheme();
+            if (theme === appliedTheme) return;
+            appliedTheme = theme;
+            styleReady = false;
+            trackingMap.setStyle(mapStyleFor(theme));
+          };
           trackingMap.on('load', () => {
-            if (isCurrentMap()) drawRouteShape(tripId, trackingMap, routeContext, isCurrentMap);
+            if (!isCurrentMap()) return;
+            drawRouteShape(tripId, routeContext, isCurrentMap, geometry => {
+              routeGeometry = geometry;
+              if (styleReady) restoreRoute();
+            });
           });
 
           const userPosition = locationService.getPosition();
@@ -266,7 +287,7 @@ export function createTripMap({
       return nearestPoint;
     }
 
-    async function drawRouteShape(tripId, mapInstance, context = { mode: 'przystanek' }, isCurrent = () => true) {
+    async function drawRouteShape(tripId, context, isCurrent, onGeometry) {
       try {
         const res = await fetch(`${apiBaseUrl}/api/trip-stops/${tripId}`);
         if (!res.ok) return;
@@ -295,6 +316,13 @@ export function createTripMap({
           routeGeoJSON = { type: 'LineString', coordinates: stops };
         }
 
+        onGeometry({ routeGeoJSON, stops, context });
+      } catch (e) {
+        console.error('Помилка побудови маршруту:', e);
+      }
+    }
+
+    function renderRouteShape(mapInstance, { routeGeoJSON, stops, context }) {
         const lineCoords = routeGeoJSON.coordinates;
         const snappedStops = stops.map(stop => projectPointToLineString(stop, lineCoords));
 
@@ -404,9 +432,6 @@ export function createTripMap({
             }
           });
         }
-      } catch (e) {
-        console.error('Помилка побудови маршруту:', e);
-      }
     }
 
     async function fetchVehiclePosition(tripId, signal) {
@@ -416,12 +441,8 @@ export function createTripMap({
       return res.json();
     }
 
-    // Повторює часткове очищення при зміні теми; повне close тут не викликаємо.
     function handleThemeChange() {
-        if (typeof modalMap !== 'undefined' && modalMap) {
-            modalMap.remove();
-            modalMap = null;
-        }
+        modalTrackingSession?.applyTheme?.();
     }
 
     // Сумісність зі старим stopVehicleTracking: лише polling, без закриття сеансу.

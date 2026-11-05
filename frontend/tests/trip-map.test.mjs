@@ -13,6 +13,7 @@ function setup(responses) {
   const timers = [], intervals = [], maps = [], animations = [], cancelled = [];
   const modal = { style: {} }, title = {};
   let requests = 0;
+  let theme = 'light';
   class Marker {
     constructor({ element }) { this.element = element; }
     setLngLat(position) { this.position = position; return this; }
@@ -22,9 +23,11 @@ function setup(responses) {
     remove() { this.map.markers.delete(this); }
   }
   class TrackingMap {
-    constructor() {
+    constructor(options) {
       this.markers = new Set(); this.handlers = {}; this.cameraMoves = 0;
       this.staticElements = { route: {}, stops: {} };
+      this.style = options.style; this.styleReady = true;
+      this.sources = new Map(); this.layers = new Map(); this.styleChanges = 0;
       maps.push(this);
     }
     on(event, callback) { this.handlers[event] = callback; }
@@ -32,6 +35,21 @@ function setup(responses) {
     getBearing() { return 0; }
     jumpTo() { this.cameraMoves++; }
     cameraForBounds() { return {}; }
+    isStyleLoaded() { return this.styleReady; }
+    setStyle(style) {
+      this.style = style; this.styleReady = false; this.styleChanges++;
+      this.sources.clear(); this.layers.clear();
+    }
+    getSource(id) { return this.sources.get(id); }
+    addSource(id, source) {
+      assert.equal(this.sources.has(id), false);
+      this.sources.set(id, { ...source, setData(data) { this.data = data; } });
+    }
+    addLayer(layer) {
+      assert.equal(this.layers.has(layer.id), false);
+      this.layers.set(layer.id, layer);
+    }
+    setPaintProperty(id, key, value) { this.layers.get(id).paint[key] = value; }
     remove() { this.removed = true; }
   }
   const context = {
@@ -61,7 +79,7 @@ function setup(responses) {
       LngLatBounds: class { extend() { return this; } },
     },
     locationService: { getPosition: () => ({ lat: 51.25, lon: 22.55 }) },
-    themeService: { getEffectiveTheme: () => 'light', mapStyleFor: () => ({}) },
+    themeService: { getEffectiveTheme: () => theme, mapStyleFor: value => `style-${value}.json` },
     animation: {
       MOVE_SMOOTHING: 0.4, MOVE_MIN_MS: 1000, MOVE_MAX_MS: 20000,
       animateMarkerTo: (marker, position, duration, follow) => {
@@ -83,7 +101,9 @@ function setup(responses) {
     api, maps, modal, animations, cancelled,
     get requests() { return requests; },
     vehicles: () => [...maps.at(-1).markers].filter(m => m.element.className === 'vehicle-marker-icon'),
-    async open(trip = 'trip') { await api.showVehicleOnMap(trip); timers.shift()(); },
+    async open(trip = 'trip', routeContext) { await api.showVehicleOnMap(trip, routeContext); timers.shift()(); },
+    theme(value) { theme = value; api.handleThemeChange(); },
+    styleLoaded() { const map = maps.at(-1); map.styleReady = true; map.handlers['style.load'](); },
     poll: () => intervals.at(-1)(),
   };
 }
@@ -173,4 +193,63 @@ test('closing the modal prevents even a queued polling callback from requesting 
   assert.equal(h.requests, 1);
   assert.equal(h.maps[0].removed, true);
   assert.equal(h.modal.style.display, 'none');
+});
+
+const stops = [[22.54, 51.24], [22.55, 51.25], [22.56, 51.26]];
+const shape = { routes: [{ geometry: { type: 'LineString', coordinates: stops } }] };
+const flush = () => new Promise(resolve => setImmediate(resolve));
+
+test('theme preserves map, markers, camera and polling; restores Trasa layers without new requests', async () => {
+  const h = setup([ok(), ok(stops), ok(shape), ok({ ...vehicle, lon: 22.55 })]);
+  await h.open('trip', { mode: 'trasa', fromCoords: stops[0], toCoords: stops[2] });
+  const map = h.maps[0], marker = h.vehicles()[0], moves = map.cameraMoves;
+  h.styleLoaded(); map.handlers.load(); await flush();
+  assert.equal(map.sources.size, 3); assert.equal(map.layers.size, 3);
+  const geometry = map.getSource('route-shape').data;
+  const requestCount = h.requests;
+  map.handlers.dragstart({ originalEvent: {} });
+  h.theme('dark');
+  assert.equal(map.style, 'style-dark.json'); assert.equal(map.removed, undefined);
+  assert.equal(h.maps.length, 1); assert.equal(h.vehicles()[0], marker);
+  assert.equal(map.markers.size, 2); assert.equal(map.cameraMoves, moves);
+  assert.equal(h.modal.style.display, 'flex');
+  h.styleLoaded();
+  assert.equal(map.sources.size, 3); assert.equal(map.layers.size, 3);
+  assert.deepEqual(map.getSource('route-shape').data, geometry);
+  assert.equal(h.requests, requestCount);
+  await h.poll(); assert.equal(h.animations.length, 1);
+  assert.equal(map.cameraMoves, moves); // manual camera state survived
+  h.theme('dark'); assert.equal(map.styleChanges, 1);
+});
+
+test('rapid theme changes restore layers once for the current style and ignore a closed map', async () => {
+  const h = setup([ok(), ok(stops), ok(shape)]); await h.open();
+  const map = h.maps[0]; h.styleLoaded(); map.handlers.load(); await flush();
+  h.theme('dark'); h.theme('light'); h.theme('dark');
+  map.handlers['style.load'](); // superseded style event while latest style is not ready
+  assert.equal(map.sources.size, 0);
+  h.styleLoaded(); h.styleLoaded();
+  assert.equal(map.sources.size, 2); assert.equal(map.layers.size, 2);
+  assert.equal(h.requests, 3);
+  h.theme('light'); h.api.closeVehicleMapModal(); h.styleLoaded();
+  assert.equal(map.sources.size, 0); assert.equal(h.modal.style.display, 'none');
+});
+
+test('geometry arriving during style loading is cached until the new style is ready', async () => {
+  let resolve;
+  const h = setup([ok(), ok(stops), () => new Promise(r => { resolve = r; })]);
+  await h.open(); h.styleLoaded(); h.maps[0].handlers.load(); await flush();
+  h.theme('dark'); resolve(ok(shape)); await flush();
+  assert.equal(h.maps[0].sources.size, 0);
+  h.styleLoaded(); assert.equal(h.maps[0].sources.size, 2);
+  assert.equal(h.requests, 3);
+});
+
+test('geometry arriving after closing during theme loading cannot revive the map', async () => {
+  let resolve;
+  const h = setup([ok(), ok(stops), () => new Promise(r => { resolve = r; })]);
+  await h.open(); h.styleLoaded(); h.maps[0].handlers.load(); await flush();
+  h.theme('dark'); h.api.closeVehicleMapModal(); resolve(ok(shape)); await flush();
+  h.styleLoaded(); assert.equal(h.maps[0].sources.size, 0);
+  assert.equal(h.maps[0].removed, true);
 });

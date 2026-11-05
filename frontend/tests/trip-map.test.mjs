@@ -253,3 +253,45 @@ test('geometry arriving after closing during theme loading cannot revive the map
   h.styleLoaded(); assert.equal(h.maps[0].sources.size, 0);
   assert.equal(h.maps[0].removed, true);
 });
+
+test('initial route renders when style.load preceded source readiness', async () => {
+  const h = setup([ok(), ok(stops), ok(shape)]); await h.open();
+  const map = h.maps[0];
+  map.styleReady = false; map.handlers['style.load']();
+  map.styleReady = true; map.handlers.load(); await flush();
+  assert.equal(map.sources.size, 2);
+  assert.equal(map.layers.size, 2);
+  assert.equal(h.requests, 3);
+});
+
+test('idle retries pending route after source readiness without repeated rendering or requests', async () => {
+  const h = setup([ok(), ok(stops), ok(shape)]);
+  await h.open('trip', { mode: 'trasa', fromCoords: stops[0], toCoords: stops[2] });
+  const map = h.maps[0];
+  map.styleReady = false; map.handlers['style.load']();
+  map.handlers.load(); await flush();
+  assert.equal(map.sources.size, 0);
+  map.styleReady = true; map.handlers.idle();
+  assert.equal(map.sources.size, 3); assert.equal(map.layers.size, 3);
+  const route = map.getSource('route-shape');
+  route.setData = () => assert.fail('idle must not redraw a rendered route');
+  map.handlers.idle(); map.handlers['style.load']();
+
+  h.theme('dark'); map.handlers['style.load']();
+  assert.equal(map.sources.size, 0);
+  map.styleReady = true; map.handlers.idle();
+  assert.equal(map.sources.size, 3); assert.equal(map.layers.size, 3);
+  map.getSource('route-shape').setData = () => assert.fail('route must render only once per style');
+  map.handlers.idle();
+  assert.equal(h.requests, 3);
+  assert.equal(h.maps.length, 1);
+});
+
+test('closing cancels pending rendering even when idle arrives later', async () => {
+  const h = setup([ok(), ok(stops), ok(shape)]); await h.open();
+  const map = h.maps[0]; map.styleReady = false;
+  map.handlers['style.load'](); map.handlers.load(); await flush();
+  h.api.closeVehicleMapModal(); map.styleReady = true; map.handlers.idle();
+  assert.equal(map.sources.size, 0);
+  assert.equal(map.removed, true);
+});

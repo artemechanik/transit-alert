@@ -41,7 +41,7 @@ export function createTripMap({
 
           const lngLat = [vehicle.lon, vehicle.lat];
           let appliedTheme = getEffectiveTheme();
-          let styleReady = false;
+          let routeNeedsRender = false;
           let routeGeometry = null;
           const trackingMap = new maplibregl.Map({
             container: 'modal-map',
@@ -71,24 +71,27 @@ export function createTripMap({
             if (isCurrentMap()) refreshMapVehicleArrows(trackingMap);
           });
           const restoreRoute = () => {
-            if (!isCurrentMap() || !trackingMap.isStyleLoaded()) return;
-            styleReady = true;
-            if (routeGeometry) renderRouteShape(trackingMap, routeGeometry);
+            if (!isCurrentMap() || !routeNeedsRender || !routeGeometry || !trackingMap.isStyleLoaded()) return;
+            // Скидаємо до додавання джерел: їхні події не повинні запускати повторне малювання.
+            routeNeedsRender = false;
+            renderRouteShape(trackingMap, routeGeometry);
           };
           trackingMap.on('style.load', restoreRoute);
+          trackingMap.on('idle', restoreRoute);
           session.applyTheme = () => {
             if (!isCurrentMap()) return;
             const theme = getEffectiveTheme();
             if (theme === appliedTheme) return;
             appliedTheme = theme;
-            styleReady = false;
+            routeNeedsRender = true;
             trackingMap.setStyle(mapStyleFor(theme));
           };
           trackingMap.on('load', () => {
             if (!isCurrentMap()) return;
             drawRouteShape(tripId, routeContext, isCurrentMap, geometry => {
               routeGeometry = geometry;
-              if (styleReady) restoreRoute();
+              routeNeedsRender = true;
+              restoreRoute();
             });
           });
 

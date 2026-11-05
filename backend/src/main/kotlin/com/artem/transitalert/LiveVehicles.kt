@@ -120,10 +120,6 @@ object LiveVehiclesCache {
             }
         }
         // -----------------------------------------------
-        val actualTimes = collectActualTimes(feed)
-
-	     val fresh = ConcurrentHashMap<String, VehiclePosition>()
-		
 		// 1. Спочатку пробігаємось і збираємо всі (tripId, seq), які зараз є на лінії
 		val targetStops = mutableListOf<Pair<String, Int>>()
 		for (entity in feed.entityList) {
@@ -138,6 +134,16 @@ object LiveVehiclesCache {
 		val scheduledMap = transaction {
 		    scheduledDepartureMinutesBulk(targetStops)
 		}
+
+        updatePositions(feed, scheduledMap)
+    }
+
+    internal fun updatePositions(
+        feed: GtfsRealtime.FeedMessage,
+        scheduledMap: Map<Pair<String, Int>, Int>,
+    ) {
+        val actualTimes = collectActualTimes(feed)
+        val fresh = ConcurrentHashMap<String, VehiclePosition>()
 
 		// 3. Збираємо свіжі дані для кешу, використовуючи словник у пам'яті
 		for (entity in feed.entityList) {
@@ -154,6 +160,8 @@ object LiveVehiclesCache {
 		            computeDelaySeconds(scheduledMin, actualUnix)
 		        }
 		    }
+
+            if (delaySeconds != null && delaySeconds > 120 * 60) continue
 
 		    fresh[tripId] = VehiclePosition(
 		        vehicleLabel = if (v.vehicle.hasLabel()) v.vehicle.label else v.vehicle.id,

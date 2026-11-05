@@ -47,6 +47,7 @@ function startApp() {
       stopVehicleTracking: tripMap.stopPolling,
       enterStops: options => stops.enterStops(options),
       enterPlanner: () => planner.enterPlanner(),
+      leavePlanner: () => planner.leavePlanner(),
       openReports: () => reports.openReports(),
       closeForms: () => reports.closeForms(),
       closePlannerAccordion: () => planner.closePlannerAccordion(),

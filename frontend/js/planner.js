@@ -6,6 +6,7 @@ export function createPlanner({
     let initialized = false;
     let lastJourneyDepartureMin = null;
     let trasaCountdownInterval = null;
+    let plannerLiveSession = null;
     let routeFromStop = null;
     let routeToStop = null;
     let trasaStartY = 0;
@@ -589,6 +590,33 @@ export function createPlanner({
     }
 
     async function updateTrasaCountdowns() {
+        const session = plannerLiveSession;
+        if (!session || session.inFlight) return;
+        session.inFlight = true;
+        session.controller = new AbortController();
+        try {
+            await refreshTrasaCountdowns(session);
+        } finally {
+            session.inFlight = false;
+        }
+    }
+
+    function startPlannerPolling() {
+        if (!plannerLiveSession) return;
+        if (!trasaCountdownInterval) {
+            trasaCountdownInterval = setInterval(updateTrasaCountdowns, 15000);
+        }
+    }
+
+    function leavePlanner() {
+        const session = plannerLiveSession;
+        plannerLiveSession = null;
+        session?.controller?.abort();
+        clearInterval(trasaCountdownInterval);
+        trasaCountdownInterval = null;
+    }
+
+    async function refreshTrasaCountdowns(session) {
         const timelines = document.querySelectorAll('.trasa-timeline');
         if (timelines.length === 0) return;
 
@@ -604,15 +632,16 @@ export function createPlanner({
         let liveDelays = {};
         if (tripIds.size > 0) {
             try {
-                const res = await fetch(`${apiBaseUrl}/live-vehicles/delays?tripIds=${Array.from(tripIds).join(',')}`);
+                const res = await fetch(`${apiBaseUrl}/live-vehicles/delays?tripIds=${Array.from(tripIds).join(',')}`, { signal: session.controller.signal });
                 if (res.ok) {
                     liveDelays = await res.json();
                 }
             } catch (e) {
-                console.warn('Не вдалося оновити LIVE затримки:', e);
+                if (e.name !== 'AbortError') console.warn('Не вдалося оновити LIVE затримки:', e);
             }
         }
 
+        if (plannerLiveSession !== session) return;
         const now = new Date();
 
         timelines.forEach(timeline => {
@@ -1136,6 +1165,9 @@ export function createPlanner({
     }
 
     function enterPlanner() {
+        if (!plannerLiveSession) plannerLiveSession = { inFlight: false, controller: null };
+        startPlannerPolling();
+        updateTrasaCountdowns();
         updateRouteButtonState(true);
         updateRouteButtonState(false);
         renderRecentRoutes();
@@ -1245,9 +1277,7 @@ export function createPlanner({
                     }
 
                     updateTrasaCountdowns();
-                    if (!trasaCountdownInterval) {
-                        trasaCountdownInterval = setInterval(updateTrasaCountdowns, 15000);
-                    }
+                    startPlannerPolling();
 
                 } catch (error) {
                     console.error('Помилка пошуку:', error);
@@ -1334,5 +1364,5 @@ export function createPlanner({
         });
     }
 
-    return { initPlanner, enterPlanner, closePlannerAccordion, renderRecentRoutes };
+    return { initPlanner, enterPlanner, leavePlanner, closePlannerAccordion, renderRecentRoutes };
 }

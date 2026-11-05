@@ -1,13 +1,14 @@
 // Єдиний власник навігаційних обробників, drawer, overlay та History API.
 export function createNavigation({
     closeVehicleMapModal, stopVehicleTracking,
-    enterStops, enterPlanner, openReports, closeForms,
+    enterStops, enterPlanner, leavePlanner, openReports, closeForms,
     closePlannerAccordion, closeDepartureAccordion
 }) {
     let initialized = false;
     let historyInitialized = false;
 
     function switchScreen(screenId, btn, isBackAction = false) {
+      if (screenId !== 'route') leavePlanner();
       // --- ВИПРАВЛЕНО: Закриваємо міні-карту БЕЗ виклику history.back() ---
       if (typeof closeVehicleMapModal === 'function') {
         closeVehicleMapModal();

@@ -80,20 +80,24 @@ export function createTripMap({
               .addTo(trackingMap);
           }
 
-          const el = document.createElement('div');
-          el.className = 'vehicle-marker-icon';
-          const bearing = vehicle.bearing || 0;
-          el.innerHTML = `
+          function createVehicleMarker(currentVehicle) {
+            const el = document.createElement('div');
+            el.className = 'vehicle-marker-icon';
+            const bearing = currentVehicle.bearing || 0;
+            el.innerHTML = `
         <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
           <svg class="vehicle-arrow" data-bearing="${bearing}" style="transform: rotate(${bearing - trackingMap.getBearing()}deg);" viewBox="0 0 100 100">
             <polygon points="50,10 90,90 10,90" />
           </svg>
-          <div class="vehicle-marker-dot">${vehicle.route || '🚌'}</div>
+          <div class="vehicle-marker-dot">${currentVehicle.route || '🚌'}</div>
         </div>
       `;
-          const marker = new maplibregl.Marker({ element: el })
-            .setLngLat(lngLat)
-            .addTo(trackingMap);
+            const marker = new maplibregl.Marker({ element: el })
+              .setLngLat([currentVehicle.lon, currentVehicle.lat])
+              .addTo(trackingMap);
+            return marker;
+          }
+          let marker = createVehicleMarker(vehicle);
           modalVehicleMarker = marker;
           let lastUpdateTs = performance.now();
           const followMarker = (position) => {
@@ -125,11 +129,27 @@ export function createTripMap({
               if (userPosition && modalUserMarker) {
                 modalUserMarker.setLngLat([userPosition.lon, userPosition.lat]);
               }
+              if (!updated) {
+                if (marker) {
+                  cancelMarkerAnimation(marker);
+                  marker._anim = null;
+                  marker.remove();
+                  marker = null;
+                  modalVehicleMarker = null;
+                }
+                return;
+              }
               if (updated) {
                 const nowTs = performance.now();
                 const interval = Math.max(MOVE_MIN_MS, Math.min(MOVE_MAX_MS, nowTs - lastUpdateTs));
                 lastUpdateTs = nowTs;
-                animateMarkerTo(marker, [updated.lon, updated.lat], interval * MOVE_SMOOTHING, followMarker);
+                if (!marker) {
+                  marker = createVehicleMarker(updated);
+                  modalVehicleMarker = marker;
+                  followMarker(marker.getLngLat());
+                } else {
+                  animateMarkerTo(marker, [updated.lon, updated.lat], interval * MOVE_SMOOTHING, followMarker);
+                }
                 const arrowEl = marker.getElement().querySelector('.vehicle-arrow');
                 if (arrowEl) arrowEl.dataset.bearing = updated.bearing || 0;
                 refreshMapVehicleArrows(trackingMap);
@@ -391,7 +411,8 @@ export function createTripMap({
 
     async function fetchVehiclePosition(tripId, signal) {
       const res = await fetch(`${apiBaseUrl}/live-vehicles/${tripId}`, { signal });
-      if (!res.ok) return null;
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`Live GPS: HTTP ${res.status}`);
       return res.json();
     }
 

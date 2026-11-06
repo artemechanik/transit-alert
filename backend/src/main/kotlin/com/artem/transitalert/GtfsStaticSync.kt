@@ -51,6 +51,21 @@ internal fun normalizeGtfsStop(stop: Map<String, String>, onDemand: Boolean = fa
 internal fun isGtfsOnDemandStop(pickupType: String?, dropOffType: String?): Boolean =
     pickupType == "3" || dropOffType == "3"
 
+/** Пасажирський індекс: лише рейси, що не складаються повністю із заборонених 1/1. */
+internal class GtfsPassengerTrips {
+    private val passengerTripIds = HashSet<String>()
+
+    fun recordStop(tripId: String, pickupType: String?, dropOffType: String?) {
+        if (pickupType != "1" || dropOffType != "1") passengerTripIds.add(tripId)
+    }
+
+    fun headsigns(lastStopIds: Map<String, String>, stopNames: Map<String, String>): Map<String, String> =
+        lastStopIds.mapNotNull { (tripId, stopId) ->
+            if (tripId !in passengerTripIds) return@mapNotNull null
+            stopNames[stopId]?.let { tripId to it.trim() }
+        }.toMap()
+}
+
 /**
  * Фоновий синхронізатор статичного GTFS (аналог LiveVehiclesCache, тільки для
  * рідкісних, але "ламких" оновлень: коли zbiorkom.live перегенеровує trip_id,
@@ -263,6 +278,7 @@ object GtfsStaticSync {
         val lastStopIdByTrip = HashMap<String, String>()
         val lastSeqByTrip = HashMap<String, Int>()
         val onDemandStops = HashSet<String>()
+        val passengerTrips = GtfsPassengerTrips()
         withCsvEntry(zipBytes, "stop_times.txt") { header, lines ->
             val tripIdx = header.indexOf("trip_id")
             val seqIdx = header.indexOf("stop_sequence")
@@ -273,6 +289,7 @@ object GtfsStaticSync {
                 val tripId = row[tripIdx]
                 val seq = row[seqIdx].toIntOrNull() ?: continue
                 val stopId = row[stopIdx]
+                passengerTrips.recordStop(tripId, row.getOrNull(pickupIdx), row.getOrNull(dropOffIdx))
                 if (isGtfsOnDemandStop(row.getOrNull(pickupIdx), row.getOrNull(dropOffIdx))) {
                     onDemandStops.add(stopId)
                 }
@@ -310,10 +327,13 @@ object GtfsStaticSync {
                 StringReader(calSb.toString()),
             )
 
-            // trip_headsigns
+            // Пасажирський індекс; сирі trip_stops і stop_departures нижче зберігають
+            // також технічні рейси для розкладу live-позицій та їхнього route join.
             val headSb = StringBuilder()
-            for ((tripId, stopId) in lastStopIdByTrip) {
-                val name = stopsById[stopId]?.get("stop_name")?.trim() ?: continue
+            val passengerHeadsigns = passengerTrips.headsigns(
+                lastStopIdByTrip, stopsById.mapValues { it.value.getValue("stop_name") },
+            )
+            for ((tripId, name) in passengerHeadsigns) {
                 headSb.append(csv(tripId)).append(',').append(csv(name)).append('\n')
             }
             copyManager.copyIn(

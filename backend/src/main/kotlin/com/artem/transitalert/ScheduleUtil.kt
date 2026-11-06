@@ -61,6 +61,12 @@ fun headsignFor(tripId: String): String? =
         .firstOrNull()
         ?.get(TripHeadsigns.headsign)
 
+/** Той самий пасажирський індекс, що використовує табло; сирий розклад лишається для LIVE. */
+internal fun passengerDepartures() = StopDepartures.join(
+    TripHeadsigns, JoinType.INNER,
+    onColumn = StopDepartures.tripId, otherColumn = TripHeadsigns.tripId,
+)
+
 /** Плановий час (хвилини від півночі служби) конкретної зупинки в рейсі. Викликати всередині transaction {}. */
 fun scheduledDepartureMinutes(tripId: String, stopSequence: Int): Int? =
     TripStops.selectAll()
@@ -86,7 +92,7 @@ fun findNearestDeparture(
         val serviceIds = activeServiceIds(date)
         if (serviceIds.isEmpty()) continue
 
-        var query = StopDepartures.selectAll().where {
+        var query = passengerDepartures().selectAll().where {
             (StopDepartures.stopId eq stopId) and
                 (StopDepartures.serviceId inList serviceIds) and
                 (StopDepartures.departureMinutes greaterEq (minuteBase - windowMinutes)) and
@@ -154,7 +160,7 @@ fun findDirectTrips(fromIds: List<String>, toIds: List<String>, activeServices: 
     // 1. Збираємо відправлення з точок А (тільки ТІ, ЩО БУДУТЬ)
     val fromStops = mutableMapOf<String, Triple<Int, Int, String>>()
     
-    TripStops.join(StopDepartures, JoinType.INNER, onColumn = TripStops.tripId, otherColumn = StopDepartures.tripId)
+    TripStops.join(passengerDepartures(), JoinType.INNER, onColumn = TripStops.tripId, otherColumn = StopDepartures.tripId)
         .selectAll()
         .where { 
             (TripStops.stopId inList fromIds) and 

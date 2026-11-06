@@ -156,7 +156,7 @@ fun Application.liveVehiclesRoutes() {
                     if (windowEnd < 0) continue
                     val nowRefSeconds = minuteBase * 60 + nowSecondOfMinute
 
-                    StopDepartures.join(TripHeadsigns, JoinType.INNER, onColumn = StopDepartures.tripId, otherColumn = TripHeadsigns.tripId)
+                    passengerDepartures()
                         .select(
                             StopDepartures.route,
                             TripHeadsigns.headsign,

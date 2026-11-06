@@ -109,7 +109,7 @@ object TransitGraph {
             val tripsData = mutableMapOf<String, MutableList<TripStopRecord>>()
             val validTrips = mutableMapOf<String, Pair<String, String>>() 
 
-            StopDepartures
+            passengerDepartures()
                 .select(StopDepartures.tripId, StopDepartures.route, StopDepartures.serviceId) 
                 .withDistinct(true)
                 .forEach { 

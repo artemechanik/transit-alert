@@ -1,3 +1,4 @@
+import { apiFetch } from './backend-connection.js';
 import { coloredTimeHtml, getLiveStatusBadge } from './planner-cards.js';
 
 // Власник LIVE-сесії, запиту затримок і таймера Trasa.
@@ -53,7 +54,7 @@ export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops }) {
         let liveDelays = {};
         if (tripIds.size > 0) {
             try {
-                const res = await fetch(`${apiBaseUrl}/live-vehicles/delays?tripIds=${Array.from(tripIds).join(',')}`, { signal: session.controller.signal });
+                const res = await apiFetch(`${apiBaseUrl}/live-vehicles/delays?tripIds=${Array.from(tripIds).join(',')}`, { signal: session.controller.signal });
                 if (res.ok) {
                     liveDelays = await res.json();
                 }

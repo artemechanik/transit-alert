@@ -1,3 +1,4 @@
+import { apiFetch } from './backend-connection.js';
 // Поля Trasa, вибрані точки, історія та підказки зупинок/адрес.
 export function createPlannerInputs({
     apiBaseUrl, getMapTilerKey, locationService, getNearbyStops, showToast
@@ -247,7 +248,7 @@ export function createPlannerInputs({
             }
 
             try {
-                const stopsPromise = fetch(`${apiBaseUrl}/stops/search?q=${encodeURIComponent(query)}`)
+                const stopsPromise = apiFetch(`${apiBaseUrl}/stops/search?q=${encodeURIComponent(query)}`)
                     .then(r => r.ok ? r.json() : []);
 
                 const mapTilerUrl = `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${getMapTilerKey()}&language=pl&autocomplete=true&bbox=22.35,51.11,22.75,51.36`;

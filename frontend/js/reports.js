@@ -1,3 +1,4 @@
+import { apiFetch } from './backend-connection.js';
 // Звіти й обидві форми володіють своїми даними та обробниками; оболонка керує drawer/overlay.
 export function createReports({ apiBaseUrl, showToast, openDrawer, closeDrawer, setOverlayVisible }) {
     let initialized = false;
@@ -30,7 +31,7 @@ export function createReports({ apiBaseUrl, showToast, openDrawer, closeDrawer, 
     }
 
     async function fetchReports() {
-      const res = await fetch(`${apiBaseUrl}/reports`);
+      const res = await apiFetch(`${apiBaseUrl}/reports`);
       const reports = await res.json();
       reportsById = Object.fromEntries(reports.map(r => [r.id, r]));
       return reports;
@@ -90,7 +91,7 @@ export function createReports({ apiBaseUrl, showToast, openDrawer, closeDrawer, 
     async function fetchReportById(id) {
       if (reportsById[id]) return reportsById[id];
       try {
-        const res = await fetch(`${apiBaseUrl}/reports/${id}`);
+        const res = await apiFetch(`${apiBaseUrl}/reports/${id}`);
         if (!res.ok) return null;
         const report = await res.json();
         reportsById[id] = report;
@@ -146,7 +147,7 @@ export function createReports({ apiBaseUrl, showToast, openDrawer, closeDrawer, 
 
     async function vote(reportId, type, btnEl) {
       try {
-        const res = await fetch(`${apiBaseUrl}/reports/${reportId}/${type}`, {
+        const res = await apiFetch(`${apiBaseUrl}/reports/${reportId}/${type}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fingerprint: getFingerprint() }),
@@ -248,7 +249,7 @@ export function createReports({ apiBaseUrl, showToast, openDrawer, closeDrawer, 
 
     async function loadRoutesForAutocomplete() {
       try {
-        const res = await fetch(`${apiBaseUrl}/routes`);
+        const res = await apiFetch(`${apiBaseUrl}/routes`);
         allRoutesCache = await res.json();
       } catch (e) {
         allRoutesCache = [];
@@ -260,7 +261,7 @@ export function createReports({ apiBaseUrl, showToast, openDrawer, closeDrawer, 
       select.innerHTML = '<option value="">Завантаження...</option>';
       select.disabled = true;
       try {
-        const res = await fetch(`${apiBaseUrl}/routes/${encodeURIComponent(route)}/directions`);
+        const res = await apiFetch(`${apiBaseUrl}/routes/${encodeURIComponent(route)}/directions`);
         if (!res.ok) throw new Error('not found');
         const directions = await res.json();
         if (!directions.length) {
@@ -308,7 +309,7 @@ export function createReports({ apiBaseUrl, showToast, openDrawer, closeDrawer, 
       submitBtn.disabled = true;
       hint.textContent = 'Wysyłanie...';
       try {
-        const res = await fetch(`${apiBaseUrl}/reports`, {
+        const res = await apiFetch(`${apiBaseUrl}/reports`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestData),
@@ -406,7 +407,7 @@ export function createReports({ apiBaseUrl, showToast, openDrawer, closeDrawer, 
           isStopLiniaSelected = false;
           const q = stopNameInput.value.trim();
           if (q.length < 2) { stopNameSuggestions.style.display = 'none'; return; }
-          fetch(`${apiBaseUrl}/stops/search?q=${encodeURIComponent(q)}`)
+          apiFetch(`${apiBaseUrl}/stops/search?q=${encodeURIComponent(q)}`)
             .then(r => r.json())
             .then(stops => {
               const uniqueNames = [...new Set(stops.map(s => s.name))].slice(0, 8);
@@ -436,7 +437,7 @@ export function createReports({ apiBaseUrl, showToast, openDrawer, closeDrawer, 
           selectedPrzystanekStopId = null;
           const q = stopIdInput.value.trim();
           if (q.length < 2) { stopIdSuggestions.style.display = 'none'; return; }
-          fetch(`${apiBaseUrl}/stops/search?q=${encodeURIComponent(q)}`)
+          apiFetch(`${apiBaseUrl}/stops/search?q=${encodeURIComponent(q)}`)
             .then(r => r.json())
             .then(stops => {
               if (!stops.length) { stopIdSuggestions.style.display = 'none'; return; }

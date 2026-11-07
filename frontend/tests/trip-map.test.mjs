@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const source = fs.readFileSync(new URL('../js/trip-map.js', import.meta.url), 'utf8')
+  .replace("import { apiFetch } from './backend-connection.js';", 'const apiFetch = (...args) => fetch(...args);')
   .replace('export function createTripMap', 'function createTripMap');
 const vehicle = { route: '153', lat: 51.24, lon: 22.54, bearing: 90 };
 const ok = (data = vehicle) => ({ ok: true, status: 200, json: async () => data });

@@ -1,3 +1,4 @@
+import { initBackendConnection } from './backend-connection.js';
 import { readConfig } from './config.js';
 import { resetLegacyTransportHistory } from './transport-history.js';
 import { showToast, refreshMapVehicleArrows } from './ui.js';
@@ -84,6 +85,7 @@ function startApp() {
     });
     stops.initStops();
     navigation.initNavigation();
+    initBackendConnection(apiBaseUrl, () => stops.recoverConnection());
 
     cityMap.initCityMap();
     planner.renderRecentRoutes();

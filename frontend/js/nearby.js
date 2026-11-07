@@ -1,3 +1,4 @@
+import { apiFetch } from './backend-connection.js';
 const NEARBY_CACHE_TTL_MS = 120000;
 
 let cachedNearbyStops = null;
@@ -15,7 +16,7 @@ export function getNearbyStops(apiBaseUrl, lat, lon, checkStatus = false) {
 }
 
 async function fetchAndCacheNearbyStops(apiBaseUrl, lat, lon, checkStatus, requestedAt) {
-  const res = await fetch(`${apiBaseUrl}/stops/nearby?lat=${lat}&lon=${lon}`);
+  const res = await apiFetch(`${apiBaseUrl}/stops/nearby?lat=${lat}&lon=${lon}`);
   // Przystanek перевіряє HTTP-статус, Trasa історично читає JSON без цієї перевірки.
   if (checkStatus && !res.ok) throw new Error(`Код помилки: ${res.status}`);
 

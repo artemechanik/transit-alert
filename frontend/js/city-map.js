@@ -1,3 +1,4 @@
+import { apiFetch } from './backend-connection.js';
 // Контролер володіє головною картою; залежності передає main.js та legacy-оболонка.
 export function createCityMap({
     maplibregl, themeService, locationService, animation,
@@ -86,7 +87,7 @@ export function createCityMap({
 
     async function updateLiveCityMap() {
         try {
-            const res = await fetch(`${apiBaseUrl}/live-vehicles`);
+            const res = await apiFetch(`${apiBaseUrl}/live-vehicles`);
             if (!res.ok) return;
           const vehicles = await res.json();
           const nowTs = performance.now();
@@ -298,7 +299,7 @@ export function createCityMap({
 
     async function runStopSearch(q, listEl, inputEl) {
       try {
-        const res = await fetch(`${apiBaseUrl}/stops/search?q=${encodeURIComponent(q)}`);
+        const res = await apiFetch(`${apiBaseUrl}/stops/search?q=${encodeURIComponent(q)}`);
         const stops = await res.json();
         if (!stops.length) {
           listEl.innerHTML = '<div id="search-empty">Нічого не знайдено</div>';

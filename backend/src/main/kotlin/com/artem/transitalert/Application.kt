@@ -42,6 +42,7 @@ fun Application.module() {
     install(CallLogging)
 
     // 4. Роути
+    statusRoutes()
     reportRoutes()
     riskRoutes()
     upcomingStopsRoutes()

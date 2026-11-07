@@ -1,3 +1,4 @@
+import { apiFetch } from './backend-connection.js';
 // Стан Przystanek і його DOM-обробники мають одного власника.
 export function createStops({
     apiBaseUrl, locationService, getNearbyStops,
@@ -10,6 +11,7 @@ export function createStops({
     let isFetchingMore = false;
     let currentStopIdForDepartures = null;
     let departuresRefreshInterval = null;
+    let pendingDepartureRequests = 0;
     let startY = 0;
     let isRefreshing = false;
     let startScrollTop = 0;
@@ -18,7 +20,7 @@ export function createStops({
 
     // Список зупинок рейсу від поточної платформи; помилку обробляє викликач.
     async function renderDepExpand(panel, dep) {
-      const res = await fetch(`${apiBaseUrl}/trips/${dep.tripId}/upcoming-stops?fromStopId=${encodeURIComponent(currentStopIdForDepartures)}`);
+      const res = await apiFetch(`${apiBaseUrl}/trips/${dep.tripId}/upcoming-stops?fromStopId=${encodeURIComponent(currentStopIdForDepartures)}`);
       if (!res.ok) throw new Error('not found');
       const stops = await res.json();
       if (!panel.classList.contains('open')) return; // панель згорнули, поки йшов запит
@@ -215,12 +217,13 @@ export function createStops({
     }
 
     async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset = 0) {
+      pendingDepartureRequests++;
       if (!isBackgroundRefresh && fetchOffset === 0) {
         departuresList.innerHTML = '<div style="text-align: center; margin-top: 40px; color: var(--text-muted);">Завантаження... <div class="svg-icon icon-hourglass"></div></div>';
       }
 
       try {
-        const res = await fetch(`${apiBaseUrl}/stops/${stopId}/departures?offset=${fetchOffset}`);
+        const res = await apiFetch(`${apiBaseUrl}/stops/${stopId}/departures?offset=${fetchOffset}`);
         if (!res.ok) throw new Error('Не вдалося завантажити розклад');
 
         const fetchedDepartures = await res.json();
@@ -448,6 +451,8 @@ export function createStops({
         if (!isBackgroundRefresh) {
           departuresList.innerHTML = '<div style="text-align: center; margin-top: 40px; color: var(--danger);">Błąd połączenia ⚠️</div>';
         }
+      } finally {
+        pendingDepartureRequests--;
       }
     }
 
@@ -458,6 +463,7 @@ export function createStops({
 
     function enterStops({ isBackAction = false } = {}) {
         if (!isBackAction && !currentStopIdForDepartures) loadNearbyStopsDefault();
+        recoverConnection();
     }
 
     function closeDepartureAccordion() {
@@ -498,7 +504,7 @@ export function createStops({
           }
 
           try {
-            const res = await fetch(`${apiBaseUrl}/stops/search?q=${encodeURIComponent(query)}`);
+            const res = await apiFetch(`${apiBaseUrl}/stops/search?q=${encodeURIComponent(query)}`);
             if (!res.ok) throw new Error('Помилка мережі');
 
             const stops = await res.json();
@@ -599,5 +605,14 @@ export function createStops({
         });
     }
 
-    return { initStops, enterStops, closeDepartureAccordion, addMinutesToTime };
+    // A failed first load never installed the normal refresh interval.
+    // Otherwise the existing polling owns refresh after reconnection.
+    function recoverConnection() {
+        if (!departuresRefreshInterval && pendingDepartureRequests === 0 && currentStopIdForDepartures
+            && stopScreenContainer.style.display !== 'none') {
+            void loadDepartures(currentStopIdForDepartures, true, 0);
+        }
+    }
+
+    return { initStops, enterStops, closeDepartureAccordion, addMinutesToTime, recoverConnection };
 }

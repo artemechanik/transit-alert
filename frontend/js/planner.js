@@ -1,3 +1,4 @@
+import { apiFetch } from './backend-connection.js';
 import { createPlannerInputs } from './planner-inputs.js';
 import { createPlannerCards } from './planner-cards.js';
 import { createPlannerLive } from './planner-live.js';
@@ -95,7 +96,7 @@ export function createPlanner({
                 }
 
                 try {
-                    const res = await fetch(`${apiBaseUrl}/route/complex?${fromParams}&${toParams}&limit=8`);
+                    const res = await apiFetch(`${apiBaseUrl}/route/complex?${fromParams}&${toParams}&limit=8`);
                     if (!res.ok) throw new Error('Помилка сервера');
 
                     const journeys = await res.json();
@@ -172,7 +173,7 @@ export function createPlanner({
                     else if (routeToStop.lat && routeToStop.lon) toParams = `toLat=${routeToStop.lat}&toLon=${routeToStop.lon}`;
 
                     const nextSearchMin = lastJourneyDepartureMin + 1;
-                    const res = await fetch(`${apiBaseUrl}/route/complex?${fromParams}&${toParams}&limit=8&time=${nextSearchMin}`);
+                    const res = await apiFetch(`${apiBaseUrl}/route/complex?${fromParams}&${toParams}&limit=8&time=${nextSearchMin}`);
                     if (!res.ok) throw new Error('Помилка сервера');
 
                     const newJourneys = await res.json();

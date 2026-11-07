@@ -1,3 +1,4 @@
+import { apiFetch } from './backend-connection.js';
 // Один контролер володіє сеансом мінікарти; спільні сервіси передає main.js.
 export function createTripMap({
     maplibregl, locationService, themeService, animation,
@@ -292,7 +293,7 @@ export function createTripMap({
 
     async function drawRouteShape(tripId, context, isCurrent, onGeometry) {
       try {
-        const res = await fetch(`${apiBaseUrl}/api/trip-stops/${tripId}`);
+        const res = await apiFetch(`${apiBaseUrl}/api/trip-stops/${tripId}`);
         if (!res.ok) return;
         const stops = await res.json();
         if (!isCurrent()) return;
@@ -438,7 +439,7 @@ export function createTripMap({
     }
 
     async function fetchVehiclePosition(tripId, signal) {
-      const res = await fetch(`${apiBaseUrl}/live-vehicles/${tripId}`, { signal });
+      const res = await apiFetch(`${apiBaseUrl}/live-vehicles/${tripId}`, { signal });
       if (res.status === 404) return null;
       if (!res.ok) throw new Error(`Live GPS: HTTP ${res.status}`);
       return res.json();

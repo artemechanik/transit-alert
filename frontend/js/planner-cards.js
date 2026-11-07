@@ -1,3 +1,4 @@
+import { apiFetch } from './backend-connection.js';
 // Картки поїздок, розгортання зупинок і відкриття мінікарти.
 function formatTime(minutes) {
     // Додаємо % 24, щоб після 23:59 годинник скидався на 00:xx
@@ -251,7 +252,7 @@ export function createPlannerCards({
     async function fetchLegStops(leg) {
         if (!leg.tripId || leg.tripId === 'WALK' || !leg.fromStopId) return [];
         try {
-            const res = await fetch(`${apiBaseUrl}/trips/${leg.tripId}/upcoming-stops?fromStopId=${encodeURIComponent(leg.fromStopId)}`);
+            const res = await apiFetch(`${apiBaseUrl}/trips/${leg.tripId}/upcoming-stops?fromStopId=${encodeURIComponent(leg.fromStopId)}`);
             if (!res.ok) return [];
             const stops = await res.json();
             // Матчимо по toStopId (реальний ID зупинки висадки), а не по назві —

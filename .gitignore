@@ -57,3 +57,6 @@ fb.py
 
 # Claude Code session exports
 *-command-message*.txt
+
+/lubus-roadmap.html
+/lubus-roadmap-progress.json

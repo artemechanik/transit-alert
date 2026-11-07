@@ -57,20 +57,7 @@ fun Application.formRoutes() {
                     }
                 }
 
-                val baseStops = cachedStops!!.filter {
-                    it.name.normalizePL().contains(searchQ) ||
-                    it.code.normalizePL().contains(searchQ)
-                }.sortedBy { stop ->
-                    val normName = stop.name.normalizePL()
-                    val normCode = stop.code.normalizePL()
-
-                    when {
-                        normName.startsWith(searchQ) -> 1
-                        normName.contains(" $searchQ") || normName.contains("-$searchQ") -> 2
-                        normCode.startsWith(searchQ) -> 3
-                        else -> 4
-                    }
-                }.take(20)
+                val baseStops = searchStops(cachedStops!!, searchQ)
 
                 if (baseStops.isEmpty()) return@transaction emptyList<StopSuggestion>()
                 val stopIds = baseStops.map { it.stopId }

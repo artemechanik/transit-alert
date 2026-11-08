@@ -1,7 +1,11 @@
 # Ізольований локальний геокодер PRG
 
 Повністю локальний прототип: Python standard library + SQLite FTS5, HTML/CSS/JS без CDN.
-Робочі компоненти Transit Alert не підключені й не змінюються.
+Ця тестова сторінка й Python-сервер залишаються окремим експериментом.
+Готову SQLite також читає основний Kotlin backend через `/addresses/search`;
+два поля планувальника Transit Alert вже використовують цей Kotlin endpoint.
+Для роботи Transit Alert Python-сервер запускати не потрібно.
+Налаштування інтеграції — у [backend/PRG.md](../../backend/PRG.md).
 
 ## Вулиці та поступове введення
 

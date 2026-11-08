@@ -21,14 +21,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   створює модулі карти, мінікарти рейсу, планувальника, зупинок, звітів і
   навігації та передає їм спільні залежності. Стилі розділені між
   `frontend/css/*.css`.
-- **Геокодинг адрес**: робиться напряму з фронтенду через MapTiler Geocoding API
-  (`frontend/js/planner.js`, автокомпліт полів "звідки/куди"), НЕ через
-  бекенд-проксі. При вводі
-  паралельно (`Promise.all`) летять запит до свого `/stops/search` (зупинки) і
-  запит до `api.maptiler.com/geocoding/...` (адреси, обмежено bbox Любліна
-  `22.35,51.11,22.75,51.36`). Результати показуються в одному дропдауні:
-  зупинки → `{name, ids}` (масив stopId), адреси → `{name, lat, lon}`
-  (з `feature.center`).
+- **Геокодинг адрес**: локальний PRG/GUGiK через Kotlin endpoint
+  `GET /addresses/search?q=...&limit=...` (`AddressRoutes.kt`, `PrgAddressSearch.kt`).
+  `frontend/js/planner-inputs.js` паралельно запитує `/stops/search` та
+  `/addresses/search?…&limit=4`: зупинки першими, далі до 4 вулиць/адрес
+  у порядку PRG. Вибір зупинки → `{name, ids}`, вулиці/адреси →
+  `{name, lat, lon}`; ↖ лише підставляє назву з пробілом для дописування.
+  Редагування скидає вибрану точку, застарілі запити скасовуються/ігноруються.
+  Таймаут адресного запиту — 5 с; збій PRG залишає пошук зупинок доступним,
+  зовнішнього fallback немає. Картки й CSS збережено; клавіатурну навігацію
+  експериментального прототипу не переносили.
+- **PRG SQLite**: окремий довідник лише для читання (не PostgreSQL/Exposed),
+  готовий зріз — 96 009 адрес і 2580 вулиць із 16 гмін.
+  Шлях — `PRG_SQLITE_PATH`; без нього файл
+  `experiments/local-geocoder/data/addresses.sqlite` шукається від кореня
+  репозиторію або через `../experiments/…` від `backend/`.
+  Немає автоматичної побудови/міграції/завантаження. Файл поза Git.
+  Читання на `Dispatchers.IO`, максимум 4 запити, SQL-бюджет близько 2 с;
+  відсутній/пошкоджений довідник → 503 лише адресного пошуку.
+  `Semaphore(4)` обмежує одночасне виконання на екземпляр сервісу:
+  решта очікують, це не ліміт користувачів чи запитів/с. SQL-бюджет не включає
+  чергу; її вплив на 5-секундний HTTP-таймаут треба оцінити перед масштабуванням
+  (див. PRG-завдання в `TODO.md`).
+  Окремий Python-сервер для Transit Alert не потрібен.
+  Контракт, джерела й тести — `backend/PRG.md`.
+  Геокодування MapTiler більше не викликається; ключ залишається потрібним картам.
 - **GTFS дані**: zbiorkom.live api6-open, оператор `default`:
   static — `https://api.zbiorkom.live/api6-open/lublin/gtfs/default`,
   realtime — `https://api.zbiorkom.live/api6-open/lublin/gtfsRealtime/default/vehiclePositions,tripUpdates`.
@@ -94,10 +111,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   `LiveVehiclesBearingTest` перевіряє збереження позицій без bearing,
   явного нуля й звичайного кута; `LiveVehiclesDelayTest` — межу 7200 с,
   відсутні дані, оновлення кешу, GPS/delays API та вплив на перший рейс і пересадки.
-  Загалом — 35 backend-тестів.
-- **Frontend-тести:** `node frontend/tests/planner-polling.test.mjs` і
-  `node frontend/tests/trip-map.test.mjs` — 16 тестів із контрольованими API,
-  таймерами та замінами DOM/MapLibre, без живого фіда. Це не браузерні тести.
+  `PrgAddressSearchTest` перевіряє read-only PRG, відмови та конкурентність:
+  усі 58 сценаріїв Python-пошуку порівнюються з Kotlin через справжній
+  loopback HTTP. Ці інтеграційні перевірки потребують наявного PRG-зрізу;
+  без SQLite відповідні тести пропускаються.
+- **Frontend-тести:** `node --experimental-vm-modules --test frontend/tests/*.test.mjs`.
+  `planner-modules.test.mjs` містить 14 сценаріїв: обидва поля, PRG-вулиці й
+  адреси, ↖, уточнення номера, stale responses, очищення, таймаут/відмови,
+  GPS/swap і координати маршрутів. Також є тести LIVE polling, мінікарти та
+  backend connection. Це тести з підмінами API/DOM, не браузерні.
+  Власник перевірив PRG у браузері 08.11.2026: наразі без зауважень;
+  суб'єктивно значно швидше за попередній пошук (не бенчмарк).
 - **Життєвий цикл LIVE фронтенду:** вихід із Trasa зупиняє її таймер і
   скасовує запит delays; повернення одразу оновлює дані й відновлює polling.
   HTTP 404 у відкритій мінікарті видаляє лише транспортний маркер; наступний
@@ -116,6 +140,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   перезалити: `DELETE FROM gtfs_feed_meta;` і перезапуск бекенда.
 - **Config через env** (усе має дефолти для localhost):
   `DB_URL`, `DB_USER`, `DB_PASSWORD` (див. `DatabaseFactory.kt`).
+  Окремо `PRG_SQLITE_PATH` для готового адресного SQLite-довідника.
 - **JVM:** toolchain 17 (`build.gradle.kts`).
 
 ### Ендпоінти (перевіряти цей список перед додаванням нового — легко задублювати)
@@ -129,6 +154,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Routing/forms (`FormRoutes.kt`): `GET /route/search`, `GET /route/complex`,
   `GET /routes`, `GET /routes/{route}/directions`, `GET /stops/search`.
   Алгоритм пошуку — у `RoutingGraph.kt`.
+- Addresses (`AddressRoutes.kt`): `GET /addresses/search` — локальні вулиці та адреси PRG.
 - Stops (`StopRoutes.kt`): `GET /stops/nearby`, `GET /api/trip-stops/{tripId}`
 - Live GPS (`LiveVehiclesRoutes.kt`): `GET /live-vehicles`, `/live-vehicles/delays`,
   `/live-vehicles/{tripId}`, `/stops/{stopId}/departures`

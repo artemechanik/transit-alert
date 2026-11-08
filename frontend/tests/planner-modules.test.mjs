@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { loadBrowserModule } from './helpers/load-browser-module.mjs';
 
 class Element {
@@ -19,7 +20,7 @@ class Element {
     }
   }
   click() { return this.emit('click'); }
-  focus() {} blur() {} contains() { return false; } closest() { return null; }
+  focus() { this.focused = true; } blur() { this.focused = false; } contains(target) { return this === target; } closest() { return null; }
   appendChild(child) { this.children.push(child); }
   getBoundingClientRect() { return { bottom: 100 }; }
   querySelector(selector) {
@@ -33,33 +34,38 @@ class Element {
 }
 
 async function setup() {
-  const elements = new Map(), calls = [], maps = [], history = new Map();
+  const elements = new Map(), calls = [], maps = [], history = new Map(), toasts = [], documents = [], timers = new Map();
+  let nextTimer = 0;
   const get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   let responder = () => [], position = { lat: 51.24, lon: 22.57 };
   const context = {
-    console, Date, AbortController, setTimeout: fn => fn(), setInterval: () => 1, clearInterval() {},
+    console, Date, AbortController,
+    setTimeout: (fn, delay) => { if (delay < 5000) { fn(); return 0; } const id = ++nextTimer; timers.set(id, fn); return id; },
+    clearTimeout: id => timers.delete(id), setInterval: () => 1, clearInterval() {},
     localStorage: { getItem: k => history.get(k), setItem: (k, v) => history.set(k, v) },
-    document: { getElementById: get, createElement: () => new Element(), addEventListener() {},
+    document: { getElementById: get, createElement: () => new Element(), addEventListener: (type, fn) => documents.push({type,fn}),
       querySelector: () => null, querySelectorAll: () => [] },
     fetch: async (url, options) => {
       calls.push({ url, options });
-      const data = responder(url);
-      return { ok: true, json: async () => data };
+      const data = await responder(url, options);
+      if (data instanceof Error) throw data;
+      const status = data?.httpStatus || 200;
+      return { ok: status >= 200 && status < 300, status, json: async () => data };
     },
   };
   const { createPlanner } = await loadBrowserModule(new URL('../js/planner.js', import.meta.url), context);
   const planner = createPlanner({ apiBaseUrl: '/api', getMapTilerKey: () => 'test-key',
-    locationService: { getPosition: () => position }, getNearbyStops: () => [], showToast() {},
+    locationService: { getPosition: () => position }, getNearbyStops: () => [], showToast: text => toasts.push(text),
     showVehicleOnMap: (...args) => maps.push(args), addMinutesToTime: s => s,
     onAccordionOpen() {}, onBack() {} });
   planner.initPlanner();
-  return { planner, get, calls, maps, history, respond: fn => { responder = fn; },
+  return { planner, get, calls, maps, history, toasts, documents, timers, respond: fn => { responder = fn; },
     move: p => { position = p; } };
 }
 
 async function chooseStop(h, field, name, ids) {
   h.respond(url => url.includes('/stops/search')
-    ? ids.map(stopId => ({ name, stopId })) : { features: [] });
+    ? ids.map(stopId => ({ name, stopId })) : { results: [] });
   const input = h.get(`route-input-${field}`); input.value = name;
   await input.emit('input');
   const suggestions = h.get(`route-suggestions-${field}`);
@@ -122,19 +128,186 @@ test('dynamic GPS stays fresh at search time and swap keeps the same selected po
   assert.equal(h.calls.at(-1).url, '/api/route/complex?from=b1,b2&toLat=51.25&toLon=22.58&limit=8');
 });
 
-test('address autocomplete retains MapTiler coordinates and stop results precede addresses', async () => {
+test('address autocomplete retains PRG coordinates and stop results precede addresses', async () => {
   const h = await setup();
   await chooseStop(h, 'to', 'Felin', ['b1']);
   h.respond(url => url.includes('/stops/search') ? [{ name: 'Lipowa - cmentarz', stopId: 'lipowa' }]
-    : { features: [{ text: 'Lipowa', address: '1', place_name: 'Lipowa 1, Lublin', center: [22.55, 51.24] }] });
+    : { results: [{ type: 'address', street: 'Lipowa', house_number: '1', locality: 'Lublin', lat: 51.24, lon: 22.55 }] });
   const input = h.get('route-input-from'); input.value = 'Lipowa';
   await input.emit('input');
   const suggestions = h.get('route-suggestions-from').children;
   assert.equal(suggestions.length, 2);
   assert.match(suggestions[0].innerHTML, /Lipowa - cmentarz/);
-  assert.match(h.calls.at(-1).url, /language=pl&autocomplete=true&bbox=22.35,51.11,22.75,51.36/);
+  assert.equal(h.calls.at(-1).url, '/api/addresses/search?q=Lipowa&limit=4');
   await suggestions[1].querySelector('.address-main-click').click();
   h.respond(() => []);
   await h.get('route-search-btn').click();
   assert.equal(h.calls.at(-1).url, '/api/route/complex?fromLat=51.24&fromLon=22.55&to=b1&limit=8');
 });
+
+const street = { type: 'street', street: 'Lipowa', house_number: '', locality: 'Lublin', lat: 51.24, lon: 22.55 };
+const address = { ...street, type: 'address', house_number: '12', lat: 51.244582, lon: 22.552772 };
+function deferred() {
+  let resolve;
+  const promise = new Promise(r => { resolve = r; });
+  return { promise, resolve };
+}
+async function enter(h, field, query) {
+  const input = h.get('route-input-' + field); input.value = query;
+  await input.emit('input');
+  return h.get('route-suggestions-' + field);
+}
+
+for (const field of ['from', 'to']) {
+  test(field + ': progressive streets, separate main/arrow actions, building refinement and street-less address', async () => {
+    const h = await setup();
+    const other = field === 'from' ? 'to' : 'from';
+    await chooseStop(h, other, 'Felin', ['b1']);
+    h.respond(url => url.includes('/stops/search') ? [] : { results: [street] });
+    for (const q of ['li', 'lip', 'lipo', 'lipowa']) {
+      const box = await enter(h, field, q);
+      assert.equal(box.children.length, 1);
+      assert.match(box.children[0].innerHTML, /Lipowa/);
+      assert.doesNotMatch(box.children[0].innerHTML, /Lipowa 12/);
+    }
+    let card = h.get('route-suggestions-' + field).children[0];
+    await card.querySelector('.address-main-click').click();
+    h.respond(() => []);
+    await h.get('route-search-btn').click();
+    assert.ok(h.calls.at(-1).url.includes(field + 'Lat=51.24&' + field + 'Lon=22.55'));
+    assert.ok(!h.calls.at(-1).url.includes(field + '='));
+    h.respond(url => url.includes('/stops/search') ? [] : { results: [street] });
+    card = (await enter(h, field, 'Lipowa')).children[0];
+    const before = h.calls.length;
+    await card.querySelector('.address-copy-btn').click();
+    assert.equal(h.get('route-input-' + field).value, 'Lipowa ');
+    assert.equal(h.get('route-input-' + field).focused, true);
+    assert.equal(h.calls.length, before, 'arrow must not geocode or select a route');
+    await h.get('route-search-btn').click();
+    assert.equal(h.calls.length, before, 'old coordinates must not survive arrow/refinement');
+    h.respond(url => url.includes('/stops/search') ? [] : { results: [address] });
+    card = (await enter(h, field, 'Lipowa 12')).children[0];
+    assert.match(card.innerHTML, /Lipowa 12/);
+    await card.querySelector('.address-main-click').click();
+    h.respond(() => []);
+    await h.get('route-search-btn').click();
+    assert.ok(h.calls.at(-1).url.includes(field + 'Lat=51.244582&' + field + 'Lon=22.552772'));
+    const motycz = { ...address, street: '', locality: 'Motycz', house_number: '69B' };
+    h.respond(url => url.includes('/stops/search') ? [] : { results: [motycz] });
+    card = (await enter(h, field, 'Motycz 69B')).children[0];
+    assert.match(card.innerHTML, /Motycz 69B/);
+    await card.querySelector('.address-main-click').click();
+    const recents = JSON.parse(h.history.get('ta_recent_route_stops'));
+    assert.equal(recents[0].name, 'Motycz 69B');
+    assert.equal(recents[0].ids, undefined);
+    assert.ok(!h.calls.some(c => c.url.includes('maptiler')));
+  });
+
+  test(field + ': late responses, clearing, editing a selection and PRG failure', async () => {
+    const h = await setup();
+    await chooseStop(h, field === 'from' ? 'to' : 'from', 'Felin', ['b1']);
+    const old = deferred();
+    h.respond(url => url.includes('/stops/search') ? [] :
+      url.includes('q=li&') ? old.promise : { results: [address] });
+    const oldInput = enter(h, field, 'li');
+    await enter(h, field, 'Lipowa 12');
+    old.resolve({ results: [{ ...street, street: 'Old street' }] });
+    await oldInput;
+    let box = h.get('route-suggestions-' + field);
+    assert.match(box.children[0].innerHTML, /Lipowa 12/);
+    assert.doesNotMatch(box.children[0].innerHTML, /Old street/);
+    await box.children[0].querySelector('.address-main-click').click();
+    const late = deferred();
+    h.respond(url => url.includes('/stops/search') ? [] : late.promise);
+    const typing = enter(h, field, 'New address');
+    const before = h.calls.length;
+    await h.get('route-search-btn').click();
+    assert.equal(h.calls.length, before, 'editing invalidates selected coordinates immediately');
+    await enter(h, field, '');
+    late.resolve({ results: [street] }); await typing;
+    box = h.get('route-suggestions-' + field);
+    assert.ok(!box.children.some(c => (c.innerHTML || '').includes('address-main-click')));
+    for (const failure of [{ httpStatus: 503 }, new Error('network down'), { wrong: 'shape' }]) {
+      h.respond(url => url.includes('/stops/search') ? [{ name: 'Working stop', stopId: 'live-id' }] : failure);
+      box = await enter(h, field, 'Lipowa');
+      assert.match(box.children[0].innerHTML, /Working stop/);
+      assert.match(box.children.at(-1).textContent, /adresów.*niedostępne/);
+      await box.children[0].click();
+    }
+  });
+}
+
+test('address-to-address search preserves lat/lon; PRG order and four-card limit are retained', async () => {
+  const h = await setup();
+  h.respond(url => url.includes('/stops/search') ? [] : { results: [address,
+    { ...address, locality: 'Świdnik' }, { ...address, locality: 'Turka' },
+    { ...address, locality: 'Dys' }, { ...address, locality: 'Fifth' }] });
+  const box = await enter(h, 'from', 'Lipowa 12');
+  assert.equal(box.children.length, 4);
+  assert.match(box.children[1].innerHTML, /Świdnik/);
+  await box.children[0].querySelector('.address-main-click').click();
+  h.respond(url => url.includes('/stops/search') ? [] : { results: [{ ...address, lat: 51.3, lon: 22.6 }] });
+  await (await enter(h, 'to', 'Lipowa 12')).children[0].querySelector('.address-main-click').click();
+  h.respond(() => []);
+  await h.get('route-search-btn').click();
+  assert.equal(h.calls.at(-1).url, '/api/route/complex?fromLat=51.244582&fromLon=22.552772&toLat=51.3&toLon=22.6&limit=8');
+});
+
+for (const field of ['from', 'to']) {
+  test(field + ': PRG timeout keeps stops usable; clear button cancels pending suggestions', async () => {
+    const h = await setup();
+    h.respond((url, options) => url.includes('/stops/search')
+      ? [{ name: 'Usable stop', stopId: 's1' }]
+      : new Promise(resolve => options.signal.addEventListener('abort', () => resolve(new Error('aborted')), { once: true })));
+    const pending = enter(h, field, 'Lipowa');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.timers.size, 1);
+    [...h.timers.values()][0]();
+    await pending;
+    let box = h.get('route-suggestions-' + field);
+    assert.match(box.children[0].innerHTML, /Usable stop/);
+    assert.match(box.children.at(-1).textContent, /niedostępne/);
+    const late = deferred();
+    h.respond(url => url.includes('/stops/search') ? [] : late.promise);
+    const old = enter(h, field, 'Lipowa');
+    const button = h.get('route-clear-' + field);
+    button.classList.add('icon-clear');
+    await button.click();
+    assert.equal(h.get('route-input-' + field).value, '');
+    late.resolve({ results: [street] }); await old;
+    box = h.get('route-suggestions-' + field);
+    assert.ok(!box.children.some(c => (c.innerHTML || '').includes('address-main-click')));
+  });
+
+  test(field + ': outside click cannot reopen a list when pending data arrives', async () => {
+    const h = await setup(), late = deferred();
+    h.respond(url => url.includes('/stops/search') ? [] : late.promise);
+    const pending = enter(h, field, 'Lipowa');
+    for (const listener of h.documents.filter(d => d.type === 'click')) listener.fn({ target: new Element() });
+    late.resolve({ results: [street] }); await pending;
+    assert.equal(h.get('route-suggestions-' + field).style.display, 'none');
+  });
+}
+
+const prgFixtures = JSON.parse(fs.readFileSync(new URL('../../backend/src/test/resources/prg-query-fixtures.json', import.meta.url), 'utf8'));
+for (const field of ['from', 'to']) {
+  test(field + ': consumes the full PRG contract verified against real Kotlin HTTP', async () => {
+    const h = await setup();
+    for (const q of ['li', 'lip', 'lipo', 'lipowa', 'Lipowa 12', 'Motycz 69B', 'Raclawickie']) {
+      const fixture = prgFixtures.find(f => f.q === q);
+      assert.ok(fixture, q);
+      h.respond(url => url.includes('/stops/search') ? [] : fixture.expected);
+      const box = await enter(h, field, q);
+      const expected = fixture.expected.results.slice(0, 4);
+      assert.equal(box.children.length, expected.length);
+      for (let i = 0; i < expected.length; i++) {
+        assert.match(box.children[i].innerHTML, new RegExp(expected[i].locality));
+      }
+      await box.children[0].querySelector('.address-main-click').click();
+      const selected = JSON.parse(h.history.get('ta_recent_route_stops'))[0];
+      assert.equal(selected.lat, expected[0].lat);
+      assert.equal(selected.lon, expected[0].lon);
+      assert.equal(selected.ids, undefined);
+    }
+  });
+}

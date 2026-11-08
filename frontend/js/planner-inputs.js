@@ -1,10 +1,58 @@
 import { apiFetch } from './backend-connection.js';
 // Поля Trasa, вибрані точки, історія та підказки зупинок/адрес.
 export function createPlannerInputs({
-    apiBaseUrl, getMapTilerKey, locationService, getNearbyStops, showToast
+    apiBaseUrl, locationService, getNearbyStops, showToast
 }) {
     let routeFromStop = null;
     let routeToStop = null;
+    const searches = new Map([true, false].map(key => [key, { version: 0, controller: null }]));
+
+    function cancelSearch(isFrom) {
+        const state = searches.get(isFrom);
+        state.version++;
+        state.controller?.abort();
+        state.controller = null;
+    }
+
+    function clearSelectedPoint(isFrom) {
+        if (isFrom) routeFromStop = null;
+        else routeToStop = null;
+    }
+
+    function escapeAddressText(text) {
+        return String(text).replace(/[&<>"']/g, char =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
+
+    async function fetchAddresses(query, signal) {
+        const controller = new AbortController();
+        const abort = () => controller.abort();
+        signal.addEventListener('abort', abort, { once: true });
+        const timeout = setTimeout(abort, 5000);
+        try {
+            const response = await apiFetch(
+                `${apiBaseUrl}/addresses/search?q=${encodeURIComponent(query)}&limit=4`,
+                { signal: controller.signal });
+            // Queries valid for stops (e.g. platform numbers) may be invalid for PRG.
+            if (response.status === 400) return { results: [], unavailable: false };
+            if (!response.ok) throw new Error('Address search unavailable');
+            const data = await response.json();
+            if (!Array.isArray(data.results)) throw new Error('Invalid address response');
+            return {
+                results: data.results.filter(item =>
+                    (item.type === 'street' || item.type === 'address') &&
+                    typeof item.street === 'string' && typeof item.locality === 'string' &&
+                    typeof item.house_number === 'string' &&
+                    Number.isFinite(item.lat) && Number.isFinite(item.lon)),
+                unavailable: false
+            };
+        } catch {
+            return { results: [], unavailable: !signal.aborted };
+        } finally {
+            clearTimeout(timeout);
+            signal.removeEventListener('abort', abort);
+        }
+    }
 
     function getRecentRouteStops() {
         try { return JSON.parse(localStorage.getItem('ta_recent_route_stops')) || []; } catch (e) { return []; }
@@ -76,6 +124,8 @@ export function createPlannerInputs({
     }
 
     function applyRecentRoute(route) {
+        cancelSearch(true);
+        cancelSearch(false);
         document.getElementById('route-input-from').value = route.from.name;
         document.getElementById('route-input-to').value = route.to.name;
 
@@ -118,6 +168,10 @@ export function createPlannerInputs({
     }
 
     function swapRoutePoints() {
+      cancelSearch(true);
+      cancelSearch(false);
+      document.getElementById('route-suggestions-from').style.display = 'none';
+      document.getElementById('route-suggestions-to').style.display = 'none';
       const inputFrom = document.getElementById('route-input-from');
       const inputTo = document.getElementById('route-input-to');
 
@@ -147,6 +201,7 @@ export function createPlannerInputs({
       const boxEl = document.getElementById(isFrom ? 'route-suggestions-from' : 'route-suggestions-to');
 
       if (locationService.getPosition()) {
+        cancelSearch(isFrom);
         if (inputEl) inputEl.value = 'Moja lokalizacja';
         if (boxEl) {
           boxEl.innerHTML = '';
@@ -203,6 +258,7 @@ export function createPlannerInputs({
 
                 // 2. Стан CLEAR ✕
                 if (actionBtn.classList.contains('icon-clear')) {
+                    cancelSearch(isFrom);
                     input.value = '';
                     suggestionsBox.style.display = 'none';
                     if (isFrom) routeFromStop = null;
@@ -234,6 +290,10 @@ export function createPlannerInputs({
 
         input.addEventListener('input', async (e) => {
             const query = e.target.value.trim();
+            cancelSearch(isFrom);
+            clearSelectedPoint(isFrom);
+            suggestionsBox.innerHTML = '';
+            suggestionsBox.style.display = 'none';
             updateRouteButtonState(isFrom);
 
             if (query.length === 0) {
@@ -247,18 +307,24 @@ export function createPlannerInputs({
                 return;
             }
 
+            const state = searches.get(isFrom);
+            const version = state.version;
+            const controller = new AbortController();
+            state.controller = controller;
+            const isCurrent = () => state.version === version && !controller.signal.aborted;
+
             try {
-                const stopsPromise = apiFetch(`${apiBaseUrl}/stops/search?q=${encodeURIComponent(query)}`)
-                    .then(r => r.ok ? r.json() : []);
+                const stopsPromise = apiFetch(`${apiBaseUrl}/stops/search?q=${encodeURIComponent(query)}`,
+                    { signal: controller.signal })
+                    .then(r => r.ok ? r.json() : [])
+                    .catch(() => []);
+                const addressesPromise = fetchAddresses(query, controller.signal);
+                const [stops, addresses] = await Promise.all([stopsPromise, addressesPromise]);
+                if (!isCurrent()) return;
 
-                const mapTilerUrl = `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${getMapTilerKey()}&language=pl&autocomplete=true&bbox=22.35,51.11,22.75,51.36`;
-                const geocodePromise = fetch(mapTilerUrl)
-                    .then(r => r.ok ? r.json() : { features: [] });
-
-                const [stops, geocodeData] = await Promise.all([stopsPromise, geocodePromise]);
-
-                if (stops.length === 0 && (!geocodeData.features || geocodeData.features.length === 0)) {
-                    suggestionsBox.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">Brak wyników</div>';
+                if (stops.length === 0 && addresses.results.length === 0) {
+                    suggestionsBox.innerHTML = `<div style="padding: 10px; color: var(--text-muted);">${addresses.unavailable
+                        ? 'Wyszukiwanie adresów jest chwilowo niedostępne.' : 'Brak wyników'}</div>`;
                     suggestionsBox.style.display = 'block';
                     return;
                 }
@@ -289,6 +355,7 @@ export function createPlannerInputs({
                     `;
 
                         div.addEventListener('click', () => {
+                            cancelSearch(isFrom);
                             input.value = group.name;
                             suggestionsBox.innerHTML = '';
                             suggestionsBox.style.display = 'none';
@@ -307,33 +374,35 @@ export function createPlannerInputs({
                     });
                 }
 
-                // Клік по адресі (MapTiler)
-                if (geocodeData.features && geocodeData.features.length > 0) {
-                    geocodeData.features.slice(0, 4).forEach(feature => {
+                // PRG streets and addresses share the existing address card and selection model.
+                if (addresses.results.length > 0) {
+                    addresses.results.slice(0, 4).forEach(address => {
                         const div = document.createElement('div');
                         div.className = 'stop-card';
                         div.style = 'padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; justify-content: space-between; gap: 12px;';
 
-                        const shortName = feature.text + (feature.address ? ' ' + feature.address : '');
-                        const contextParts = feature.place_name.split(',').slice(1).join(',').trim();
+                        const shortName = address.type === 'street' ? address.street
+                            : `${address.street || address.locality} ${address.house_number}`.trim();
+                        const contextParts = address.locality;
 
                         div.innerHTML = `
                         <div class="address-main-click" style="display: flex; align-items: center; gap: 12px; flex: 1; cursor: pointer;">
                             <div class="svg-icon icon-map-pin" style="color: var(--text-muted); flex-shrink: 0;"></div>
                             <div style="overflow: hidden;">
-                                <div style="font-weight: bold; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${shortName}</div>
-                                <div style="font-size: 0.85em; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${contextParts}</div>
+                                <div style="font-weight: bold; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeAddressText(shortName)}</div>
+                                <div style="font-size: 0.85em; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeAddressText(contextParts)}</div>
                             </div>
                         </div>
                         <div class="address-copy-btn" style="padding: 4px 8px; cursor: pointer; color: var(--text-muted); font-size: 20px; font-weight: bold; flex-shrink: 0;">↖</div>
                     `;
 
                         div.querySelector('.address-main-click').addEventListener('click', () => {
+                            cancelSearch(isFrom);
                             input.value = shortName;
                             suggestionsBox.innerHTML = '';
                             suggestionsBox.style.display = 'none';
 
-                            const routeObj = { name: shortName, lat: feature.center[1], lon: feature.center[0] };
+                            const routeObj = { name: shortName, lat: address.lat, lon: address.lon };
                             if (isFrom) routeFromStop = routeObj; else routeToStop = routeObj;
                             saveRecentRouteStop(routeObj);
 
@@ -344,6 +413,8 @@ export function createPlannerInputs({
 
                         div.querySelector('.address-copy-btn').addEventListener('click', (e) => {
                             e.stopPropagation();
+                            cancelSearch(isFrom);
+                            clearSelectedPoint(isFrom);
                             input.value = shortName + ' ';
                             input.focus();
                             updateRouteButtonState(isFrom);
@@ -353,14 +424,23 @@ export function createPlannerInputs({
                     });
                 }
 
+                if (addresses.unavailable) {
+                    const notice = document.createElement('div');
+                    notice.style = 'padding: 10px; color: var(--text-muted);';
+                    notice.textContent = 'Wyszukiwanie adresów jest chwilowo niedostępne.';
+                    suggestionsBox.appendChild(notice);
+                }
                 suggestionsBox.style.display = 'block';
             } catch (error) {
-                console.error('Помилка пошуку:', error);
+                if (isCurrent()) console.error('Помилка пошуку:', error);
+            } finally {
+                if (state.version === version) state.controller = null;
             }
         });
 
         document.addEventListener('click', (e) => {
             if (!input.contains(e.target) && !suggestionsBox.contains(e.target)) {
+                cancelSearch(isFrom);
                 suggestionsBox.style.display = 'none';
             }
         });
@@ -428,6 +508,7 @@ export function createPlannerInputs({
         }
 
         item.addEventListener('click', () => {
+            cancelSearch(isFrom);
             inputEl.value = group.name;
             suggestionsBoxEl.style.display = 'none';
 

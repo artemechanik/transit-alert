@@ -38,6 +38,9 @@ dependencies {
     implementation("io.ktor:ktor-client-core-jvm")
     implementation("io.ktor:ktor-client-cio-jvm")
 
+    // Independent read-only PRG dictionary.
+    implementation("org.xerial:sqlite-jdbc:3.46.1.3")
+
     // Logging
     implementation("ch.qos.logback:logback-classic:1.5.6")
 

@@ -43,6 +43,7 @@ fun Application.module() {
 
     // 4. Роути
     statusRoutes()
+    addressRoutes()
     reportRoutes()
     riskRoutes()
     upcomingStopsRoutes()

@@ -1,0 +1,9 @@
+:root{font:17px system-ui,sans-serif;color:#16312b;background:#f1f5f1}*{box-sizing:border-box}
+main{max-width:780px;margin:7vh auto;padding:28px}h1{font-size:2.8rem;letter-spacing:-.05em;margin:.4em 0}p{line-height:1.6}
+.eyebrow{font-size:.7rem;font-weight:700;letter-spacing:.14em;color:#52695f}label{display:block;margin-top:32px;margin-bottom:10px;font-weight:600}
+input{width:100%;font:inherit;padding:18px;border:2px solid #9aafa3;border-radius:10px;background:white}input:focus{outline:3px solid #a9d5bf;border-color:#206646}
+#status{font-size:.85rem;color:#52695f;min-height:1.6em}ul{list-style:none;padding:0;margin:0;background:white;border-radius:10px;overflow:hidden}
+li{padding:14px 18px;border-bottom:1px solid #e6ece7;cursor:pointer}li[aria-selected=true],li:hover{background:#dbeee1}
+li small{display:block;color:#587265;font-size:.75rem;margin-top:5px}section{margin-top:26px;padding:20px;background:#dbeee1;border-radius:10px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.8rem;line-height:1.8}footer{margin-top:32px;font-size:.75rem;color:#52695f}
+@media(max-width:600px){main{padding:18px;margin:2vh auto}h1{font-size:2.1rem}}

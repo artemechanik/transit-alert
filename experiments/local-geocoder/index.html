@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="uk"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Локальний пошук PRG</title><link rel="stylesheet" href="/style.css">
+<main><p class="eyebrow">TRANSIT ALERT · ОКРЕМИЙ ЕКСПЕРИМЕНТ</p>
+<h1>Знайти адресу</h1><p>Люблін та околиці · державні дані PRG · пошук повністю локальний</p>
+<label for="query">Вулиця, населений пункт або адреса</label>
+<input id="query" role="combobox" aria-autocomplete="list" aria-controls="results" aria-expanded="false"
+ autocomplete="off" placeholder="Biłgorajska 24 або Motycz 69B" maxlength="200">
+<p id="status" role="status" aria-live="polite">Введіть адресу польською або без діакритики.</p>
+<ul id="results" role="listbox" aria-label="Адресні підказки"></ul>
+<section id="selection" hidden><h2>Обрана адреса</h2><p id="selected-name"></p><pre id="details"></pre></section>
+<footer><p>↑ ↓ — вибір · Enter — підтвердити · Esc — закрити</p>
+<p>Квартира не є окремою адресною точкою. Покриття: усі адреси 16 гмін, без обмеження 1 км. Джерело: PRG/GUGiK.</p>
+<p id="stats"></p></footer></main><script src="/app.js"></script></html>

@@ -1,0 +1,7 @@
+{
+  "e1462166-2e68-49e4-ac37-a53773dd605d": {"decision":"review","reason":"Arena Lublin point over 1 km from same-name BDOT stadium"},
+  "e1b5b4e1-1408-4c6b-8382-8b679c2b637c": {"decision":"review","reason":"Arena Lublin point several km from same-name BDOT stadium"},
+  "af37775e-6e18-4e9c-9f31-0c58da510871": {"decision":"review","reason":"same-name Muzeum Cebularza has conflicting location; retain other source point provisionally"},
+  "da4e28af-30ea-49fa-a68c-8068bc6c5a63": {"decision":"review","reason":"Skansen Wsi Lubelskiej point conflicts with Muzeum Wsi Lubelskiej location; do not invent second destination"},
+  "bb30e3b5-d1f1-47c5-a693-c83ca4c6617a": {"decision":"include","category":"industry","relevance":75,"reason":"science and technology park is a workplace destination, not a public green park"}
+}

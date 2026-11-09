@@ -1,0 +1,182 @@
+[
+  {
+    "audit_group": 1,
+    "action": "merge",
+    "members": [
+      [
+        "bdot:26780F22-46C2-DA8A-E053-CC2BA8C01EC0",
+        "bdot:26780F22-46C3-DA8A-E053-CC2BA8C01EC0",
+        "bdot:26780F22-4732-DA8A-E053-CC2BA8C01EC0",
+        "bdot:26780F22-4738-DA8A-E053-CC2BA8C01EC0",
+        "bdot:26780F22-47A0-DA8A-E053-CC2BA8C01EC0",
+        "bdot:26780F22-4885-DA8A-E053-CC2BA8C01EC0",
+        "bdot:26780F22-488B-DA8A-E053-CC2BA8C01EC0",
+        "bdot:26780F22-4902-DA8A-E053-CC2BA8C01EC0",
+        "bdot:26780F22-D2CC-DA8A-E053-CC2BA8C01EC0",
+        "bdot:9418e781-8c4b-11ee-a3ae-44e5174962da",
+        "bdot:941b5881-8c4b-11ee-83d4-44e5174962da",
+        "bdot:941b5883-8c4b-11ee-806f-44e5174962da",
+        "bdot:946a62df-8c4b-11ee-b2f9-44e5174962da",
+        "bdot:950172d7-8c4b-11ee-8de5-44e5174962da",
+        "bdot:950172ef-8c4b-11ee-977b-44e5174962da",
+        "bdot:950172f1-8c4b-11ee-90bc-44e5174962da",
+        "bdot:950172f3-8c4b-11ee-977b-44e5174962da",
+        "bdot:9503e3d7-8c4b-11ee-be18-44e5174962da",
+        "overture:1327afe9-db22-4a83-95e9-c14168532c43"
+      ],
+      [
+        "bdot:26780F22-4788-DA8A-E053-CC2BA8C01EC0"
+      ]
+    ],
+    "reason": "Approved same destination"
+  },
+  {
+    "audit_group": 2,
+    "action": "merge",
+    "members": [
+      [
+        "bdot:26780F22-464B-DA8A-E053-CC2BA8C01EC0",
+        "bdot:944db31f-8c4b-11ee-ad84-44e5174962da",
+        "bdot:948c1baf-8c4b-11ee-b3bc-44e5174962da",
+        "bdot:94a8cb71-8c4b-11ee-8eeb-44e5174962da",
+        "bdot:94c57b31-8c4b-11ee-b715-44e5174962da",
+        "bdot:94f58bdf-8c4b-11ee-a2d6-44e5174962da",
+        "bdot:950172c1-8c4b-11ee-a133-44e5174962da",
+        "bdot:950172c3-8c4b-11ee-bca6-44e5174962da",
+        "bdot:950172c5-8c4b-11ee-8dfe-44e5174962da",
+        "bdot:950172c7-8c4b-11ee-a82a-44e5174962da",
+        "bdot:950172c9-8c4b-11ee-b34f-44e5174962da",
+        "bdot:950172cb-8c4b-11ee-9138-44e5174962da",
+        "bdot:950172d3-8c4b-11ee-8706-44e5174962da",
+        "bdot:950172d5-8c4b-11ee-bb42-44e5174962da",
+        "bdot:950172e7-8c4b-11ee-be2e-44e5174962da",
+        "bdot:950172e9-8c4b-11ee-93b2-44e5174962da",
+        "bdot:950172eb-8c4b-11ee-9aa9-44e5174962da",
+        "bdot:950172ed-8c4b-11ee-a5ff-44e5174962da",
+        "bdot:9503e3d9-8c4b-11ee-82d7-44e5174962da",
+        "bdot:9503e3db-8c4b-11ee-b6d0-44e5174962da",
+        "bdot:ece38da2-a039-11ee-87fc-44e5174962da",
+        "overture:37238624-fcab-47d1-a00f-fe105dc5da44"
+      ],
+      [
+        "bdot:26780F22-47FA-DA8A-E053-CC2BA8C01EC0",
+        "bdot:BC1F10AD-D340-413E-B2AB-2813D265688D"
+      ]
+    ],
+    "reason": "Approved same destination"
+  },
+  {
+    "audit_group": 3,
+    "action": "merge",
+    "members": [
+      [
+        "bdot:97320e61-8c4b-11ee-94a9-44e5174962da",
+        "overture:d197a6e2-7a5c-48c4-912b-9d1a64274b79"
+      ],
+      [
+        "overture:f70687df-4919-48ae-980a-942dfe58de1e"
+      ]
+    ],
+    "reason": "Approved same destination"
+  },
+  {
+    "audit_group": 4,
+    "action": "represent",
+    "members": [
+      [
+        "bdot:4875C032-7522-4C03-AA41-8C5F843971F0"
+      ],
+      [
+        "bdot:6A037197-E8A0-4FFC-9F9C-F200348379C4",
+        "bdot:8e1e72a6-8c4b-11ee-8dbc-44e5174962da"
+      ]
+    ],
+    "reason": "Retain physical places; suppress indistinguishable suggestion pending review",
+    "labels": [
+      "Uniwersytet Medyczny w Lublinie — budynek szpitalny",
+      "Uniwersytet Medyczny w Lublinie — teren szkoły wyższej"
+    ]
+  },
+  {
+    "audit_group": 5,
+    "action": "represent",
+    "members": [
+      [
+        "bdot:26780F22-4D18-DA8A-E053-CC2BA8C01EC0"
+      ],
+      [
+        "bdot:26780F22-4734-DA8A-E053-CC2BA8C01EC0"
+      ]
+    ],
+    "reason": "Retain physical places; suppress indistinguishable suggestion pending review"
+  },
+  {
+    "audit_group": 6,
+    "action": "represent",
+    "members": [
+      [
+        "bdot:ea772181-a039-11ee-a99a-44e5174962da"
+      ],
+      [
+        "bdot:26780F22-478B-DA8A-E053-CC2BA8C01EC0"
+      ]
+    ],
+    "reason": "Retain physical places; suppress indistinguishable suggestion pending review",
+    "labels": [
+      "Uniwersytet Przyrodniczy w Lublinie — budynek szkoły wyższej",
+      "Uniwersytet Przyrodniczy w Lublinie — biblioteka"
+    ]
+  },
+  {
+    "audit_group": 7,
+    "action": "represent",
+    "members": [
+      [
+        "bdot:26780F22-4CA6-DA8A-E053-CC2BA8C01EC0"
+      ],
+      [
+        "bdot:26780F22-48FC-DA8A-E053-CC2BA8C01EC0"
+      ]
+    ],
+    "reason": "Retain physical places; suppress indistinguishable suggestion pending review"
+  },
+  {
+    "audit_group": 8,
+    "action": "represent",
+    "members": [
+      [
+        "bdot:2CD6FBCE-B6FE-42B7-8D97-47F16F9579D7"
+      ],
+      [
+        "bdot:26780F22-48FE-DA8A-E053-CC2BA8C01EC0"
+      ]
+    ],
+    "reason": "Retain physical places; suppress indistinguishable suggestion pending review"
+  },
+  {
+    "audit_group": 9,
+    "action": "represent",
+    "members": [
+      [
+        "bdot:26780F22-49C6-DA8A-E053-CC2BA8C01EC0"
+      ],
+      [
+        "bdot:7CF046E4-F090-470A-A361-6FBE6FD7BDC5"
+      ]
+    ],
+    "reason": "Retain physical places; suppress indistinguishable suggestion pending review"
+  },
+  {
+    "audit_group": 10,
+    "action": "represent",
+    "members": [
+      [
+        "bdot:eb1bc5f1-a039-11ee-b9c8-44e5174962da"
+      ],
+      [
+        "bdot:eb504383-a039-11ee-b344-44e5174962da"
+      ]
+    ],
+    "reason": "Retain physical places; suppress indistinguishable suggestion pending review"
+  }
+]

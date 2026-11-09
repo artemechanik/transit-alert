@@ -1,0 +1,76 @@
+{
+  "release": "2026-10-21.0",
+  "bbox": [
+    22.1293,
+    50.979211,
+    22.864832,
+    51.545196
+  ],
+  "files": [
+    {
+      "file": "overture-2026-10-21.0.parquet",
+      "sha256": "ad6697718215f0bea5f1a6832b5f53462cf7399eedc9a49efb481c9490439701",
+      "url": "s3://overturemaps-us-west-2/release/2026-10-21.0/theme=places/type=place/*",
+      "snapshot_date": "2026-11-08"
+    },
+    {
+      "file": "0663_GML.zip",
+      "sha256": "0574aaeda26a9f42b35db59d2bad9bada7909c235245daa1ea5b1879615acce9",
+      "url": "https://opendata.geoportal.gov.pl/bdot10k/schemat2021/06/0663_GML.zip",
+      "snapshot_date": "2026-11-08"
+    },
+    {
+      "file": "0617_GML.zip",
+      "sha256": "62ca5a41db7eb12a0814dfe93d62fecb1b7374ed688bb70cc19896b0a843bff7",
+      "url": "https://opendata.geoportal.gov.pl/bdot10k/schemat2021/06/0617_GML.zip",
+      "snapshot_date": "2026-11-08"
+    },
+    {
+      "file": "wikidata-controls.json",
+      "sha256": "7832cc41fe8f43d8deadb1438ce0d65e5270f562cf9ccc1c1325f31aeb88bef7",
+      "url": "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q24121676%7CQ1916610%7CQ9186420&props=info%7Clabels%7Caliases%7Cclaims&languages=pl%7Cen&maxlag=5&format=json",
+      "snapshot_date": "2026-11-08"
+    },
+    {
+      "file": "gtfs.zip",
+      "sha256": "4f93a6e61ba6449420ececb80e2dca56c3a0e0bb6a445b54c177e77869690e60",
+      "url": "https://api.zbiorkom.live/api6-open/lublin/gtfs/default",
+      "snapshot_date": "2026-11-07"
+    },
+    {
+      "file": "boundary.json",
+      "sha256": "7024afc8b6e77a1cb0a90aa720977d10d68f164723a6ff7d5e96aa106f39731a",
+      "url": "https://mapy.geoportal.gov.pl/wss/service/PZGIK/PRG/WFS/AdministrativeBoundaries",
+      "snapshot_date": "2026-11-07"
+    }
+  ],
+  "wikidata_scope": "three confirmed control entities; unrelated search result present in raw snapshot is not imported",
+  "boundary_method": "16 full PRG gmina polygons, WGS84 lon/lat; derived from study A03_Granice_gmin.gml",
+  "gtfs_use": "nearest-stop signal only, no GTFS data redistributed as POIs",
+  "license_artifacts": [
+    {
+      "file": "Apache-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "file": "CC0-1.0.txt",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+    },
+    {
+      "file": "CDLA-Permissive-2.0.html",
+      "sha256": "d83421c5034fc32005797c66309851f5703cc5dc330068d26bbeac9ebb0b8f63"
+    },
+    {
+      "file": "Foursquare-NOTICE.html",
+      "sha256": "c0c2e01a4c473cb07072f6ff54db7e6a2c6c3173e6e73a7e4f33380341803f03"
+    },
+    {
+      "file": "Overture-attribution.html",
+      "sha256": "95dafe36193495560ee775eddaff69aa263b37087c19beb3caad0bedc540eef6"
+    },
+    {
+      "file": "PGiK-2026-1389.pdf",
+      "sha256": "f7b4ac608d0737a50bf59729d04ea7100f9e64728affcf3fd7582cbfcfaa0c24"
+    }
+  ]
+}

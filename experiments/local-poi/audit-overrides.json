@@ -1,0 +1,194 @@
+{
+  "overture:0e56884b-8bf5-4781-8b89-a8c8af711a3b": {
+    "decision": "include",
+    "name": "RAPA",
+    "expected_name": "RAPA",
+    "category": "industry",
+    "relevance": 80,
+    "site": "RAPA",
+    "reason": "Named production facility, Ceramiczna 9",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:4f817798-f94f-404b-9692-694d35430449": {
+    "decision": "include",
+    "name": "VERANO GLOBAL",
+    "expected_name": "VERANO GLOBAL",
+    "category": "industry",
+    "relevance": 80,
+    "site": "VERANO GLOBAL",
+    "reason": "Verified manufacturer, Vetterow 7A",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:9b2ca643-5eef-424a-8d31-13f7a7b46f08": {
+    "decision": "include",
+    "name": "7R Park Lublin East I",
+    "expected_name": "7R",
+    "category": "industry",
+    "relevance": 80,
+    "site": "7R Park Lublin East I",
+    "reason": "Verified logistics park, Melgiewska 18",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:dc31bb18-1b62-41ff-bcd3-883d8d3df1ae": {
+    "decision": "include",
+    "name": "PCEZ Świdnik",
+    "expected_name": "Powiatowe Centrum Edukacji Zawodowej",
+    "category": "education",
+    "relevance": 80,
+    "site": "PCEZ Świdnik",
+    "reason": "Vocational school complex, Szkolna 1",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:0e37b66c-a1cc-4b78-81a6-d591d362218d": {
+    "decision": "include",
+    "name": "WSEI — Projektowa 4",
+    "expected_name": "Higher School of Economics and Innovation",
+    "category": "education",
+    "relevance": 80,
+    "site": "WSEI — Projektowa 4",
+    "reason": "University campus; historical English source name",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:86c350b6-49e1-46ee-814b-ea8edc142956": {
+    "decision": "include",
+    "name": "WOMP — Nałęczowska 27",
+    "expected_name": "Wojewódzki Ośrodek Medycyny Pracy",
+    "category": "health",
+    "relevance": 80,
+    "site": "WOMP — Nałęczowska 27",
+    "reason": "Regional occupational medicine centre",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:91596be5-c46a-4aaf-9c77-7013318cda12": {
+    "decision": "include",
+    "name": "Starostwo Powiatowe w Świdniku",
+    "expected_name": "Powiat Świdnicki w Świdniku",
+    "category": "government",
+    "relevance": 80,
+    "site": "Starostwo Powiatowe w Świdniku",
+    "reason": "Public county office, Niepodleglosci 13",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:bda5d3b9-3261-4fa3-b327-31daa646c449": {
+    "decision": "include",
+    "name": "Raben Logistics Polska",
+    "expected_name": "Raben Logistics Polska",
+    "category": "industry",
+    "relevance": 80,
+    "site": "Raben Logistics Polska",
+    "reason": "Verified warehouse complex; erroneous medical category",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:dbdb608c-934e-460b-a5f1-0ed580da6997": {
+    "decision": "include",
+    "name": "Filharmonia Lubelska",
+    "expected_name": "Filharmonia Lubelska",
+    "category": "culture",
+    "relevance": 80,
+    "site": "Filharmonia Lubelska",
+    "reason": "Permanent concert institution",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:37c3ec9f-c771-4b9d-9708-dee72286d977": {
+    "decision": "include",
+    "name": "Lubelskie Centrum Konferencyjne",
+    "expected_name": "Lubelskie Centrum Konferencyjne",
+    "category": "culture",
+    "relevance": 80,
+    "site": "Lubelskie Centrum Konferencyjne",
+    "reason": "Separate conference destination, Grottgera 2",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:6da91593-15ac-4862-8bac-501c86707054": {
+    "decision": "include",
+    "name": "Wojewódzka Biblioteka Publiczna im. Hieronima Łopacińskiego",
+    "expected_name": "Wojewódzka Biblioteka Publiczna im. Hieronima Lopacinskiego",
+    "category": "culture",
+    "relevance": 80,
+    "site": "Wojewódzka Biblioteka Publiczna im. Hieronima Łopacińskiego",
+    "reason": "Public regional library, Narutowicza 4",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:8a0cd656-7fbb-46e9-9b39-f37605d2995c": {
+    "decision": "include",
+    "name": "Allmedica — Tetmajera 21",
+    "expected_name": "Allmedica - Szpital ul. Tetmajera",
+    "category": "health",
+    "relevance": 80,
+    "site": "Allmedica — Tetmajera 21",
+    "reason": "Multispecialty medical destination, not only laboratory",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:8c09968e-d246-4b79-b081-ba9793f362d0": {
+    "decision": "include",
+    "name": "MPWiK — Piłsudskiego 15",
+    "expected_name": "MPWiK Sp. z o.o. w Lublinie",
+    "category": "government",
+    "relevance": 80,
+    "site": "MPWiK — Piłsudskiego 15",
+    "reason": "Customer service destination, separate from technical sites",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "bdot:26780F22-D33A-DA8A-E053-CC2BA8C01EC0": {
+    "decision": "include",
+    "name": "Elektrociepłownia Lublin-Wrotków",
+    "expected_name": "PGE Górnictwo i Energetyka Konwencjonalna S.A. Oddział Elektrociepłownia Lublin - Wrotków",
+    "category": "industry",
+    "relevance": 80,
+    "site": "Elektrociepłownia Lublin-Wrotków",
+    "reason": "Verified power/heat production site; purpose excluded by old type gate",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "bdot:26780F22-D2EC-DA8A-E053-CC2BA8C01EC0": {
+    "decision": "include",
+    "name": "LCKZiU",
+    "expected_name": "Lubelskie Centrum Kształcenia Zawodowego i Ustawicznego im. Krzysztofa Kamila Baczyńskiego",
+    "category": "education",
+    "relevance": 80,
+    "site": "LCKZiU",
+    "reason": "Named vocational education complex, Magnoliowa 8",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "bdot:26780F22-D2DF-DA8A-E053-CC2BA8C01EC0": {
+    "decision": "include",
+    "name": "Instytut Agrofizyki PAN",
+    "expected_name": "Instytut Agrofizyki Polska Akademia Nauk",
+    "category": "education",
+    "relevance": 80,
+    "site": "Instytut Agrofizyki PAN",
+    "reason": "Independent scientific campus, Doswiadczalna 4",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "bdot:26791096-EE41-C49B-E053-CC2BA8C05673": {
+    "decision": "include",
+    "name": "PCEZ Świdnik",
+    "expected_name": "Powiatowe Centrum Edukacji Zawodowej im. Zygmunta Puławskiego w Świdniku",
+    "category": "education",
+    "relevance": 80,
+    "site": "PCEZ Świdnik",
+    "reason": "Same reviewed physical school site as Overture record",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "bdot:26780F22-D3BF-DA8A-E053-CC2BA8C01EC0": {
+    "decision": "include",
+    "name": "VERANO GLOBAL",
+    "expected_name": "Verano Konwektory",
+    "category": "industry",
+    "relevance": 80,
+    "site": "VERANO GLOBAL",
+    "reason": "Same reviewed manufacturer site; 8323 m2 is not a reason to exclude",
+    "audit": "conversation audit 2026-11-08; approved cleanup 2026-11-09"
+  },
+  "overture:61cdd41b-482d-4b20-a04d-92d7dccf8b38": {
+    "decision": "reject",
+    "expected_name": "Konfrontacje Teatralne",
+    "reason": "Festival, not a permanent physical destination",
+    "audit": "approved cleanup 2026-11-09"
+  },
+  "overture:765ce230-3728-475e-b639-864853587832": {
+    "decision": "review",
+    "expected_name": "Projekt Kultura Bogusław Byrski",
+    "reason": "Organizer company; public venue not established",
+    "audit": "approved cleanup 2026-11-09"
+  }
+}

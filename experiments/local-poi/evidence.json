@@ -1,0 +1,10 @@
+{
+  "checked_on": "2026-11-08",
+  "scope": "Evidence of facility purpose, not employee counts, passenger demand, or verified entrances. Web pages are references, not copied POI data.",
+  "references": [
+    {"name": "PZL-Świdnik", "url": "https://www.pzlswidnik.pl/documents/12297516/12998040/Broszura%2BPZL-Swidnik_PL.pdf?t=1611299194793", "supports": "Aircraft production facility in Świdnik"},
+    {"name": "Intrograf", "url": "https://www.intrograf.com.pl/o-nas", "supports": "Printing/packaging production, not a small retail print shop"},
+    {"name": "Aliplast", "url": "https://bip.lublin.eu/download/gfx/bip/userfiles/_public/import/urzad-miasta-lublin/ogloszenia/obwieszczenia/2023/os/charakterystyka_decyzji_os-od-i.6220.54.2022.pdf", "supports": "Production/warehouse facility at Wacława Moritza 3; reason to quarantine two downtown Overture points"},
+    {"name": "Panattoni", "url": "https://panattonieurope.com/pl-pl/znajdz-nieruchomosc?region=lublin", "supports": "Logistics/warehouse parks in Lublin; no entrance or employment inference"}
+  ]
+}

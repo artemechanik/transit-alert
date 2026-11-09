@@ -1,0 +1,4 @@
+pyarrow==26.0.1
+pyproj==3.8.0
+shapely==2.2.0
+numpy==2.5.4

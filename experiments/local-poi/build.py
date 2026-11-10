@@ -382,6 +382,23 @@ def main():
             # No reliable distinguishing address/corpus name in these BDOT records.
             # Keep the first audited representation; preserve other places and all names.
             c.execute('UPDATE search_presentations SET visible=0,representative_id=?,reason=? WHERE poi_id=?',(ids[0],rule['reason'],ids[1]))
+    # Address curation is separate from physical identities, original payloads and ranking.
+    address_overrides=json.loads((ROOT/'address-overrides.json').read_text())
+    c.execute('CREATE TABLE address_overrides(poi_id TEXT PRIMARY KEY REFERENCES pois(id), address_line TEXT NOT NULL, locality TEXT NOT NULL, source TEXT NOT NULL, url TEXT NOT NULL, checked_on TEXT NOT NULL, confidence TEXT NOT NULL, details_json TEXT NOT NULL)')
+    for pid,record in sorted(address_overrides.items()):
+        row=c.execute('SELECT name,lon,lat FROM pois WHERE id=?',(pid,)).fetchone()
+        expected=(record['expected_name'],record['expected_lon'],record['expected_lat'])
+        if row!=expected:raise ValueError('Address override place identity/geometry changed: '+pid)
+        keys={source+':'+sid for source,sid in c.execute('SELECT source,source_id FROM features WHERE poi_id=?',(pid,))}
+        if keys!=set(record['source_ids']):raise ValueError('Address override sources changed: '+pid)
+        if record['confidence']!='confirmed':raise ValueError('Only confirmed addresses can be published')
+        if record.get('canonical_name'):
+            label=record['canonical_name']
+            c.execute('UPDATE pois SET name=? WHERE id=?',(label,pid))
+            c.execute('INSERT OR IGNORE INTO names VALUES(?,?,?,?,?,?,?)',(pid,label,normalize(label),'canonical','local_knowledge',pid,record['checked_on']))
+            for item in review:
+                if item['id']==pid:item['name']=label
+        c.execute('INSERT INTO address_overrides VALUES(?,?,?,?,?,?,?,?)',(pid,record['address_line'],record['locality'],record['source'],record['url'],record['checked_on'],record['confidence'],js(record)))
     c.execute('INSERT INTO metadata VALUES(?,?)',('presentation_rules',js(presentation_rules)))
     c.execute("INSERT INTO names_fts(names_fts) VALUES('rebuild')")
     c.execute('INSERT INTO metadata VALUES(?,?)',('manifest',js(manifest)))

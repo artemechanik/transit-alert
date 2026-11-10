@@ -22,7 +22,9 @@ data class PrgAddressResult(
     val display_name: String, val locality: String, val simc: String, val terc: String,
     val street: String, val house_number: String, val lat: Double, val lon: Double,
     val match_rank: Int, val ulic: String, val coordinate_kind: String,
-    val origin: String, val representative_method: String?
+    val origin: String, val representative_method: String?,
+    val category: String? = null, val subtitle: String? = null, val site_id: String? = null,
+    val address_line: String? = null, val address_status: String? = null
 )
 @Serializable
 data class PrgSearchResponse(val query: String, val results: List<PrgAddressResult>, val warning: String?)

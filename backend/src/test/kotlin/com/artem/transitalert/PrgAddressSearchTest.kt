@@ -51,7 +51,7 @@ class PrgAddressSearchTest {
         application {
             install(ContentNegotiation) { json() }
             statusRoutes()
-            addressRoutes(PrgAddressSearch(absent))
+            addressRoutes(PrgAddressSearch(absent), null)
         }
         assertEquals(HttpStatusCode.OK, client.get("/status").status)
         assertEquals(HttpStatusCode.ServiceUnavailable, client.get("/addresses/search?q=Lipowa").status)
@@ -76,7 +76,7 @@ class PrgAddressSearchTest {
         assumeTrue("Local PRG database not provided", Files.isRegularFile(database))
         application {
             install(ContentNegotiation) { json() }
-            addressRoutes(PrgAddressSearch(database))
+            addressRoutes(PrgAddressSearch(database), null)
         }
         for (q in listOf("", "   ")) {
             val response = client.get("/addresses/search") { parameter("q", q) }
@@ -109,7 +109,7 @@ class PrgAddressSearchTest {
         val server = embeddedServer(Netty, host = "127.0.0.1", port = 0) {
             install(ContentNegotiation) { json() }
             statusRoutes()
-            addressRoutes(PrgAddressSearch(database))
+            addressRoutes(PrgAddressSearch(database), null)
         }.start(wait = false)
         try {
             val port = server.resolvedConnectors().first().port

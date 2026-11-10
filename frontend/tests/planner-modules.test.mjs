@@ -11,7 +11,7 @@ class Element {
       remove: c => this.classes.delete(c) };
     this.parentNode = { insertBefore() {} };
   }
-  set innerHTML(value) { this.html = value; this.children = []; }
+  set innerHTML(value) { this.html = value; this.children = []; this.recentCards = null; }
   get innerHTML() { return this.html || ''; }
   addEventListener(type, listener) { (this.listeners[type] ||= []).push(listener); }
   async emit(type, extra = {}) {
@@ -28,13 +28,14 @@ class Element {
     return this.parts.get(selector);
   }
   querySelectorAll(selector) {
+    if (selector === '.stop-card') return this.recentCards ||= Array.from({ length: (this.innerHTML.match(/class="stop-card"/g) || []).length }, () => new Element());
     if (selector === '.dep-expand-map-btn') return [this.querySelector(selector)];
     return [];
   }
 }
 
-async function setup() {
-  const elements = new Map(), calls = [], maps = [], history = new Map(), toasts = [], documents = [], timers = new Map();
+async function setup(initialHistory = []) {
+  const elements = new Map(), calls = [], maps = [], history = new Map(initialHistory), toasts = [], documents = [], timers = new Map();
   let nextTimer = 0;
   const get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   let responder = () => [], position = { lat: 51.24, lon: 22.57 };
@@ -311,3 +312,155 @@ for (const field of ['from', 'to']) {
     }
   });
 }
+
+for (const field of ['from','to']) {
+  test(field + ': POI selection, stop priority, no refinement arrow and stale POI rejection', async () => {
+    const h = await setup();
+    const poi = { type: 'poi', id: 'poi:test', display_name: 'Galeria Orkana', subtitle: 'Orkana 6, Lublin', category: 'shopping', lat: 51.24, lon: 22.55 };
+    h.respond(url => url.includes('/stops/search') ? [{ name: 'Orkana', stopId: 's1' }] : { results: [poi] });
+    const box = await enter(h, field, 'ork');
+    assert.equal(box.children.length, 2);
+    assert.match(box.children[0].innerHTML, /Orkana/);
+    assert.ok(!box.children[0].innerHTML.includes('Galeria Orkana'));
+    const card = box.children[1];
+    assert.match(card.innerHTML, /Galeria Orkana/);
+    assert.match(card.innerHTML, /Orkana 6, Lublin/);
+    assert.ok(!card.innerHTML.includes('51.24'));
+    assert.ok(!card.innerHTML.includes('address-copy-btn'));
+    await card.querySelector('.address-main-click').click();
+    assert.equal(h.get('route-input-' + field).value, 'Galeria Orkana');
+    const recents = JSON.parse(h.history.get('ta_recent_route_stops'));
+    assert.deepEqual(recents[0], { name: 'Galeria Orkana', lat: 51.24, lon: 22.55 });
+    const late = deferred();
+    h.respond(url => url.includes('/stops/search') ? [] : late.promise);
+    const old = enter(h, field, 'olimp');
+    h.respond(url => url.includes('/stops/search') ? [] : { results: [] });
+    await enter(h, field, 'new');
+    late.resolve({ results: [poi] }); await old;
+    assert.ok(!box.children.some(c => (c.innerHTML || '').includes('Galeria Orkana')));
+  });
+}
+
+for (const field of ['from', 'to']) {
+  test(field + ': typed autocomplete uses one compact icon per card and structured POI mapping', async () => {
+    const h = await setup();
+    const cases = [
+      ['Orkana', { type:'street', street:'Władysława Orkana', locality:'Lublin', house_number:'', lat:51.23, lon:22.51 }, 'map-pin'],
+      ['Orkana', { type:'poi', id:'mall', display_name:'Galeria Orkana', subtitle:'Orkana 6, Lublin', category:'shopping', lat:51.23, lon:22.49 }, 'shopping-bag'],
+      ['Ball', { type:'poi', id:'factory', display_name:'Ball Packing Europe Lublin Sp. z o.o.', subtitle:'Vetterów 14, Lublin', category:'industry', lat:51.22, lon:22.64 }, 'factory'],
+      ['Cinema', { type:'poi', id:'poi:0e028b4b83d9237738cc', display_name:'Cinema', subtitle:'Lublin', category:'culture', lat:51.2, lon:22.5 }, 'clapperboard'],
+      ['Lipowa 13', { type:'address', street:'Lipowa', house_number:'13', locality:'Lublin', lat:51.2, lon:22.5 }, 'map-pin'],
+      ['Cinema', { type:'poi', id:'unknown', display_name:'Cinema in a name is not a category', subtitle:'Lublin', category:'unknown', lat:51.2, lon:22.5 }, 'map-pin'],
+    ];
+    for (const [query,item,icon] of cases) {
+      h.respond(url => url.includes('/stops/search') ? [] : { results:[item] });
+      const box = await enter(h,field,query), card=box.children[0];
+      assert.ok(card.className.includes('planner-autocomplete-card'));
+      assert.match(card.innerHTML,new RegExp('planner-icon-'+icon));
+      assert.equal((card.innerHTML.match(/aria-hidden="true"/g)||[]).length,1);
+      assert.ok(!card.innerHTML.includes('text-overflow'));
+      assert.equal(card.innerHTML.includes('address-copy-btn'),item.type!=='poi');
+      await card.querySelector('.address-main-click').click();
+      const recent=JSON.parse(h.history.get('ta_recent_route_stops'))[0];
+      assert.equal(recent.lat,item.lat);assert.equal(recent.lon,item.lon);
+    }
+    h.respond(url => url.includes('/stops/search') ? [{name:'Hubalczyków',stopId:'h1'},{name:'Hubalczyków',stopId:'h2'}] : { results:[] });
+    const box=await enter(h,field,'Hubalczyków');
+    assert.equal(box.children.length,1);
+    assert.match(box.children[0].innerHTML,/planner-icon-bus-front/);
+    assert.ok(!box.children[0].innerHTML.includes('stop.svg'));
+    assert.ok(!box.children[0].innerHTML.includes('planner-autocomplete-subtitle'));
+    await box.children[0].click();
+    assert.deepEqual(JSON.parse(h.history.get('ta_recent_route_stops'))[0].ids,['h1','h2']);
+  });
+}
+
+test('autocomplete SVG assets and wrapping rules remain local and scoped', () => {
+  const css=fs.readFileSync(new URL('../css/planner.css',import.meta.url),'utf8');
+  const scoped=css.slice(css.indexOf('/* Typed autocomplete results only;'));
+  assert.match(scoped,/min-width: 0/);assert.match(scoped,/overflow-wrap: anywhere/);
+  assert.match(scoped,/white-space: normal/);assert.ok(!scoped.includes('ellipsis'));
+  assert.match(scoped,/pointer-events: none/);
+  for(const icon of ['bus-front','map-pin','factory','shopping-bag','clapperboard','hospital','graduation-cap','trees','train-front','landmark']) {
+    assert.ok(fs.readFileSync(new URL('../icons/lucide/'+icon+'.svg',import.meta.url),'utf8').includes('<svg'));
+    assert.ok(scoped.includes('../icons/lucide/'+icon+'.svg'));
+  }
+});
+
+for (const field of ['from','to']) {
+  test(field + ': input icon appears only on selection and follows category, edit, refinement and clear', async () => {
+    const h=await setup(), icon=h.get('route-selected-icon-'+field);
+    assert.equal(icon.hidden,true);
+    await chooseStop(h,field,'Hubalczyków',['h1','h2']);
+    assert.equal(icon.hidden,false);assert.match(icon.className,/planner-icon-bus-front/);
+    for(const [category,wanted] of [['industry','factory'],['shopping','shopping-bag'],['health','hospital'],['education','graduation-cap'],['park','trees'],['transport','train-front'],['government','landmark'],['unknown','map-pin']]) {
+      h.respond(url=>url.includes('/stops/search') ? [] : {results:[{type:'poi',id:category,category,display_name:'Selected '+category,subtitle:'Lublin',lat:51.24,lon:22.55}]});
+      const box=await enter(h,field,category);
+      assert.equal(icon.hidden,true);
+      await box.children[0].querySelector('.address-main-click').click();
+      assert.equal(icon.hidden,false);assert.match(icon.className,new RegExp('planner-icon-'+wanted));
+    }
+    h.respond(url=>url.includes('/stops/search') ? [] : {results:[{type:'street',street:'Lipowa',locality:'Lublin',house_number:'',lat:51.2,lon:22.5}]});
+    let box=await enter(h,field,'Lipowa');
+    const streetCard=box.children[0];
+    await streetCard.querySelector('.address-main-click').click();
+    assert.match(icon.className,/planner-icon-map-pin/);
+    await streetCard.querySelector('.address-copy-btn').click();
+    assert.equal(icon.hidden,true);
+    box=await enter(h,field,'Lipowa');
+    await box.children[0].querySelector('.address-main-click').click();
+    const clear=h.get('route-clear-'+field);clear.classList.add('icon-clear');
+    await clear.click();assert.equal(icon.hidden,true);
+    assert.equal(h.get('route-input-'+field).value,'');
+    h.respond(url=>url.includes('/stops/search') ? [] : {results:[{type:'address',street:'Lipowa',house_number:'13',locality:'Lublin',lat:51.25,lon:22.56}]});
+    box=await enter(h,field,'Lipowa 13');
+    await box.children[0].querySelector('.address-main-click').click();
+    assert.match(icon.className,/planner-icon-map-pin/);
+    const gpsState=await setup();
+    const gps=gpsState.get('route-clear-'+field);gps.classList.add('icon-location');
+    await gps.click();
+    assert.equal(gpsState.get('route-selected-icon-'+field).hidden,false);
+    assert.match(gpsState.get('route-selected-icon-'+field).className,/icon-location/);
+    await enter(gpsState,field,'editing GPS');
+    assert.equal(gpsState.get('route-selected-icon-'+field).hidden,true);
+  });
+}
+
+test('selected icons swap with points, GPS remains dynamic, and route history restores category metadata', async () => {
+  const h=await setup();
+  h.respond(url=>url.includes('/stops/search') ? [] : {results:[{type:'poi',id:'poi:0e028b4b83d9237738cc',category:'culture',display_name:'Cinema',subtitle:'Lublin',lat:51.24,lon:22.55}]});
+  await (await enter(h,'from','Cinema')).children[0].querySelector('.address-main-click').click();
+  await chooseStop(h,'to','Felin',['f1']);
+  h.respond(()=>[]);await h.get('route-search-btn').click();
+  assert.match(h.get('route-selected-icon-from').className,/clapperboard/);
+  const swap=h.get('route-clear-to');swap.classList.add('icon-swap');await swap.click();
+  assert.match(h.get('route-selected-icon-to').className,/clapperboard/);
+  assert.match(h.get('route-selected-icon-from').className,/bus-front/);
+  // A new page restores the saved icon even when the bounded recent-point cache is gone.
+  const history=[...h.history.entries()].filter(([key])=>key!=='ta_route_point_icons');
+  const restored=await setup(history);
+  restored.planner.renderRecentRoutes();
+  const cards=restored.get('recent-routes-list').querySelectorAll('.stop-card');assert.ok(cards.length>0);
+  await cards[0].click();
+  assert.match(restored.get('route-selected-icon-to').className,/clapperboard/);
+  assert.match(restored.get('route-selected-icon-from').className,/bus-front/);
+  await enter(restored,'from','');
+  const gps=restored.get('route-clear-from');gps.classList.add('icon-location');
+  restored.respond(()=>[]);await gps.click();
+  assert.match(restored.get('route-selected-icon-from').className,/icon-location/);
+  assert.equal(restored.get('route-selected-icon-from').hidden,false);
+  restored.move({lat:51.3,lon:22.6});await restored.get('route-search-btn').click();
+  assert.ok(restored.calls.at(-1).url.includes('fromLat=51.3&fromLon=22.6'));
+  const reverse=restored.get('route-clear-to');reverse.classList.add('icon-swap');await reverse.click();
+  assert.match(restored.get('route-selected-icon-to').className,/icon-location/);
+});
+
+test('input icon slots reserve stable left padding and do not intercept field actions',()=>{
+  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  for(const field of ['from','to']) {
+    assert.match(html,new RegExp('id="route-selected-icon-'+field+'"[^>]*aria-hidden="true" hidden'));
+    assert.match(html,new RegExp('id="route-input-'+field+'"\\s+style="[^"]*padding: 9px 36px 9px 40px'));
+  }
+  const css=fs.readFileSync(new URL('../css/planner.css',import.meta.url),'utf8');
+  assert.match(css,/#route-selected-icon-from, #route-selected-icon-to \{[^}]*pointer-events: none/s);
+});

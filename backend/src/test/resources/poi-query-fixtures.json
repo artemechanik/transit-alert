@@ -1,0 +1,929 @@
+[
+  {
+    "q": "ork",
+    "results": [
+      {
+        "id": "poi:3703596b6fb9384a1509",
+        "name": "Galeria Orkana",
+        "lat": 51.23409956,
+        "lon": 22.49597814,
+        "category": "shopping",
+        "text_rank": 2
+      }
+    ]
+  },
+  {
+    "q": "olimp",
+    "results": [
+      {
+        "id": "poi:eb59fd8810eaae3cd609",
+        "name": "Olimp Kino",
+        "lat": 51.26732248589484,
+        "lon": 22.570940725766864,
+        "category": "culture",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:67632724c9b55aeb44d5",
+        "name": "Galeria Olimp",
+        "lat": 51.26585874,
+        "lon": 22.57103634,
+        "category": "shopping",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:a784ca1c9cd35d180d54",
+        "name": "Nowy Basen Olimpijski W Lublinie",
+        "lat": 51.2366223903375,
+        "lon": 22.568617585622587,
+        "category": "sport",
+        "text_rank": 2
+      }
+    ]
+  },
+  {
+    "q": "vivo",
+    "results": [
+      {
+        "id": "poi:8ab59e107b71f45fb150",
+        "name": "VIVO! Lublin",
+        "lat": 51.25017387,
+        "lon": 22.57639787,
+        "category": "shopping",
+        "text_rank": 1
+      }
+    ]
+  },
+  {
+    "q": "dworzec lublin",
+    "results": [
+      {
+        "id": "poi:e5059bbbda4428c65605",
+        "name": "Dworzec Lublin",
+        "lat": 51.231547295149106,
+        "lon": 22.56615803345009,
+        "category": "transport",
+        "text_rank": 0
+      },
+      {
+        "id": "poi:291c8c92e5451687286e",
+        "name": "Dworzec Autobusowy Lublin",
+        "lat": 51.251970941930026,
+        "lon": 22.571167637324127,
+        "category": "transport",
+        "text_rank": 2
+      }
+    ]
+  },
+  {
+    "q": "uniwersytet medyczny",
+    "results": [
+      {
+        "id": "poi:a9b0616267a8c07c815c",
+        "name": "Uniwersytet Medyczny w Lublinie",
+        "lat": 51.24831,
+        "lon": 22.54887,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:5e6f2160359229a48d80",
+        "name": "Uniwersytet Medyczny w Lublinie",
+        "lat": 51.259422604522484,
+        "lon": 22.567881009425488,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:00e0eb926f5b13d2c86f",
+        "name": "Uniwersytet Medyczny w Lublinie",
+        "lat": 51.262097351839046,
+        "lon": 22.564289966985587,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:d3f60c901bb23fe8023e",
+        "name": "Uniwersytet Medyczny w Lublinie — teren szkoły wyższej",
+        "lat": 51.2602332323503,
+        "lon": 22.563067210405308,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:e8433e337e5376b60eb8",
+        "name": "Uniwersytet Medyczny w Lublinie",
+        "lat": 51.256910793977745,
+        "lon": 22.564141630189262,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:07a1c4aea7f7d293b6d1",
+        "name": "Uniwersytet Medyczny w Lublinie — budynek szpitalny",
+        "lat": 51.25947742042819,
+        "lon": 22.563521508111965,
+        "category": "health",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:a0471babd37083099468",
+        "name": "Uniwersytet Medyczny w Lublinie",
+        "lat": 51.24858248234688,
+        "lon": 22.56178227480161,
+        "category": "education",
+        "text_rank": 1
+      }
+    ]
+  },
+  {
+    "q": "ogrod saski",
+    "results": [
+      {
+        "id": "poi:94d9a821c4709d0f937b",
+        "name": "Ogród Saski",
+        "lat": 51.24908888898706,
+        "lon": 22.546741282357544,
+        "category": "park",
+        "text_rank": 0
+      }
+    ]
+  },
+  {
+    "q": "szpital kliniczny nr 4",
+    "results": [
+      {
+        "id": "poi:cbf398f9d569d7ef1d72",
+        "name": "Szpital Kliniczny nr 4",
+        "lat": 51.259081426977595,
+        "lon": 22.565324634845048,
+        "category": "health",
+        "text_rank": 0
+      }
+    ]
+  },
+  {
+    "q": "centrum spotkania kultur",
+    "results": [
+      {
+        "id": "poi:2b8ee6e3d75f88d64a55",
+        "name": "Centrum Spotkania Kultur",
+        "lat": 51.24709554255779,
+        "lon": 22.54871475169533,
+        "category": "culture",
+        "text_rank": 0
+      }
+    ]
+  },
+  {
+    "q": "csk",
+    "results": [
+      {
+        "id": "poi:2b8ee6e3d75f88d64a55",
+        "name": "Centrum Spotkania Kultur",
+        "lat": 51.24709554255779,
+        "lon": 22.54871475169533,
+        "category": "culture",
+        "text_rank": 0
+      },
+      {
+        "id": "poi:912bb7b4fff1353c33f6",
+        "name": "Kino CSK",
+        "lat": 51.24695091,
+        "lon": 22.54862353,
+        "category": "culture",
+        "text_rank": 2
+      }
+    ]
+  },
+  {
+    "q": "pzl swidnik",
+    "results": [
+      {
+        "id": "poi:6a40ff74dd8d0fc3484a",
+        "name": "PZL-Świdnik",
+        "lat": 51.2297,
+        "lon": 22.7019,
+        "category": "industry",
+        "text_rank": 0
+      }
+    ]
+  },
+  {
+    "q": "rapa",
+    "results": [
+      {
+        "id": "poi:954c13ce34dec374e5e0",
+        "name": "RAPA",
+        "lat": 51.27515657,
+        "lon": 22.56653521,
+        "category": "industry",
+        "text_rank": 0
+      }
+    ]
+  },
+  {
+    "q": "verano",
+    "results": [
+      {
+        "id": "poi:f33e3381ee49cb4c96aa",
+        "name": "VERANO GLOBAL",
+        "lat": 51.22404,
+        "lon": 22.63852,
+        "category": "industry",
+        "text_rank": 1
+      }
+    ]
+  },
+  {
+    "q": "raben",
+    "results": [
+      {
+        "id": "poi:1951fcc70e32ef7ab8d7",
+        "name": "Raben Logistics Polska",
+        "lat": 51.2429112,
+        "lon": 22.6424897,
+        "category": "industry",
+        "text_rank": 1
+      }
+    ]
+  },
+  {
+    "q": "7r",
+    "results": [
+      {
+        "id": "poi:4f45ee039706d7c80cc8",
+        "name": "7R Park Lublin East I",
+        "lat": 51.249825206914,
+        "lon": 22.6200531806885,
+        "category": "industry",
+        "text_rank": 0
+      }
+    ]
+  },
+  {
+    "q": "pcez",
+    "results": [
+      {
+        "id": "poi:d21a5ec46919977adb04",
+        "name": "PCEZ Świdnik",
+        "lat": 51.22656732,
+        "lon": 22.69752197,
+        "category": "education",
+        "text_rank": 1
+      }
+    ]
+  },
+  {
+    "q": "lckziu",
+    "results": [
+      {
+        "id": "poi:d5df9883de9100c729cc",
+        "name": "LCKZiU",
+        "lat": 51.265219100732594,
+        "lon": 22.577615988977655,
+        "category": "education",
+        "text_rank": 0
+      }
+    ]
+  },
+  {
+    "q": "agrofiz",
+    "results": [
+      {
+        "id": "poi:e5fd0b75c0d63cb6fa1e",
+        "name": "Instytut Agrofizyki PAN",
+        "lat": 51.22019010125091,
+        "lon": 22.625790695852697,
+        "category": "education",
+        "text_rank": 2
+      }
+    ]
+  },
+  {
+    "q": "wsei",
+    "results": [
+      {
+        "id": "poi:0e9183857e0830826e37",
+        "name": "WSEI — Projektowa 4",
+        "lat": 51.24542021,
+        "lon": 22.61065594,
+        "category": "education",
+        "text_rank": 1
+      }
+    ]
+  },
+  {
+    "q": "womp",
+    "results": [
+      {
+        "id": "poi:ec9d6725f67b41e2b258",
+        "name": "WOMP — Nałęczowska 27",
+        "lat": 51.24988267,
+        "lon": 22.51641055,
+        "category": "health",
+        "text_rank": 1
+      }
+    ]
+  },
+  {
+    "q": "starost powiat swid",
+    "results": [
+      {
+        "id": "poi:86058fd9c375d763a46a",
+        "name": "Starostwo Powiatowe w Świdniku",
+        "lat": 51.21961,
+        "lon": 22.6993,
+        "category": "government",
+        "text_rank": 2
+      }
+    ]
+  },
+  {
+    "q": "filharm",
+    "results": [
+      {
+        "id": "poi:7e144f17ebd4aed791a6",
+        "name": "Filharmonia Lubelska",
+        "lat": 51.24486668,
+        "lon": 22.54603324,
+        "category": "culture",
+        "text_rank": 1
+      }
+    ]
+  },
+  {
+    "q": "lubelskie konfer",
+    "results": [
+      {
+        "id": "poi:71ed37d03e8832bbe0cb",
+        "name": "Lubelskie Centrum Konferencyjne",
+        "lat": 51.24671874,
+        "lon": 22.54939082,
+        "category": "culture",
+        "text_rank": 2
+      }
+    ]
+  },
+  {
+    "q": "bibliot lopac",
+    "results": [
+      {
+        "id": "poi:55c3cff068a270abbbce",
+        "name": "Wojewódzka Biblioteka Publiczna im. Hieronima Łopacińskiego",
+        "lat": 51.24659891,
+        "lon": 22.56326285,
+        "category": "culture",
+        "text_rank": 2
+      }
+    ]
+  },
+  {
+    "q": "allmed",
+    "results": [
+      {
+        "id": "poi:c7f24a3a2f3a558b8f87",
+        "name": "Allmedica — Tetmajera 21",
+        "lat": 51.2258562,
+        "lon": 22.5947461,
+        "category": "health",
+        "text_rank": 1
+      }
+    ]
+  },
+  {
+    "q": "mpwik",
+    "results": [
+      {
+        "id": "poi:d61b6f8f28adefb58d67",
+        "name": "MPWiK — Piłsudskiego 15",
+        "lat": 51.2403259,
+        "lon": 22.557296000000004,
+        "category": "government",
+        "text_rank": 1
+      }
+    ]
+  },
+  {
+    "q": "szpital",
+    "results": [
+      {
+        "id": "poi:634ee324d1a6132670f6",
+        "name": "Szpital SPZOZ",
+        "lat": 51.2214741,
+        "lon": 22.69381013,
+        "category": "health",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:4135ecfbbf58559b5051",
+        "name": "Szpital Jaczewskiego",
+        "lat": 51.258347,
+        "lon": 22.564662,
+        "category": "health",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:cbf398f9d569d7ef1d72",
+        "name": "Szpital Kliniczny nr 4",
+        "lat": 51.259081426977595,
+        "lon": 22.565324634845048,
+        "category": "health",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:99efee08f9f91a5d26bb",
+        "name": "Szpital Neuropsychiatryczny",
+        "lat": 51.20439981,
+        "lon": 22.58812256,
+        "category": "health",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:989741dfd7582fe44bdb",
+        "name": "Szpital im. Stefana Wyszyńskiego",
+        "lat": 51.23960481,
+        "lon": 22.50376005,
+        "category": "health",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:510c6705ae4cf9d82c9c",
+        "name": "Szpital MSWiA",
+        "lat": 51.22659647,
+        "lon": 22.61376274,
+        "category": "health",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:c4487930b8dca901b54b",
+        "name": "Chodźki Szpital",
+        "lat": 51.26072814033,
+        "lon": 22.564278051338,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:f4a87d911d75f3ca410d",
+        "name": "Samodzielny Publiczny Szpital Wojewódzki im. Jana Bożego",
+        "lat": 51.21527493,
+        "lon": 22.56987792,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:18d6873d34366723cd1e",
+        "name": "Samodzielny Publiczny Szpital Kliniczny nr 1",
+        "lat": 51.24986812996434,
+        "lon": 22.558803040800107,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:1bed748984db7f8a72da",
+        "name": "ARION Szpitale",
+        "lat": 51.26938,
+        "lon": 22.57145,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:41e165340f31a93014b3",
+        "name": "Wojewódzki Szpital Specjalistyczny im. Stefana Kardynała Wyszyńskiego",
+        "lat": 51.256855298787016,
+        "lon": 22.57264648370038,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:e1f22b4ff49c3c2059f7",
+        "name": "1 Wojskowy Szpital Kliniczny z Polikliniką SPZOZ w Lublinie",
+        "lat": 51.25151217,
+        "lon": 22.53385014,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:820c20a4f79d0485e908",
+        "name": "Uniwersytecki Szpital Dziecięcy w Lublinie",
+        "lat": 51.26056438,
+        "lon": 22.56193988,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:22c9b24508b9db8e4547",
+        "name": "Wojewódzki Szpital Specjalistyczny im. Stefana Kardynała Wyszyńskiego",
+        "lat": 51.215812195200186,
+        "lon": 22.568430280168222,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:f9d4e857df53ab714703",
+        "name": "Wojewodzki Szpital Specjalistyczny",
+        "lat": 51.23953422,
+        "lon": 22.50362805,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:1ddaf8f0477a5afd0e99",
+        "name": "Samodzielny Publiczny Szpital Wojewódzki im. J. Bożego",
+        "lat": 51.2549624047075,
+        "lon": 22.567036893765476,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:4c0e73c272f9105a6f95",
+        "name": "Wojewódzki Szpital Specjalistyczny im. Stefana Kardynała Wyszyńskiego",
+        "lat": 51.255754334540654,
+        "lon": 22.567028329881566,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:39757dbb1ea1e91383dd",
+        "name": "Wojewódzki Szpital Specjalistyczny im. Kardynała Stefana Wyszyńskiego",
+        "lat": 51.23928335453297,
+        "lon": 22.50476954227444,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:516037f42f7cdffe201a",
+        "name": "Samodzielny Publiczny Szpital Kliniczny nr 1",
+        "lat": 51.25050029,
+        "lon": 22.56233699,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:07a1c4aea7f7d293b6d1",
+        "name": "Uniwersytet Medyczny w Lublinie — budynek szpitalny",
+        "lat": 51.25947742042819,
+        "lon": 22.563521508111965,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:c7f24a3a2f3a558b8f87",
+        "name": "Allmedica — Tetmajera 21",
+        "lat": 51.2258562,
+        "lon": 22.5947461,
+        "category": "health",
+        "text_rank": 2
+      }
+    ]
+  },
+  {
+    "q": "uniwersytet",
+    "results": [
+      {
+        "id": "poi:1eb058e1887095853e00",
+        "name": "Uniwersytet Marii Curie-Skłodowskiej w Lublinie",
+        "lat": 51.245412164724485,
+        "lon": 22.541035525547667,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:b6110ad7e860b48eb5ca",
+        "name": "Uniwersytet Przyrodniczy w Lublinie",
+        "lat": 51.243779,
+        "lon": 22.54021449,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:a9b0616267a8c07c815c",
+        "name": "Uniwersytet Medyczny w Lublinie",
+        "lat": 51.24831,
+        "lon": 22.54887,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:5e6f2160359229a48d80",
+        "name": "Uniwersytet Medyczny w Lublinie",
+        "lat": 51.259422604522484,
+        "lon": 22.567881009425488,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:00e0eb926f5b13d2c86f",
+        "name": "Uniwersytet Medyczny w Lublinie",
+        "lat": 51.262097351839046,
+        "lon": 22.564289966985587,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:d3f60c901bb23fe8023e",
+        "name": "Uniwersytet Medyczny w Lublinie — teren szkoły wyższej",
+        "lat": 51.2602332323503,
+        "lon": 22.563067210405308,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:e8433e337e5376b60eb8",
+        "name": "Uniwersytet Medyczny w Lublinie",
+        "lat": 51.256910793977745,
+        "lon": 22.564141630189262,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:e84084e097d8b0e5f902",
+        "name": "Uniwersytet Przyrodniczy w Lublinie",
+        "lat": 51.22606479148581,
+        "lon": 22.63548822892447,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:1c147189ac99e2eee971",
+        "name": "Uniwersytet Marii Curie-Skłodowskiej w Lublinie",
+        "lat": 51.24563231716822,
+        "lon": 22.561021146285572,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:bbf1f72b749c0f1427dd",
+        "name": "Uniwersytet Marii Curie-Skłodowskiej w Lublinie",
+        "lat": 51.24917513448716,
+        "lon": 22.559811900709732,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:ee419d33a12c5d2e05cf",
+        "name": "Uniwersytet Marii Curie-Skłodowskiej w Lublinie",
+        "lat": 51.24348878759229,
+        "lon": 22.54122601929884,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:03452127263860d80e56",
+        "name": "Uniwersytet Marii Curie-Skłodowskiej w Lublinie",
+        "lat": 51.24767978962316,
+        "lon": 22.522891821968976,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:fd341d8cd15890a5c8e5",
+        "name": "Uniwersytet Przyrodniczy w Lublinie",
+        "lat": 51.24107740226492,
+        "lon": 22.543244538954685,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:9ad2f036a2cd3e7a3b64",
+        "name": "Uniwersytet Marii Curie-Skłodowskiej w Lublinie",
+        "lat": 51.239596192268095,
+        "lon": 22.543048775733915,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:c032466d7656500cd166",
+        "name": "Uniwersytet Przyrodniczy w Lublinie",
+        "lat": 51.22526862121784,
+        "lon": 22.623258853867007,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:9cc61da9d19ead204451",
+        "name": "Uniwersytet Przyrodniczy w Lublinie",
+        "lat": 51.25073297067523,
+        "lon": 22.543964617609525,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:ccc72b034d8cd3e9fd29",
+        "name": "Uniwersytet Marii Curie-Skłodowskiej w Lublinie",
+        "lat": 51.24733821429301,
+        "lon": 22.539511437365015,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:fd508c182fa64cd73117",
+        "name": "Uniwersytet Przyrodniczy w Lublinie — biblioteka",
+        "lat": 51.24345031161302,
+        "lon": 22.54135055248438,
+        "category": "culture",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:51690bfa55ff0e30e89b",
+        "name": "Uniwersytet Przyrodniczy w Lublinie",
+        "lat": 51.25061907351798,
+        "lon": 22.549870863408387,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:aaca99ac2dad7772f103",
+        "name": "Uniwersytet Przyrodniczy w Lublinie",
+        "lat": 51.24922780328461,
+        "lon": 22.5106780309507,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:07a1c4aea7f7d293b6d1",
+        "name": "Uniwersytet Medyczny w Lublinie — budynek szpitalny",
+        "lat": 51.25947742042819,
+        "lon": 22.563521508111965,
+        "category": "health",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:66f375aa2f40556417d3",
+        "name": "Uniwersytet Przyrodniczy w Lublinie — budynek szkoły wyższej",
+        "lat": 51.24373599768835,
+        "lon": 22.542349783595483,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:a0471babd37083099468",
+        "name": "Uniwersytet Medyczny w Lublinie",
+        "lat": 51.24858248234688,
+        "lon": 22.56178227480161,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:96af59ab865a64517cbc",
+        "name": "Uniwersytet Marii Curie-Skłodowskiej w Lublinie",
+        "lat": 51.24641896193866,
+        "lon": 22.535990404794553,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:8aac12ffd7a68b8437cf",
+        "name": "Uniwersytet Przyrodniczy w Lublinie",
+        "lat": 51.243665230069446,
+        "lon": 22.542841007401243,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:24cc35a05673640e6092",
+        "name": "Uniwersytet Przyrodniczy w Lublinie",
+        "lat": 51.24448557810852,
+        "lon": 22.543441308248376,
+        "category": "education",
+        "text_rank": 1
+      },
+      {
+        "id": "poi:095c92c9872fae49faf3",
+        "name": "Klinika Okulistyki Uniwersytetu Lubelskiego",
+        "lat": 51.2517102418568,
+        "lon": 22.55747249723217,
+        "category": "health",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:f46df97d0cac2e8b34d7",
+        "name": "Centrum Symulacji Medycznej Uniwersytetu Medycznego w Lublinie",
+        "lat": 51.26115,
+        "lon": 22.56419,
+        "category": "education",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:29f1e14921297d763e40",
+        "name": "Katolicki Uniwersytet Lubelski Jana Pawła II",
+        "lat": 51.24758804,
+        "lon": 22.54491228,
+        "category": "education",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:21e0dd23d4e2923aba5c",
+        "name": "Katolicki Uniwersytet Lubelski Jana Pawła II",
+        "lat": 51.22736789587659,
+        "lon": 22.605387285450192,
+        "category": "education",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:30f41a5138eadff17f46",
+        "name": "Hala Sportowo-Widowiskowa Uniwersytetu Medycznego w Lublinie",
+        "lat": 51.26255743,
+        "lon": 22.56673194,
+        "category": "sport",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:3716e136b83a4a66f885",
+        "name": "Katolicki Uniwersytet Lubelski Jana Pawła II",
+        "lat": 51.23777362126898,
+        "lon": 22.501389812697006,
+        "category": "education",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:ef61a6b964501509a430",
+        "name": "Katolicki Uniwersytet Lubelski Jana Pawła II",
+        "lat": 51.24388166651546,
+        "lon": 22.55365510286245,
+        "category": "culture",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:fc0d4c554c2aca557627",
+        "name": "Katolicki Uniwersytet Lubelski Jana Pawła II",
+        "lat": 51.24953627649303,
+        "lon": 22.55434392412178,
+        "category": "education",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:38a2507b60f3ba113e49",
+        "name": "Ogród Botaniczny Uniwersytetu Marii Curie-Skłodowskiej w Lublinie",
+        "lat": 51.26242417352529,
+        "lon": 22.514927487468235,
+        "category": "park",
+        "text_rank": 2
+      }
+    ]
+  },
+  {
+    "q": "politechnika",
+    "results": [
+      {
+        "id": "poi:43ae49031e9f63be0183",
+        "name": "Politechnika Lubelska",
+        "lat": 51.23608348,
+        "lon": 22.54971488,
+        "category": "education",
+        "text_rank": 1
+      }
+    ]
+  },
+  {
+    "q": "umcs",
+    "results": [
+      {
+        "id": "poi:000aba5c1e4b4c24419a",
+        "name": "Muzeum UMCS",
+        "lat": 51.24643891,
+        "lon": 22.54160713,
+        "category": "culture",
+        "text_rank": 2
+      },
+      {
+        "id": "poi:1eb058e1887095853e00",
+        "name": "Uniwersytet Marii Curie-Skłodowskiej w Lublinie",
+        "lat": 51.245412164724485,
+        "lon": 22.541035525547667,
+        "category": "education",
+        "text_rank": 2
+      }
+    ]
+  },
+  {
+    "q": "Teatr w Budowie",
+    "results": [
+      {
+        "id": "poi:2b8ee6e3d75f88d64a55",
+        "name": "Centrum Spotkania Kultur",
+        "lat": 51.24709554255779,
+        "lon": 22.54871475169533,
+        "category": "culture",
+        "text_rank": 0
+      }
+    ]
+  },
+  {
+    "q": "Tarasy Zamkowe",
+    "results": [
+      {
+        "id": "poi:8ab59e107b71f45fb150",
+        "name": "VIVO! Lublin",
+        "lat": 51.25017387,
+        "lon": 22.57639787,
+        "category": "shopping",
+        "text_rank": 0
+      }
+    ]
+  },
+  {
+    "q": "zzzzzz",
+    "results": []
+  }
+]

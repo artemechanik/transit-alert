@@ -191,4 +191,22 @@ class PresentationTests(unittest.TestCase):
             self.assertEqual(c.execute('select count(*) from features').fetchone()[0],542)
             self.assertEqual(c.execute('select count(*) from search_presentations where visible=0').fetchone()[0],5)
 
+class AddressOverrideTests(unittest.TestCase):
+    def test_curated_addresses_and_site_boundaries(self):
+        curated=json.loads((ROOT/'address-overrides.json').read_text())
+        with connect() as c:
+            self.assertEqual(len(curated),c.execute('SELECT count(*) FROM address_overrides').fetchone()[0])
+            for pid,r in curated.items():
+                row=c.execute('SELECT address_line,locality,confidence,details_json FROM address_overrides WHERE poi_id=?',(pid,)).fetchone()
+                self.assertEqual(tuple(row[:3]),(r['address_line'],r['locality'],'confirmed'))
+                self.assertEqual(json.loads(row[3]),r)
+                self.assertTrue(r['url'].startswith('local_knowledge:') if r['source']=='local_knowledge' else r['url'].startswith('https://'))
+            self.assertEqual(c.execute("SELECT address_line FROM address_overrides WHERE poi_id='poi:81f12419d2966e9ba933'").fetchone()[0],'Działkowa 45')
+            self.assertEqual(c.execute("SELECT address_line FROM address_overrides WHERE poi_id='poi:c13dd5d066d11f25638f'").fetchone()[0],'Wrotkowska 1')
+            self.assertEqual(c.execute("SELECT address_line FROM address_overrides WHERE poi_id='poi:228e290fbc850db05464'").fetchone()[0],'ul. Energetyków 23')
+            self.assertEqual(c.execute("SELECT count(*) FROM address_overrides WHERE source='local_knowledge'").fetchone()[0],28)
+            for query in ['art bet','art bed']:
+                self.assertTrue(any(x['id']=='poi:33f4b578e10e3774dec3' and x['name']=='Art-Bet Wytwórnia Betonu Sp. J.' for x in search(query,50)))
+            self.assertEqual(c.execute("SELECT count(*) FROM pois WHERE category='industry'").fetchone()[0],74)
+
 if __name__=='__main__':unittest.main()

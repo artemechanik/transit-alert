@@ -1,3 +1,4 @@
+import { plannerPoiIcons } from '../icons/lucide/poi-icons.js';
 import { apiFetch } from './backend-connection.js';
 // Поля Trasa, вибрані точки, історія та підказки зупинок/адрес.
 export function createPlannerInputs({
@@ -24,6 +25,62 @@ export function createPlannerInputs({
             ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
     }
 
+    function objectIconName(item) {
+        return item?.type === 'poi'
+            ? plannerPoiIcons[item.id] || ({ industry: 'factory', shopping: 'shopping-bag',
+                health: 'hospital', education: 'graduation-cap', park: 'trees',
+                transport: 'train-front', government: 'landmark' }[item.category] || 'map-pin')
+            : item ? 'map-pin' : 'bus-front';
+    }
+
+    function autocompleteIcon(item) {
+        const icon = objectIconName(item);
+        return `<span class="planner-autocomplete-icon planner-icon-${icon}" aria-hidden="true"></span>`;
+    }
+
+    // Presentation metadata stays separate from routing objects and their coordinates/IDs.
+    const allowedPointIcons = new Set(['bus-front', 'map-pin', 'factory', 'shopping-bag',
+        'clapperboard', 'hospital', 'graduation-cap', 'trees', 'train-front', 'landmark']);
+    function pointIconKey(point) {
+        return JSON.stringify([point.name, point.lat ?? null, point.lon ?? null,
+            [...(point.ids || (point.stopId ? [point.stopId] : []))].sort()]);
+    }
+    function storedPointIcons() {
+        try {
+            const icons = JSON.parse(localStorage.getItem('ta_route_point_icons'));
+            return icons && typeof icons === 'object' && !Array.isArray(icons) ? icons : {};
+        } catch { return {}; }
+    }
+    const activePointIcons = new WeakMap();
+    function rememberPointIcon(point, item) {
+        activePointIcons.set(point, objectIconName(item));
+        const icons = storedPointIcons();
+        const key = pointIconKey(point);
+        delete icons[key];
+        icons[key] = objectIconName(item);
+        // Bound metadata for old history without changing the existing history contract.
+        const entries = Object.entries(icons).slice(-64);
+        try { localStorage.setItem('ta_route_point_icons', JSON.stringify(Object.fromEntries(entries))); } catch {}
+    }
+    function selectedPointIcon(point) {
+        if (!point) return null;
+        if (point.isDynamicGps) return 'gps';
+        if (point.ids?.length || point.stopId) return 'bus-front';
+        if (point.type === 'poi' || point.category) return objectIconName({ ...point, type: 'poi' });
+        const saved = activePointIcons.get(point) || storedPointIcons()[pointIconKey(point)];
+        if (allowedPointIcons.has(saved)) return saved;
+        return Number.isFinite(point.lat) && Number.isFinite(point.lon) ? 'map-pin' : null;
+    }
+    function updateSelectedPointIcon(isFrom) {
+        const point = isFrom ? routeFromStop : routeToStop;
+        const input = document.getElementById(isFrom ? 'route-input-from' : 'route-input-to');
+        const element = document.getElementById(isFrom ? 'route-selected-icon-from' : 'route-selected-icon-to');
+        if (!element) return;
+        const icon = point && input?.value === point.name ? selectedPointIcon(point) : null;
+        element.hidden = !icon;
+        element.className = 'route-selection-icon' + (icon === 'gps' ? ' icon-location' : icon ? ` planner-icon-${icon}` : '');
+    }
+
     async function fetchAddresses(query, signal) {
         const controller = new AbortController();
         const abort = () => controller.abort();
@@ -40,9 +97,10 @@ export function createPlannerInputs({
             if (!Array.isArray(data.results)) throw new Error('Invalid address response');
             return {
                 results: data.results.filter(item =>
-                    (item.type === 'street' || item.type === 'address') &&
+                    ((item.type === 'poi' && typeof item.display_name === 'string' && typeof item.subtitle === 'string') ||
+                    ((item.type === 'street' || item.type === 'address') &&
                     typeof item.street === 'string' && typeof item.locality === 'string' &&
-                    typeof item.house_number === 'string' &&
+                    typeof item.house_number === 'string')) &&
                     Number.isFinite(item.lat) && Number.isFinite(item.lon)),
                 unavailable: false
             };
@@ -77,7 +135,9 @@ export function createPlannerInputs({
 
         // Видаляємо такий самий маршрут, якщо він вже є, щоб підняти його наверх
         routes = routes.filter(r => `${r.from.name}-${r.to.name}` !== routeKey);
-        routes.unshift({ from: fromStop, to: toStop });
+        routes.unshift({ from: fromStop, to: toStop, pointIcons: {
+            from: selectedPointIcon(fromStop), to: selectedPointIcon(toStop)
+        } });
 
         if (routes.length > 10) routes.length = 10; // Зберігаємо 3 останні маршрути
         localStorage.setItem('ta_recent_routes', JSON.stringify(routes));
@@ -131,6 +191,10 @@ export function createPlannerInputs({
 
         routeFromStop = route.from;
         routeToStop = route.to;
+        for (const [key, point] of [['from', routeFromStop], ['to', routeToStop]]) {
+            const icon = route.pointIcons?.[key];
+            if (point && allowedPointIcons.has(icon)) activePointIcons.set(point, icon);
+        }
 
         // Оновлюємо стани кнопок (верхня буде ✕, нижня — ⇅)
         updateRouteButtonState(true);
@@ -141,6 +205,7 @@ export function createPlannerInputs({
     }
 
     function updateRouteButtonState(isFrom) {
+      updateSelectedPointIcon(isFrom);
       const input = document.getElementById(isFrom ? 'route-input-from' : 'route-input-to');
       const btn = document.getElementById(isFrom ? 'route-clear-from' : 'route-clear-to');
       if (!input || !btn) return;
@@ -240,6 +305,7 @@ export function createPlannerInputs({
         const actionBtn = document.getElementById(isFrom ? 'route-clear-from' : 'route-clear-to');
 
         if (!input || !suggestionsBox) return;
+        updateSelectedPointIcon(isFrom);
 
         // ОБРОБКА КЛІКУ ПО КНОПЦІ В ПОЛІ
         if (actionBtn) {
@@ -347,12 +413,9 @@ export function createPlannerInputs({
 
                     Object.values(groupedStops).forEach(group => {
                         const div = document.createElement('div');
-                        div.className = 'stop-card';
-                        div.style = 'padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; gap: 12px;';
-                        div.innerHTML = `
-                        <div style="-webkit-mask-image: url('stop.svg'); mask-image: url('stop.svg'); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; background-color: var(--blue); width: 20px; height: 20px; flex-shrink: 0;"></div>
-                        <div style="font-weight: bold; color: var(--text);">${group.name}</div>
-                    `;
+                        div.className = 'stop-card planner-autocomplete-card';
+                        div.innerHTML = `${autocompleteIcon(null)}
+                            <div class="planner-autocomplete-copy"><div class="planner-autocomplete-title">${escapeAddressText(group.name)}</div></div>`;
 
                         div.addEventListener('click', () => {
                             cancelSearch(isFrom);
@@ -378,22 +441,21 @@ export function createPlannerInputs({
                 if (addresses.results.length > 0) {
                     addresses.results.slice(0, 4).forEach(address => {
                         const div = document.createElement('div');
-                        div.className = 'stop-card';
-                        div.style = 'padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; justify-content: space-between; gap: 12px;';
+                        div.className = 'stop-card planner-autocomplete-card';
 
-                        const shortName = address.type === 'street' ? address.street
+                        const shortName = address.type === 'poi' ? address.display_name : address.type === 'street' ? address.street
                             : `${address.street || address.locality} ${address.house_number}`.trim();
-                        const contextParts = address.locality;
+                        const contextParts = address.type === 'poi' ? address.subtitle : address.locality;
 
                         div.innerHTML = `
-                        <div class="address-main-click" style="display: flex; align-items: center; gap: 12px; flex: 1; cursor: pointer;">
-                            <div class="svg-icon icon-map-pin" style="color: var(--text-muted); flex-shrink: 0;"></div>
-                            <div style="overflow: hidden;">
-                                <div style="font-weight: bold; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeAddressText(shortName)}</div>
-                                <div style="font-size: 0.85em; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeAddressText(contextParts)}</div>
+                        <div class="address-main-click planner-autocomplete-main">
+                            ${autocompleteIcon(address)}
+                            <div class="planner-autocomplete-copy">
+                                <div class="planner-autocomplete-title">${escapeAddressText(shortName)}</div>
+                                ${contextParts ? `<div class="planner-autocomplete-subtitle">${escapeAddressText(contextParts)}</div>` : ''}
                             </div>
                         </div>
-                        <div class="address-copy-btn" style="padding: 4px 8px; cursor: pointer; color: var(--text-muted); font-size: 20px; font-weight: bold; flex-shrink: 0;">↖</div>
+                        ${address.type === 'poi' ? '' : `<div class="address-copy-btn">↖</div>`}
                     `;
 
                         div.querySelector('.address-main-click').addEventListener('click', () => {
@@ -404,6 +466,7 @@ export function createPlannerInputs({
 
                             const routeObj = { name: shortName, lat: address.lat, lon: address.lon };
                             if (isFrom) routeFromStop = routeObj; else routeToStop = routeObj;
+                            rememberPointIcon(routeObj, address);
                             saveRecentRouteStop(routeObj);
 
                             // Знімаємо фокус і оновлюємо стан кнопки
@@ -411,7 +474,7 @@ export function createPlannerInputs({
                             updateRouteButtonState(isFrom);
                         });
 
-                        div.querySelector('.address-copy-btn').addEventListener('click', (e) => {
+                        div.querySelector('.address-copy-btn')?.addEventListener('click', (e) => {
                             e.stopPropagation();
                             cancelSearch(isFrom);
                             clearSelectedPoint(isFrom);
@@ -460,7 +523,8 @@ export function createPlannerInputs({
                     distance: stop.distance,
                     // ДОДАНО: Зберігаємо координати, якщо це адреса
                     lat: stop.lat,
-                    lon: stop.lon
+                    lon: stop.lon,
+                    pointIcon: selectedPointIcon(stop)
                 };
             } else {
                 // Безпечно докидаємо всі нові ID, яких ще немає в групі
@@ -525,6 +589,9 @@ export function createPlannerInputs({
 
             if (isFrom) routeFromStop = routeObj;
             else routeToStop = routeObj;
+
+            if (allowedPointIcons.has(group.pointIcon)) activePointIcons.set(routeObj, group.pointIcon);
+            updateSelectedPointIcon(isFrom);
 
             // Зберігаємо в історію, оновлюючи її
             if (group.lat && group.lon) {

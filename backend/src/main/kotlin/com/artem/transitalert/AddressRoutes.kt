@@ -10,7 +10,8 @@ import java.sql.SQLException
 @Serializable
 private data class AddressSearchError(val error: String)
 
-fun Application.addressRoutes(service: PrgAddressSearch = PrgAddressSearch()) {
+fun Application.addressRoutes(service: PrgAddressSearch = PrgAddressSearch(), poi: PoiSearch? = PoiSearch()) {
+    val combined = PlaceSearch(service, poi)
     routing {
         get("/addresses/search") {
             call.response.header(HttpHeaders.CacheControl, "no-store")
@@ -25,7 +26,7 @@ fun Application.addressRoutes(service: PrgAddressSearch = PrgAddressSearch()) {
                     "limit має бути додатним цілим числом."
                 }
                 val limit = rawLimit.toIntOrNull()?.coerceAtMost(50) ?: 50
-                call.respond(service.search(parameters["q"] ?: "", limit))
+                call.respond(combined.search(parameters["q"] ?: "", limit))
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, AddressSearchError(e.message ?: "Invalid query"))
             } catch (e: SQLException) {

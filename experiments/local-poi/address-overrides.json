@@ -1,0 +1,814 @@
+{
+  "poi:0266c3292a806df8c573": {
+    "expected_name": "Aliplast",
+    "source_ids": [
+      "bdot:26780F22-D387-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.646412878295436,
+    "expected_lat": 51.21861823182695,
+    "address_line": "Wacława Moritza 3",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://www.aliplastpoland.com/contact",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційні контакти складу, транспорту та виробничих відділів."
+  },
+  "poi:1e95a0b7fa3c88892133": {
+    "expected_name": "Apis",
+    "source_ids": [
+      "bdot:26780F22-D36D-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.549533329531783,
+    "expected_lat": 51.21519492866741,
+    "address_line": "Diamentowa 23",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://apis.pl/kontakt/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційна сторінка: центральні відділи, експедиція і магазин."
+  },
+  "poi:854eb6d2b240c11d328c": {
+    "expected_name": "Ball Packing Europe Lublin Sp. z o.o.",
+    "source_ids": [
+      "bdot:26780F22-D385-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.647730304024762,
+    "expected_lat": 51.222571476053034,
+    "address_line": "Vetterów 14",
+    "locality": "Lublin",
+    "source": "public_document",
+    "url": "https://bip.ure.gov.pl/download/3/20388/InformacjaPrezesaUREnr752025.pdf",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Державний перелік URE; потрібна перевірка території, не доказ входу."
+  },
+  "poi:c055a017eb12b3036d70": {
+    "expected_name": "Elektomontaż Lublin Sp. z o.o.",
+    "source_ids": [
+      "bdot:26780F22-D373-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.56036504733534,
+    "expected_lat": 51.204229932150454,
+    "address_line": "Diamentowa 1",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://elektromontaz-lublin.pl/kontakt/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Поточний офіційний контакт тієї ж центральної виробничої території, з відділами логістики і конструкцій."
+  },
+  "poi:3763593fa9855a13b2d3": {
+    "expected_name": "Elektro Spark",
+    "source_ids": [
+      "bdot:26780F22-D372-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.559693260278742,
+    "expected_lat": 51.205948884036076,
+    "address_line": "Energetyków 15",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://www.elektrospark.pl/kontakt",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційний контакт центру й місцевої торгівлі/виробництва."
+  },
+  "poi:93b8b0cd25508b6ecb2e": {
+    "expected_name": "Elektrociepłownia Lublin-Wrotków",
+    "source_ids": [
+      "bdot:26780F22-D33A-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.557487231233452,
+    "expected_lat": 51.21550714527585,
+    "address_line": "Inżynierska 4",
+    "locality": "Lublin",
+    "source": "public_document",
+    "url": "https://pgeenergiaciepla.pl/content/download/743685b24963d4b2e086be63e980ab0c/file/regl-110009_a-regulamin-udostepniania-bocznicy-kolejowej.pdf?contentId=10399&inLanguage=pol-PL&version=1",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційний регламент саме колії EC Lublin Wrotków, розділ 6.5.4: Inżynierska 4. Посилання на Szczecin більше не є підтвердженням."
+  },
+  "poi:bd8d75ace9b1e19741da": {
+    "expected_name": "Eurocash Dystrybucja",
+    "source_ids": [
+      "bdot:26780F22-D38C-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.638963778241376,
+    "expected_lat": 51.24389829507146,
+    "address_line": "Metalurgiczna 30",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://www.grupaeurocash.pl/kontakt",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Контакт Biuro Lublin лежить у тій самій території BDOT Eurocash; це адреса наявного комплексу, не окремий склад."
+  },
+  "poi:e57a4e81d0fb2bc358ad": {
+    "expected_name": "Fawag S.A.",
+    "source_ids": [
+      "bdot:26780F22-D3C0-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.584976591843635,
+    "expected_lat": 51.24141780473903,
+    "address_line": "Łęczyńska 58",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://fawag.pl/o-firmie/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційний опис місцевої фабрики та її адреси."
+  },
+  "poi:b4ff543ebc27a30421fb": {
+    "expected_name": "Herbapol Lublin S.A.",
+    "source_ids": [
+      "bdot:26780F22-D33F-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.548748155739045,
+    "expected_lat": 51.21607521585402,
+    "address_line": "Diamentowa 25",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://www.produkty.zielnik-apteczny.pl/kontakt/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Контакт Herbapol-Lublin; окремо вказано офіс у Варшаві."
+  },
+  "poi:8d24dfc6c5dca2dfe958": {
+    "expected_name": "Inter-Gips",
+    "source_ids": [
+      "bdot:26780F22-D3AB-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.560586309576664,
+    "expected_lat": 51.20754972483333,
+    "address_line": "Budowlana 20",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://www.intergips.lublin.pl/kontakt/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційні місцеві контакти та години роботи."
+  },
+  "poi:81f12419d2966e9ba933": {
+    "expected_name": "Lubella - Młyn nr 1",
+    "source_ids": [
+      "bdot:26780F22-D34E-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.588344480893106,
+    "expected_lat": 51.249097973833514,
+    "address_line": "Działkowa 45",
+    "locality": "Lublin",
+    "source": "public_reference",
+    "url": "https://www.encyklopedialublina.pl/architektura-i-urbanistyka/zabytki-przemyslu/219-mlyn-braci-krausse.html",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Опис саме млина Krausse/Lubella на Działkowa 45; PRG 45 і 45a в одній території, один POI."
+  },
+  "poi:c13dd5d066d11f25638f": {
+    "expected_name": "Lubella S.A.",
+    "source_ids": [
+      "bdot:26780F22-D331-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.551897505885407,
+    "expected_lat": 51.22210122713941,
+    "address_line": "Wrotkowska 1",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://lubella.pl/projekty-ue/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційна сторінка прямо визначає місце реалізації виробничого проєкту. Не плутати з Młyn nr 1 на іншій території."
+  },
+  "poi:15fbb7b2918476c06d2d": {
+    "expected_name": "Lubelskie Zakłady Przemysłu Skórzanego Protektor",
+    "source_ids": [
+      "bdot:975f8703-8c4b-11ee-a007-44e5174962da"
+    ],
+    "expected_lon": 22.651398625699684,
+    "expected_lat": 51.21972861264431,
+    "address_line": "Vetterów 24a-24b",
+    "locality": "Lublin",
+    "source": "public_document",
+    "url": "https://www.protektorsa.pl/wp-content/uploads/2025/03/KNF_Rb-8_2025-umowa-objecie-akcji.pdf",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційний звіт виробника 2025 та офіційні контакти 24a–24b відповідають території BDOT; діапазон будинків не створює другого POI."
+  },
+  "poi:6a40ff74dd8d0fc3484a": {
+    "expected_name": "PZL-Świdnik",
+    "source_ids": [
+      "overture:b896277e-9839-46f1-9e22-198867c1b2df",
+      "bdot:26791096-EE68-C49B-E053-CC2BA8C05673"
+    ],
+    "expected_lon": 22.7019,
+    "expected_lat": 51.2297,
+    "address_line": "al. Lotników Polskich 1",
+    "locality": "Świdnik",
+    "source": "public_document",
+    "url": "https://www.pzlswidnik.pl/documents/12297516/0/Leonardo%2BPZL-%C5%9AWIDNIK%2BS.A.%2B%282%29.pdf/56d48fb8-bebe-9b61-e4da-35eec36d8e03?t=1778158564486",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Сертифікат 2026–2027 прямо називає operational unit з авіаційним виробництвом; PRG 291 м від представницької точки не спростовує адресу великого заводу."
+  },
+  "poi:e08fd9ff60f859f28174": {
+    "expected_name": "Perła — Browary Lubelskie",
+    "source_ids": [
+      "bdot:26780F22-D3BC-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.566451694602833,
+    "expected_lat": 51.24342649579434,
+    "address_line": "Bernardyńska 15",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://perla.pl/kontakt/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Історичний/центральний майданчик. Не переносити Kunickiego 106 з іншого POI."
+  },
+  "poi:a8ec59c1594cff1929a1": {
+    "expected_name": "Pixi",
+    "source_ids": [
+      "bdot:26780F22-D3AA-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.600926597559834,
+    "expected_lat": 51.18252680076745,
+    "address_line": "Feliksa Strojnowskiego 25",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://www.pixi.pl/kontakt/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційно вказана локалізація та схема доїзду."
+  },
+  "poi:616ac1b18f21adfdb35f": {
+    "expected_name": "Poczta Polska Centrum Logistyki Oddział Regionalny w Lublinie, Oddział Terenowy w Lublinie",
+    "source_ids": [
+      "bdot:26780F22-D348-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.58333043314379,
+    "expected_lat": 51.205830465035994,
+    "address_line": "Seweryna Sierpińskiego 26",
+    "locality": "Lublin",
+    "source": "public_reference",
+    "url": "https://www.pracuj.pl/praca/mlodszy-pracownik-mlodsza-pracownica-rzemieslnik-rzemieslniczka-lublin-seweryna-sierpinskiego-26%2Coferta%2C1005196504",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Актуальна вакансія самого роботодавця Poczta Polska визначає стаціонарне місце роботи за цією адресою; PRG всередині території. Moritza 2 не переноситься."
+  },
+  "poi:3418b398d82406213cf6": {
+    "expected_name": "Polfa Lublin S.A.",
+    "source_ids": [
+      "bdot:26780F22-D355-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.50062411119169,
+    "expected_lat": 51.24568140242677,
+    "address_line": "Wojciechowska 42",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://polfa.pl/pl/kontakt/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційні контакти виробника та відділу персоналу."
+  },
+  "poi:e81acb8c1cc06aab2110": {
+    "expected_name": "Polska Korporacja Recyclingu Sp. z o.o.",
+    "source_ids": [
+      "bdot:26780F22-D33E-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.641221829013446,
+    "expected_lat": 51.23823816926409,
+    "address_line": "Metalurgiczna 15C",
+    "locality": "Lublin",
+    "source": "public_document",
+    "url": "https://www.pkrecykling.pl/dokumenty/ref/OS_WydzialOchronySrodowiska_LUBLIN.pdf",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Документ міського відділу довкілля 08.10.2024 та офіційний сайт переробного підприємства вказують ту саму адресу; відсутність точного номера у старому PRG не спростовує джерельну адресу."
+  },
+  "poi:ce26c0ae53f1566d4045": {
+    "expected_name": "Polskone Sp. z o.o.",
+    "source_ids": [
+      "bdot:26780F22-D3A9-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.60579342583167,
+    "expected_lat": 51.231624305493895,
+    "address_line": "Hanki Ordonówny 8",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://www.pol-skone.pl/kontakt/centrala-i-fabryka-nr-1-w-lublinie",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Пряме позначення Centrala i Fabryka nr 1."
+  },
+  "poi:d4e60450a915cf39d1a3": {
+    "expected_name": "Stanlab",
+    "source_ids": [
+      "bdot:26780F22-D375-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.5528215968338,
+    "expected_lat": 51.20657132771216,
+    "address_line": "Diamentowa 5B",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://www.stanlab.eu/kontakt/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційно ідентифікований Centrum Drzewne, який відповідає існуючій території. Karola Olszewskiego 13 є іншим центром і не переноситься."
+  },
+  "poi:d6aae629201d360141f5": {
+    "expected_name": "Tabal Sp. j.",
+    "source_ids": [
+      "bdot:26780F22-D378-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.553215064267377,
+    "expected_lat": 51.20764303234979,
+    "address_line": "Energetyków 14",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://tabal.pl/kontakt/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційно названі виробничі/комерційні відділи WATERJET, TABLICE та HURTOWNIA за Energetyków 14; Smoluchowskiego 7 — інше місце."
+  },
+  "poi:1009be76fdb3ad904296": {
+    "expected_name": "Tabla Sp. z o.o.",
+    "source_ids": [
+      "bdot:26780F22-D35F-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.55115193232953,
+    "expected_lat": 51.20688263976812,
+    "address_line": "Diamentowa 7B",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://tabla.pl/kontakt/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Окрема компанія TABLA, не TABAL."
+  },
+  "poi:3e3820c53591da611e5d": {
+    "expected_name": "Vita Polmers Poland",
+    "source_ids": [
+      "bdot:26780F22-D3A6-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.601883125787992,
+    "expected_lat": 51.18152904070223,
+    "address_line": "Feliksa Strojnowskiego 27",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://www.thevitagroup.com/en/contact-us/",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Сайт містить Vita Lublin і перелік виробничих можливостей; написання Strojanowskiego у джерелі відрізняється."
+  },
+  "poi:d0a7eda1cfb849350c46": {
+    "expected_name": "Zakład Przemysłu Ziemniaczanego Lublin S.A.",
+    "source_ids": [
+      "bdot:26780F22-D35B-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.546653738230923,
+    "expected_lat": 51.22281564629043,
+    "address_line": "Betonowa 9",
+    "locality": "Lublin",
+    "source": "official_website",
+    "url": "https://zpzlublin.com.pl/contact.html",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Офіційна локалізація заводу; правова форма змінилась з назви BDOT."
+  },
+  "poi:2b780643d563a79aec10": {
+    "expected_name": "Złomowisko Zadębie",
+    "source_ids": [
+      "bdot:26780F22-D38B-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.63103049305012,
+    "expected_lat": 51.24881409560283,
+    "address_line": "Jana Kasprowicza 12",
+    "locality": "Lublin",
+    "source": "public_document",
+    "url": "https://lublin.eu/download/gfx/lublin/userfiles/_public/mieszkancy/srodowisko/sprawy_wydzialu/decyzje_srowiskowe/2021/uruchomienie_stacji_demontazu_pojazdow_na_zlomowisku_zadebie_na_dzialce_nr_56__ark._46_ark._8__przy_ul._kasprowicza_12_w_lublinie/raport_demontaz_pojazdow_kasprowicza.pdf",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Документ конкретної установки złomowisko Zadębie на Kasprowicza 12; PRG Jana Kasprowicza 12 всередині території."
+  },
+  "poi:33f4b578e10e3774dec3": {
+    "expected_name": "Art Bed",
+    "source_ids": [
+      "bdot:26780F22-D3A7-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.633349051358262,
+    "expected_lat": 51.241864125219536,
+    "address_line": "ul. Antoniny Grygowej 5A",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика. Назву Art Bed уточнено до Art-Bet; стара назва залишається alias.",
+    "canonical_name": "Art-Bet Wytwórnia Betonu Sp. J."
+  },
+  "poi:eed7b70e7680432a4bac": {
+    "expected_name": "Baxter Manufacturing Sp. z o.o.",
+    "source_ids": [
+      "bdot:26780F22-D356-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.503395781766585,
+    "expected_lat": 51.24566928354548,
+    "address_line": "ul. Wojciechowska 42B",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:c7c7464426d37f212a93": {
+    "expected_name": "Biomed Lublin S.A.",
+    "source_ids": [
+      "bdot:26780F22-D34D-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.486924306496604,
+    "expected_lat": 51.262722757179986,
+    "address_line": "ul. Główna 34",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:5ee56606c2e4811e56bc": {
+    "expected_name": "Bruno Tassi",
+    "source_ids": [
+      "bdot:26780F22-D35D-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.61271917035704,
+    "expected_lat": 51.22559649644062,
+    "address_line": "ul. Grenadierów 1 / Droga Męczenników Majdanka 74",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:bdff65167d4fc0ecef9c": {
+    "expected_name": "Bury Sp. z o.o.",
+    "source_ids": [
+      "bdot:26780F22-D395-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.62789840319791,
+    "expected_lat": 51.24969979488143,
+    "address_line": "ul. Mełgiewska 38C",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:7afce11771c9f378904e": {
+    "expected_name": "Centrum Dystrybucji Stokrotka Lublin",
+    "source_ids": [
+      "overture:9aadb023-defd-407a-80b3-3079c53eac1c"
+    ],
+    "expected_lon": 22.640022502074157,
+    "expected_lat": 51.229903340579945,
+    "address_line": "ul. Mełgiewska 7–9",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:ff6fde33e8b58538e250": {
+    "expected_name": "Indykpol",
+    "source_ids": [
+      "bdot:26780F22-D32C-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.60978487714025,
+    "expected_lat": 51.25306309889399,
+    "address_line": "ul. Zimna 2",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:d7018ae91bd7c216c079": {
+    "expected_name": "Kolporter",
+    "source_ids": [
+      "bdot:26780F22-D3AF-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.624226041114383,
+    "expected_lat": 51.248169676356525,
+    "address_line": "ul. Zadębie 65",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:32bfe7b9ba096083b0e8": {
+    "expected_name": "Kza Przedsiębiorstwo Automatyki i Telekomunikacji S.A.",
+    "source_ids": [
+      "bdot:26780F22-D363-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.56967009699104,
+    "expected_lat": 51.22930726403205,
+    "address_line": "ul. Pochyła 9",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:7166daec2985474ec13f": {
+    "expected_name": "Libet",
+    "source_ids": [
+      "bdot:691A94D1-3174-470E-9E4E-09596F1FF76F"
+    ],
+    "expected_lon": 22.616299394907358,
+    "expected_lat": 51.23414589001861,
+    "address_line": "ul. Pancerniaków 12",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:7324119e741f62de7028": {
+    "expected_name": "Lprt S.A.",
+    "source_ids": [
+      "bdot:26780F22-D36F-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.554007961932143,
+    "expected_lat": 51.20854511263401,
+    "address_line": "ul. Energetyków 27",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:ab42e116b62d71c1b580": {
+    "expected_name": "Lubelska Agencja Ochrony Środowiska S.A.",
+    "source_ids": [
+      "bdot:26791096-EE50-C49B-E053-CC2BA8C05673"
+    ],
+    "expected_lon": 22.70493751365659,
+    "expected_lat": 51.227951741061105,
+    "address_line": "ul. Elektryczna 13–15",
+    "locality": "Świdnik",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:35258d724d9a0a79ed15": {
+    "expected_name": "Lubelskie Przedsiębiorstwo Robót Drogowych S.A.",
+    "source_ids": [
+      "bdot:26780F22-D33D-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.62554149493025,
+    "expected_lat": 51.25995725271822,
+    "address_line": "ul. Zawieprzycka 3",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:9fea548e59fe7639ca7c": {
+    "expected_name": "Margomed",
+    "source_ids": [
+      "bdot:26780F22-D396-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.61710744029551,
+    "expected_lat": 51.23002631843514,
+    "address_line": "ul. Pancerniaków 27 / Al. Wincentego Witosa 38",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:9ced7e1808521968e9f7": {
+    "expected_name": "Megast S.C.",
+    "source_ids": [
+      "bdot:26780F22-D34B-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.484424450998027,
+    "expected_lat": 51.27383698409301,
+    "address_line": "al. Warszawska 150",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:19b785d7c030ef4d07c8": {
+    "expected_name": "Optronik",
+    "source_ids": [
+      "bdot:26780F22-D379-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.554652238029636,
+    "expected_lat": 51.2072325029376,
+    "address_line": "ul. Energetyków 10",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:5e9f84a937f67550ee09": {
+    "expected_name": "P.H.U. Domar S.A.",
+    "source_ids": [
+      "bdot:26780F22-D371-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.558939828795918,
+    "expected_lat": 51.20720153053034,
+    "address_line": "ul. Energetyków 17",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:cfcf7d2c793f9f963909": {
+    "expected_name": "PBDiM Sp. z o.o. Mińsk Mazowiecki",
+    "source_ids": [
+      "bdot:26780F22-D3A8-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.625195686721494,
+    "expected_lat": 51.250249570539275,
+    "address_line": "ul. Mełgiewska 38B",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:1c79568a232098c15bb5": {
+    "expected_name": "Pipelive",
+    "source_ids": [
+      "bdot:26780F22-D38F-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.63357932475683,
+    "expected_lat": 51.24623521622365,
+    "address_line": "ul. Mełgiewska 80",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:83df9d708da91be324a4": {
+    "expected_name": "Polbruk",
+    "source_ids": [
+      "bdot:26780F22-D38E-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.630645108796816,
+    "expected_lat": 51.2463234183849,
+    "address_line": "ul. Mełgiewska 74",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:1122d494c78023ae9132": {
+    "expected_name": "Prim Lublin",
+    "source_ids": [
+      "bdot:26780F22-D35A-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.551061226403803,
+    "expected_lat": 51.21843833978974,
+    "address_line": "ul. Inżynierska 10",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:ecd7c695fe565b291c25": {
+    "expected_name": "Przedsiębiorstwo Usługowo-Handlowe Petromax Sp. z o.o.",
+    "source_ids": [
+      "bdot:26780F22-D344-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.563412043918554,
+    "expected_lat": 51.198625392145864,
+    "address_line": "ul. Zemborzycka 116C",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:c3cd3655f33a4d8bcd76": {
+    "expected_name": "Refleks",
+    "source_ids": [
+      "bdot:26780F22-D366-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.60177637652702,
+    "expected_lat": 51.25409687065715,
+    "address_line": "ul. Turystyczna 32",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:f225cd4818d7a4d6539b": {
+    "expected_name": "Stalmet",
+    "source_ids": [
+      "bdot:26780F22-D3AD-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.59128152013161,
+    "expected_lat": 51.240294641464764,
+    "address_line": "ul. Krzemionki 4",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:3ca1fea6a6161c51f357": {
+    "expected_name": "Strabag Polski Asfalt",
+    "source_ids": [
+      "bdot:26780F22-D393-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.643892764858357,
+    "expected_lat": 51.239762372077166,
+    "address_line": "ul. Metalurgiczna 13E",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:228e290fbc850db05464": {
+    "expected_name": "TP S.A.",
+    "source_ids": [
+      "bdot:26780F22-D370-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.556468815965005,
+    "expected_lat": 51.20833747112691,
+    "address_line": "ul. Energetyków 23",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:02db8091c688f0f21189": {
+    "expected_name": "Winged Trade Sp z o.o.",
+    "source_ids": [
+      "bdot:26780F22-D367-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.555352176802245,
+    "expected_lat": 51.22104009390176,
+    "address_line": "ul. Wrotkowska 2",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  },
+  "poi:17322c73ae993f6c0d2f": {
+    "expected_name": "ZSW Spółdzielnia Pracy Oszczędność",
+    "source_ids": [
+      "bdot:26780F22-D329-DA8A-E053-CC2BA8C01EC0"
+    ],
+    "expected_lon": 22.60437792450341,
+    "expected_lat": 51.25120087961845,
+    "address_line": "ul. Gospodarcza 36",
+    "locality": "Lublin",
+    "source": "local_knowledge",
+    "url": "local_knowledge:owner-confirmation:2026-11-10",
+    "checked_on": "2026-11-10",
+    "confidence": "confirmed",
+    "reason": "Власник підтвердив поштову адресу саме наявного фізичного майданчика за вказаними координатами. Координати не змінено; це не підтвердження входу чи створення іншого майданчика."
+  }
+}

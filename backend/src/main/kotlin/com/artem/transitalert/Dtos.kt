@@ -97,7 +97,12 @@ data class JourneyLeg(
     val fromStopId: String,   
      val toStopId: String,   
      val isRealTime: Boolean = false,
-    val delayMinutes: Int = 0
+    val delayMinutes: Int = 0,
+    val scheduledDepartureEpoch: Long? = null,
+    val scheduledArrivalEpoch: Long? = null,
+    val departureEpoch: Long? = null,
+    val arrivalEpoch: Long? = null,
+    val liveObservedEpoch: Long? = null
 )
 
 // Це весь маршрут цілком (сумарний час і список шматків)

@@ -20,9 +20,10 @@ async function setup() {
     clearInterval: id => timers.delete(id),
     fetch: (url, options) => { calls.push({ url, signal: options.signal }); return responder(options.signal); },
   };
-  const { createPlanner } = await loadBrowserModule(new URL('../js/planner.js', import.meta.url), context);
-  const planner = createPlanner({ apiBaseUrl: '' });
-  return { planner, timers, calls, row, setResponder: fn => { responder = fn; }, tick: () => [...timers.values()][0]?.() };
+  const { createPlannerLive } = await loadBrowserModule(new URL('../js/planner-live.js', import.meta.url), context);
+  const live = createPlannerLive({ apiBaseUrl: '', refreshOpenTrasaPassedStops: async () => {} });
+  const planner = { enterPlanner: live.enterPlannerLive, leavePlanner: live.leavePlanner };
+  return { planner, timers, calls, row, setResponder: fn => { responder = fn; }, tick: async () => { for (let i=0;i<15;i++) [...timers.values()][0]?.(); await flush(); } };
 }
 
 test('enter updates immediately; leave stops polling; return resumes with one timer', async () => {
@@ -62,4 +63,47 @@ test('navigation stops Trasa on map, stop, reports and history return', async ()
   assert.equal(leaves, 0); assert.equal(enters, 1);
   for (const screen of ['map', 'stop', 'reports']) nav.switchScreen(screen, null, true);
   assert.equal(leaves, 3); assert.equal(closes, 4);
+});
+
+test('polling keeps the red blinking LIVE node and its animation instance', async () => {
+  let content, badge, interval;
+  const timer = {
+    set innerHTML(value) { content={innerHTML:''}; badge=null; },
+    querySelector: s => s === '.trasa-timer-content' ? content : badge,
+    prepend: node => { badge=node; },
+  };
+  const row={dataset:{tripId:'trip',min:'600',delay:'0',delayInitial:'0',live:'true'},querySelector:()=>null};
+  const timeline={querySelectorAll:()=>[row],querySelector:s=>s==='.trasa-dep-min'?timer:null,closest:()=>null};
+  const {createPlannerLive}=await loadBrowserModule(new URL('../js/planner-live.js',import.meta.url),{
+    Date,AbortController,console,
+    document:{querySelectorAll:()=>[timeline],createElement:()=>({style:{}})},
+    setInterval:fn=>{interval=fn;return 1;},clearInterval(){},
+  });
+  const live=createPlannerLive({refreshResults:async()=>{},refreshOpenTrasaPassedStops:async()=>{}});
+  live.enterPlannerLive(); await flush();
+  const original=badge; assert.ok(original);
+  assert.match(original.style.cssText,/color:#ef4444/);
+  assert.match(original.style.cssText,/animation:trasaLiveBlink 1.5s infinite/);
+  for(let i=0;i<15;i++) interval(); await flush();
+  assert.equal(badge,original);
+  live.leavePlanner();
+});
+
+test('transfer risk remains independent of the initial walking warning', async () => {
+  const walkWarning={hidden:false};
+  const transferWarning={hidden:true};
+  const makeRow=dataset=>({dataset,querySelector:s=>s==='.trasa-transfer-warn'?transferWarning:null});
+  const rows=[makeRow({tripId:'first',min:'600',delay:'0',delayInitial:'0'}),
+    makeRow({tripId:'first',min:'650',delay:'0',delayInitial:'0',nextDep:'651',transferWalk:'1'}),
+    makeRow({tripId:'second',min:'700',delay:'0',delayInitial:'0'})];
+  const timeline={querySelectorAll:()=>rows,querySelector:()=>null,closest:()=>null};
+  const {createPlannerLive}=await loadBrowserModule(new URL('../js/planner-live.js',import.meta.url),{
+    Date,AbortController,console,document:{querySelectorAll:()=>[timeline]},setInterval:()=>1,clearInterval(){}
+  });
+  const live=createPlannerLive({refreshResults:async()=>{},refreshOpenTrasaPassedStops:async()=>{}});
+  live.enterPlannerLive(); await flush();
+  assert.equal(transferWarning.hidden,false); assert.equal(walkWarning.hidden,false);
+  rows[1].dataset.nextDep='660'; await live.updateTrasaCountdowns();
+  assert.equal(transferWarning.hidden,true); assert.equal(walkWarning.hidden,false);
+  live.leavePlanner();
 });

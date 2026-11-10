@@ -448,3 +448,12 @@
 :is(#route-selected-icon-from, #route-selected-icon-to).planner-icon-trees { --planner-selected-icon: url("../icons/lucide/trees.svg"); }
 :is(#route-selected-icon-from, #route-selected-icon-to).planner-icon-train-front { --planner-selected-icon: url("../icons/lucide/train-front.svg"); }
 :is(#route-selected-icon-from, #route-selected-icon-to).planner-icon-landmark { --planner-selected-icon: url("../icons/lucide/landmark.svg"); }
+
+.trasa-refresh-indicator { height:0; overflow:hidden; text-align:center; color:var(--text-muted); transition:height .2s; }
+.trasa-wrapper { transition:opacity .25s; animation:trasaResultEnter .25s ease-out; }
+.trasa-result-exit { opacity:0; pointer-events:none; }
+@keyframes trasaResultEnter { from { opacity:0; } to { opacity:1; } }
+.trasa-departed .trasa-compact-header,
+.trasa-departed .trasa-middle-scroll,
+.trasa-departed .trasa-timeline > :not(.trasa-dep-min) { filter:grayscale(1); opacity:.55; }
+.trasa-departed .trasa-timer-content { filter:grayscale(1); opacity:.55; }

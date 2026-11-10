@@ -2,7 +2,7 @@ import { apiFetch } from './backend-connection.js';
 import { coloredTimeHtml, getLiveStatusBadge } from './planner-cards.js';
 
 // Власник LIVE-сесії, запиту затримок і таймера Trasa.
-export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops }) {
+export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops, refreshResults, tickResults }) {
     let trasaCountdownInterval = null;
     let plannerLiveSession = null;
 
@@ -11,13 +11,15 @@ export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops }) {
             + parseInt(row.dataset.delay, 10) - parseInt(row.dataset.delayInitial, 10);
     }
 
-    async function updateTrasaCountdowns() {
+    async function updateTrasaCountdowns(options = {}) {
         const session = plannerLiveSession;
-        if (!session || session.inFlight) return;
+        if (!session) return;
+        if (session.inFlight) return options.manual ? refreshResults?.(options) : undefined;
         session.inFlight = true;
         session.controller = new AbortController();
         try {
-            await refreshTrasaCountdowns(session);
+            await refreshResults?.(options);
+            if (plannerLiveSession === session) await refreshTrasaCountdowns(session);
         } finally {
             session.inFlight = false;
         }
@@ -26,7 +28,11 @@ export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops }) {
     function startPlannerPolling() {
         if (!plannerLiveSession) return;
         if (!trasaCountdownInterval) {
-            trasaCountdownInterval = setInterval(updateTrasaCountdowns, 15000);
+            let ticks = 0;
+            trasaCountdownInterval = setInterval(() => {
+                tickResults?.();
+                if (++ticks % 15 === 0) updateTrasaCountdowns();
+            }, 1000);
         }
     }
 
@@ -52,7 +58,7 @@ export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops }) {
 
         // 2. Робимо запит на сервер за новими затримками
         let liveDelays = {};
-        if (tripIds.size > 0) {
+        if (!refreshResults && tripIds.size > 0) {
             try {
                 const res = await apiFetch(`${apiBaseUrl}/live-vehicles/delays?tripIds=${Array.from(tripIds).join(',')}`, { signal: session.controller.signal });
                 if (res.ok) {
@@ -109,7 +115,7 @@ export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops }) {
 
                 // --- ЧИСТА МАТЕМАТИКА ТАЙМЕРА (БЕЗ 1440) ---
                 // JS Date сам перемкне день вперед, якщо expectedDepartureMin >= 1440
-                const depDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(expectedDepartureMin / 60), expectedDepartureMin % 60, 0);
+                const depDate = firstRow.dataset.departureEpoch ? new Date(Number(firstRow.dataset.departureEpoch) * 1000) : new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(expectedDepartureMin / 60), expectedDepartureMin % 60, 0);
                 const diffMs = depDate - now;
                 let countdown = Math.max(0, Math.floor(diffMs / 60000));
 
@@ -154,7 +160,22 @@ export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops }) {
                 </div>`;
                 }
 
-                timerEl.innerHTML = timerHtml;
+                let content = timerEl.querySelector('.trasa-timer-content');
+                if (!content) {
+                    timerEl.innerHTML = '<div class="trasa-timer-content"></div>';
+                    content = timerEl.querySelector('.trasa-timer-content');
+                }
+                const html = timerHtml.replace(liveBadgeHtml, '');
+                if (content.innerHTML !== html) content.innerHTML = html;
+                let badge = timerEl.querySelector('.trasa-live-blink');
+                if (isLive && !badge) {
+                    badge = document.createElement('span');
+                    badge.className = 'trasa-live-blink';
+                    badge.style.cssText = 'color:#ef4444;font-size:9px;font-weight:900;letter-spacing:.5px;margin-bottom:2px;animation:trasaLiveBlink 1.5s infinite;display:block;text-align:center';
+                    badge.textContent = 'LIVE';
+                    timerEl.prepend(badge);
+                }
+
             }
 
             // 6. Шапка: статус першого рейсу + тривалість (перший і останній рейси можуть мати різні затримки)

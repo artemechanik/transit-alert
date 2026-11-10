@@ -1,3 +1,4 @@
+import { initialWalkRisk } from './planner-results.js';
 import { apiFetch } from './backend-connection.js';
 // Картки поїздок, розгортання зупинок і відкриття мінікарти.
 function formatTime(minutes) {
@@ -170,7 +171,7 @@ export function createPlannerCards({
             timelineHtml += `<div class="trasa-row" ${rowAttrs(transitLegs[i], transitLegs[i].arrivalMin)} data-next-dep="${nextLeg.departureMin}" data-transfer-walk="${transferWalkMin(transitLegs[i], nextLeg)}" style="${rowStyle} opacity: 0.8;">
             <div class="time" style="${timeStyle} font-size: 14px; font-weight: 500; color: var(--text-muted);">${coloredTimeHtml(transitLegs[i].arrivalMin, transitLegs[i].delayMinutes || 0)}</div>
             <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--border); box-shadow: 0 0 0 3px var(--card);"></div></div>
-            <div class="stop-name" style="flex: 1; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;"><span class="trasa-transfer-warn" hidden style="color: var(--danger); font-weight: 700;">⚠ Zagrożona przesiadka · </span>➔ ${tStop.name} ${tStop.code ? `<span class="stop-code" style="font-size: 14px; font-weight: 500; color: var(--text-muted);">(${tStop.code})</span>` : ''}</div>
+            <div class="stop-name" style="flex: 1; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;"><span class="trasa-transfer-warn" hidden style="color: var(--danger); font-weight: 700;">⚠ </span>➔ ${tStop.name} ${tStop.code ? `<span class="stop-code" style="font-size: 14px; font-weight: 500; color: var(--text-muted);">(${tStop.code})</span>` : ''}</div>
         </div>`;
         }
 
@@ -182,7 +183,7 @@ export function createPlannerCards({
     </div>`;
 
         // 4. ТАЙМЕР АБСОЛЮТНИЙ (відцентрований відносно всього таймлайну!)
-        timelineHtml += `<div class="trasa-dep-min" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 5;">${timerHtml}</div>`;
+        timelineHtml += `<div class="trasa-dep-min" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 5;">${isLive ? '<span class="trasa-live-blink" style="color:#ef4444;font-size:9px;font-weight:900;letter-spacing:.5px;margin-bottom:2px;animation:trasaLiveBlink 1.5s infinite;display:block;text-align:center">LIVE</span>' : ''}<div class="trasa-timer-content">${timerHtml}</div></div>`;
 
         timelineHtml += '</div>';
 
@@ -203,7 +204,7 @@ export function createPlannerCards({
                 ${getLiveStatusBadge(isLive, delay)}
             </div>
             <!-- Далі твій старий код пішоходів і годинника -->
-            ${walkMin > 0 ? `<div style="display:flex; align-items:center; gap:2px;"><div class="svg-icon icon-walk" style="width:13px;height:13px;"></div>${walkMin}m</div> <span style="opacity:0.4">•</span>` : ''}
+            ${walkMin > 0 ? `<div class="trasa-initial-walk" style="display:flex; align-items:center; gap:2px;"><div class="svg-icon icon-walk" style="width:13px;height:13px;"></div><span class="trasa-initial-walk-warn" ${initialWalkRisk(journey, Date.now() / 1000) ? '' : 'hidden'} style="color:var(--danger);font-weight:700;">⚠</span>${walkMin}m</div> <span style="opacity:0.4">•</span>` : ''}
             <div style="display:flex; align-items:center; gap:3px; color: var(--text-muted);">
                 <div class="svg-icon icon-bus-ride" style="width:20px;height:16px; color:var(--text-muted);"></div><span class="trasa-duration">${duration}m</span>
             </div>
@@ -229,12 +230,28 @@ export function createPlannerCards({
 
         card.addEventListener('click', (e) => {
             if (e.target.closest('.dep-expand-map-btn')) return;
-            toggleTrasaExpand(card, legs, transitLegs);
+            const current = wrapper.journey || journey;
+            toggleTrasaExpand(card, current.legs, current.legs.filter(l => l.route !== "Пішки" && l.route));
         });
 
         wrapper.appendChild(card);
 
         return wrapper;
+    }
+
+    function updateJourneyCard(wrapper, journey) {
+        wrapper.journey = journey;
+        const walkWarning = wrapper.querySelector('.trasa-initial-walk-warn');
+        if (walkWarning) walkWarning.hidden = !initialWalkRisk(journey, Date.now() / 1000);
+        const transit = journey.legs.filter(l => l.route !== 'Пішки' && l.route);
+        const rows = [...wrapper.querySelectorAll('.trasa-row[data-trip-id]')];
+        rows.forEach((row, index) => {
+            const leg = index === 0 ? transit[0] : transit[index - 1];
+            if (!leg) return;
+            const min = index === 0 ? leg.departureMin : leg.arrivalMin;
+            Object.assign(row.dataset, { min, delay:leg.delayMinutes || 0, delayInitial:leg.delayMinutes || 0, live:String(leg.isRealTime), departureEpoch:leg.departureEpoch });
+            if (row.dataset.nextDep !== undefined && transit[index]) row.dataset.nextDep = transit[index].departureMin;
+        });
     }
 
     async function refreshOpenTrasaPassedStops() {
@@ -442,5 +459,5 @@ export function createPlannerCards({
         });
     }
 
-    return { buildJourneyCard, refreshOpenTrasaPassedStops, closePlannerAccordion };
+    return { buildJourneyCard, updateJourneyCard, refreshOpenTrasaPassedStops, closePlannerAccordion };
 }

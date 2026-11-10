@@ -8,7 +8,7 @@ class Element {
     this.value = ''; this.style = {}; this.dataset = {}; this.children = [];
     this.listeners = {}; this.parts = new Map(); this.classes = new Set();
     this.classList = { contains: c => this.classes.has(c), add: c => this.classes.add(c),
-      remove: c => this.classes.delete(c) };
+      remove: c => this.classes.delete(c), toggle: (c,on) => on ? this.classes.add(c) : this.classes.delete(c) };
     this.parentNode = { insertBefore() {} };
   }
   set innerHTML(value) { this.html = value; this.children = []; this.recentCards = null; }
@@ -36,16 +36,21 @@ class Element {
 
 async function setup(initialHistory = []) {
   const elements = new Map(), calls = [], maps = [], history = new Map(initialHistory), toasts = [], documents = [], timers = new Map();
-  let nextTimer = 0;
+  let timelines = [], clockNow = null;
+  class PlannerTestDate extends Date {
+    constructor(...args) { super(...(args.length ? args : [clockNow ?? Date.now()])); }
+    static now() { return clockNow ?? Date.now(); }
+  }
+  let nextTimer = 0; const intervals = new Map(), created = [];
   const get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   let responder = () => [], position = { lat: 51.24, lon: 22.57 };
   const context = {
-    console, Date, AbortController,
+    console, Date: PlannerTestDate, AbortController,
     setTimeout: (fn, delay) => { if (delay < 5000) { fn(); return 0; } const id = ++nextTimer; timers.set(id, fn); return id; },
-    clearTimeout: id => timers.delete(id), setInterval: () => 1, clearInterval() {},
+    clearTimeout: id => timers.delete(id), setInterval: fn => { const id=++nextTimer; intervals.set(id,fn); return id; }, clearInterval: id => intervals.delete(id),
     localStorage: { getItem: k => history.get(k), setItem: (k, v) => history.set(k, v) },
-    document: { getElementById: get, createElement: () => new Element(), addEventListener: (type, fn) => documents.push({type,fn}),
-      querySelector: () => null, querySelectorAll: () => [] },
+    document: { getElementById: get, createElement: () => { const element = new Element(); created.push(element); return element; }, addEventListener: (type, fn) => documents.push({type,fn}),
+      querySelector: () => null, querySelectorAll: selector => selector === '.trasa-timeline' ? timelines : [] },
     fetch: async (url, options) => {
       calls.push({ url, options });
       const data = await responder(url, options);
@@ -59,8 +64,8 @@ async function setup(initialHistory = []) {
     locationService: { getPosition: () => position }, getNearbyStops: () => [], showToast: text => toasts.push(text),
     showVehicleOnMap: (...args) => maps.push(args), addMinutesToTime: s => s,
     onAccordionOpen() {}, onBack() {} });
-  planner.initPlanner();
-  return { planner, get, calls, maps, history, toasts, documents, timers, respond: fn => { responder = fn; },
+  planner.initPlanner(); planner.enterPlanner();
+  return { planner, get, calls, maps, history, toasts, documents, timers, intervals, created, setNow: value => { clockNow = value; }, setTimelines: value => { timelines = value; }, respond: fn => { responder = fn; },
     move: p => { position = p; } };
 }
 
@@ -105,8 +110,8 @@ test('grouped stop selection reaches search, card and map with exact stop IDs', 
 
   const results = h.get('route-results-list');
   results.scrollTop = 0; results.clientHeight = 100; results.scrollHeight = 100;
-  h.respond(() => [{ legs: [{ ...leg, departureMin: 630, arrivalMin: 650 }] }]);
-  await results.emit('touchstart', { touches: [{ clientY: 100 }] });
+  h.respond(() => [{ legs: [{ ...leg, tripId: 'later-trip', departureMin: 630, arrivalMin: 650 }] }]);
+  await results.emit('touchstart', { touches: [{ clientY: 100, clientX: 0 }] });
   await results.emit('touchend', { changedTouches: [{ clientY: 20 }] });
   assert.equal(h.calls.at(-1).url, '/api/route/complex?from=a1,a2&to=b1,b2&limit=8&time=601');
   assert.equal(results.children.length, 2);
@@ -379,7 +384,12 @@ test('autocomplete SVG assets and wrapping rules remain local and scoped', () =>
   const css=fs.readFileSync(new URL('../css/planner.css',import.meta.url),'utf8');
   const scoped=css.slice(css.indexOf('/* Typed autocomplete results only;'));
   assert.match(scoped,/min-width: 0/);assert.match(scoped,/overflow-wrap: anywhere/);
-  assert.match(scoped,/white-space: normal/);assert.ok(!scoped.includes('ellipsis'));
+  assert.match(scoped,/white-space: normal/);
+  assert.match(scoped,/height: 60px/);
+  assert.match(scoped,/padding: 8px 16px/);
+  assert.match(scoped,/-webkit-line-clamp: 2/);
+  assert.match(scoped,/-webkit-line-clamp: 1/);
+  assert.match(scoped,/text-overflow: ellipsis/);
   assert.match(scoped,/pointer-events: none/);
   for(const icon of ['bus-front','map-pin','factory','shopping-bag','clapperboard','hospital','graduation-cap','trees','train-front','landmark']) {
     assert.ok(fs.readFileSync(new URL('../icons/lucide/'+icon+'.svg',import.meta.url),'utf8').includes('<svg'));
@@ -463,4 +473,115 @@ test('input icon slots reserve stable left padding and do not intercept field ac
   }
   const css=fs.readFileSync(new URL('../css/planner.css',import.meta.url),'utf8');
   assert.match(css,/#route-selected-icon-from, #route-selected-icon-to \{[^}]*pointer-events: none/s);
+});
+
+test('Trasa pull refresh preserves wrapper and scroll; error recovers; inactive gestures do not fetch', async () => {
+  const h = await setup();
+  await chooseStop(h,'from','Start',['a1']); await chooseStop(h,'to','End',['b1']);
+  const now = Math.floor(Date.now()/1000);
+  const j = {legs:[{...leg,scheduledDepartureEpoch:now+600,scheduledArrivalEpoch:now+1200,departureEpoch:now+600,arrivalEpoch:now+1200}]};
+  h.respond(() => [j]); await h.get('route-search-btn').click();
+  const results=h.get('route-results-list'), wrapper=results.children[0];
+  results.scrollTop=0; results.clientHeight=100; results.scrollHeight=500;
+  const pull=async () => {
+    await results.emit('touchstart',{touches:[{clientY:0,clientX:0}]});
+    await results.emit('touchend',{changedTouches:[{clientY:90,clientX:0}]});
+  };
+  const count=h.calls.length;
+  await pull(); assert.equal(h.calls.length,count+1);
+  assert.equal(results.children[0],wrapper); assert.equal(results.scrollTop,0);
+  h.respond(() => new Error('offline')); await pull(); assert.equal(results.children[0],wrapper);
+  h.respond(() => [j]); await pull(); assert.equal(results.children[0],wrapper);
+  results.scrollTop=80; const before=h.calls.length; await pull(); assert.equal(h.calls.length,before);
+  h.planner.leavePlanner(); results.scrollTop=0; await pull(); assert.equal(h.calls.length,before);
+});
+
+test('automatic request is quiet; manual pull joins it; leave aborts and return resumes', async () => {
+  const h=await setup();
+  await chooseStop(h,'from','Start',['a1']); await chooseStop(h,'to','End',['b1']);
+  const now=Math.floor(Date.now()/1000);
+  const j={legs:[{...leg,isRealTime:false,scheduledDepartureEpoch:now+600,scheduledArrivalEpoch:now+1200,departureEpoch:now+600,arrivalEpoch:now+1200}]};
+  h.respond(()=>[j]); await h.get('route-search-btn').click();
+  const results=h.get('route-results-list'), wrapper=results.children[0], card=wrapper.children[0];
+  const indicator=h.created.find(e=>e.className==='trasa-refresh-indicator');
+  card.classList.add('fullscreen-expanded'); results.scrollTop=40;
+  const flush=()=>new Promise(r=>setImmediate(r));
+  const poll=()=>{for(let i=0;i<15;i++) [...h.intervals.values()][0]?.();};
+  let resolve;
+  h.respond(()=>new Promise(r=>{resolve=r;}));
+  const before=h.calls.length; poll(); await flush();
+  assert.equal(h.calls.length,before+1);
+  assert.notEqual(indicator.style.height,'24px');
+  assert.equal(results.scrollTop,40); assert.equal(results.children[0],wrapper);
+  assert.equal(card.classList.contains('fullscreen-expanded'),true);
+  results.scrollTop=0; results.clientHeight=100; results.scrollHeight=500;
+  await results.emit('touchstart',{touches:[{clientY:0,clientX:0}]});
+  const pulling=results.emit('touchend',{changedTouches:[{clientY:90,clientX:0}]});
+  await flush(); assert.equal(indicator.style.height,'24px');
+  assert.equal(h.calls.length,before+1);
+  resolve([j]); await pulling; await flush();
+  assert.equal(indicator.style.height,'0');
+  const toastCount=h.toasts.length;
+  h.respond(()=>new Error('offline')); poll(); await flush();
+  assert.equal(h.toasts.length,toastCount); assert.equal(indicator.style.height,'0');
+  h.respond(()=>new Promise(r=>{resolve=r;})); poll(); await flush();
+  const pending=h.calls.at(-1); h.planner.leavePlanner();
+  assert.equal(pending.options.signal.aborted,true); assert.equal(h.intervals.size,0);
+  const count=h.calls.length; poll(); assert.equal(h.calls.length,count);
+  h.respond(()=>[j]); h.planner.enterPlanner(); await flush();
+  assert.equal(h.calls.length,count+1); assert.equal(h.intervals.size,1);
+  resolve([]); await flush(); assert.equal(results.children[0],wrapper);
+});
+
+test('only initial walker gets new warning; transfer warning stays in its timeline location', async () => {
+  const h=await setup();
+  await chooseStop(h,'from','Start',['a1']); await chooseStop(h,'to','End',['b1']);
+  const now=Math.floor(Date.now()/1000);
+  const first={...leg,scheduledDepartureEpoch:now+180,departureEpoch:now+180,scheduledArrivalEpoch:now+600,arrivalEpoch:now+600,liveObservedEpoch:now};
+  const next={...first,tripId:'next',fromStopId:'b1',toStopId:'c1',departureMin:620,arrivalMin:630,scheduledDepartureEpoch:now+620,departureEpoch:now+620};
+  const j={legs:[{route:'Пішки',departureMin:0,arrivalMin:7},first,next,{route:'Пішки',departureMin:630,arrivalMin:660}]};
+  h.respond(()=>[j]); await h.get('route-search-btn').click();
+  const wrapper=h.get('route-results-list').children[0], html=wrapper.children[0].innerHTML;
+  assert.equal((html.match(/trasa-initial-walk-warn/g)||[]).length,1);
+  assert.match(html,/class="trasa-initial-walk"[^]*?icon-walk[^]*?class="trasa-initial-walk-warn"  style/);
+  assert.match(html,/class="trasa-row"[^]*?class="stop-name"[^]*?<span class="trasa-transfer-warn" hidden style="color: var\(--danger\); font-weight: 700;">⚠ <\/span>➔/);
+  assert.doesNotMatch(html,/Zagrożona przesiadka/);
+  assert.equal((html.match(/icon-walk/g)||[]).length,2);
+  assert.equal(wrapper.classList.contains('trasa-departed'),false);
+  assert.equal(wrapper.querySelector('.trasa-initial-walk-warn').hidden,false);
+  const transferWarning=wrapper.children[0].querySelector('.trasa-transfer-warn');
+  const row=(tripId,min,extra={})=>({dataset:{tripId,min:String(min),delay:'0',delayInitial:'0',...extra},querySelector:selector=>selector==='.trasa-transfer-warn'?transferWarning:null});
+  const rows=[row('trip-7',600),row('trip-7',620,{nextDep:'620',transferWalk:'0'}),row('next',630)];
+  h.setTimelines([{querySelectorAll:()=>rows,querySelector:()=>null,closest:()=>null}]);
+  for(let i=0;i<15;i++) [...h.intervals.values()][0]();
+  await new Promise(r=>setImmediate(r));
+  assert.equal(transferWarning.hidden,false);
+  assert.equal(wrapper.querySelector('.trasa-initial-walk-warn').hidden,false);
+  const corrected={legs:j.legs.map(l=>l===first?{...l,departureEpoch:now+600,departureMin:610}:l)};
+  h.respond(()=>[corrected]);
+  const results=h.get('route-results-list'); results.scrollTop=0; results.clientHeight=100; results.scrollHeight=500;
+  await results.emit('touchstart',{touches:[{clientY:0,clientX:0}]});
+  await results.emit('touchend',{changedTouches:[{clientY:90,clientX:0}]});
+  assert.equal(results.children[0],wrapper);
+  assert.equal(wrapper.querySelector('.trasa-initial-walk-warn').hidden,true);
+});
+
+test('gray card stays in its slot while new results arrive and fresh LIVE restores its existing node', async () => {
+  const h=await setup(); const now=2000000000; h.setNow(now*1000);
+  await chooseStop(h,'from','Start',['a1']); await chooseStop(h,'to','End',['b1']);
+  const first={legs:[{...leg,scheduledDepartureEpoch:now+1,scheduledArrivalEpoch:now+600,departureEpoch:now+1,arrivalEpoch:now+600,liveObservedEpoch:now}]};
+  h.respond(()=>[first]); await h.get('route-search-btn').click();
+  const results=h.get('route-results-list'), wrapper=results.children[0];
+  const second={legs:[{...first.legs[0],tripId:'later',scheduledDepartureEpoch:now+500,departureEpoch:now+500}]};
+  h.setNow((now+2)*1000); h.respond(()=>[second]);
+  for(let i=0;i<15;i++) [...h.intervals.values()][0]();
+  await new Promise(r=>setImmediate(r));
+  assert.equal(results.children.length,2); assert.equal(results.children[0],wrapper);
+  assert.equal(wrapper.classList.contains('trasa-departed'),true);
+  const corrected={legs:[{...first.legs[0],departureEpoch:now+200,liveObservedEpoch:now+10}]};
+  h.setNow((now+10)*1000); h.respond(()=>[corrected,second]);
+  for(let i=0;i<15;i++) [...h.intervals.values()][0]();
+  await new Promise(r=>setImmediate(r));
+  assert.equal(results.children[0],wrapper); assert.equal(wrapper.classList.contains('trasa-departed'),false);
+  assert.equal(wrapper.classList.contains('trasa-result-exit'),false);
 });

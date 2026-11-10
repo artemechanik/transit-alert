@@ -17,6 +17,9 @@ import java.time.LocalDateTime // <-- Додали цей імпорт
 // Вікно, в якому шукаємо "актуальні зараз" напрямки лінії.
 private const val DIRECTIONS_WINDOW_MINUTES = 90
 
+internal fun routingLiveSnapshot(vehicles: List<VehiclePosition>, now: Long): Map<String, VehiclePosition> =
+    vehicles.filter { it.timestamp > 0 && now - it.timestamp in 0..300 }.associateBy { it.tripId }
+
 fun String.normalizePL(): String {
     return this.lowercase()
         .replace("ą", "a").replace("ć", "c").replace("ę", "e")
@@ -160,7 +163,9 @@ fun Application.formRoutes() {
             // Один знімок на весь запит: tripId -> delayMin.
             // Ділення `/ 60` — так само, як delayMinutes у JourneyLeg і /live-vehicles/delays,
             // щоб граф і UI бачили однакову затримку.
-            val currentDelays = LiveVehiclesCache.all()
+            val liveNow = Instant.now().epochSecond
+            val liveSnapshot = routingLiveSnapshot(LiveVehiclesCache.all(), liveNow)
+            val currentDelays = liveSnapshot.values
                 .mapNotNull { vehicle ->
                     val delayMin = (vehicle.delaySeconds ?: 0) / 60
                     if (delayMin != 0) vehicle.tripId to delayMin else null
@@ -215,7 +220,7 @@ fun Application.formRoutes() {
                             val first = currentLeg.first()
                             val last = currentLeg.last()
 
-                            val liveData = try { LiveVehiclesCache.byTripId(first.tripId) } catch (e: Exception) { null }
+                            val liveData = liveSnapshot[first.tripId]
 
                             legs.add(JourneyLeg(
                                 route = first.route,
@@ -236,7 +241,7 @@ fun Application.formRoutes() {
                     if (currentLeg.isNotEmpty()) {
                         val first = currentLeg.first()
                         val last = currentLeg.last()
-                        val liveData = try { LiveVehiclesCache.byTripId(first.tripId) } catch (e: Exception) { null }
+                        val liveData = liveSnapshot[first.tripId]
 
                         legs.add(JourneyLeg(
                             route = first.route,
@@ -278,7 +283,19 @@ fun Application.formRoutes() {
 
                     if (!isDuplicate) {
                         allJourneys.add(
-                            JourneyResponse(totalMinutes = realTotalMinutes, legs = legs)
+                            JourneyResponse(totalMinutes = realTotalMinutes, legs = legs.map { leg ->
+                                val delay = leg.delayMinutes
+                                val live = liveSnapshot[leg.tripId]
+                                val departure = gtfsInstant(baseSearchDate, leg.departureMin).epochSecond
+                                val arrival = gtfsInstant(baseSearchDate, leg.arrivalMin).epochSecond
+                                leg.copy(
+                                    scheduledDepartureEpoch = departure - delay * 60L,
+                                    scheduledArrivalEpoch = arrival - delay * 60L,
+                                    departureEpoch = departure + ((live?.delaySeconds ?: 0) - delay * 60),
+                                    arrivalEpoch = arrival + ((live?.delaySeconds ?: 0) - delay * 60),
+                                    liveObservedEpoch = live?.timestamp?.takeIf { it > 0 }
+                                )
+                            })
                         )
                     }
 

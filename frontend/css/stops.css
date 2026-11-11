@@ -135,18 +135,3 @@
     color: var(--text-muted) !important;
     border-color: var(--text-muted) !important;
   }
-
-  /* Індикатори для свайпів (Вниз - Історія, Вверх - Майбутнє) */
-  #ptr-indicator,
-  #ptr-indicator-bottom {
-    text-align: center;
-    color: var(--blue);
-    font-size: 13px;
-    font-weight: 600;
-    height: 0;
-    overflow: hidden;
-    transition: height 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }

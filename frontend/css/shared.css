@@ -238,3 +238,41 @@
 .icon-hourglass {
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 22h16v-6l-4-4 4-4V2H4v6l4 4-4 4v6z'/%3E%3C/svg%3E");
 }
+/* Shared loading feedback for Trasa and Przystanek. */
+.trasa-refresh-indicator, #ptr-indicator, #ptr-indicator-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-shrink: 0;
+    height: 0;
+    overflow: hidden;
+    color: var(--blue);
+    font-size: 13px;
+    font-weight: 600;
+    transition: height .2s ease;
+}
+.trasa-refresh-indicator::before, #ptr-indicator::before, #ptr-indicator-bottom::before {
+    content: '';
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: listLoadingSpin .8s linear infinite;
+}
+#route-results-list, #departures-list { overflow-anchor: none; }
+.list-card-pending { opacity: 0; }
+.list-card-enter { animation: listCardEnter 250ms ease-out; }
+@keyframes listCardEnter {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes listLoadingSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    .list-card-pending { opacity: 1; }
+    .list-card-enter { animation: none; }
+    .trasa-refresh-indicator, #ptr-indicator, #ptr-indicator-bottom { transition: none; }
+    .trasa-refresh-indicator::before, #ptr-indicator::before, #ptr-indicator-bottom::before { animation: none; }
+}

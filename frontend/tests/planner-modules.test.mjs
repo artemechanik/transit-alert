@@ -112,6 +112,7 @@ test('grouped stop selection reaches search, card and map with exact stop IDs', 
   results.scrollTop = 0; results.clientHeight = 100; results.scrollHeight = 100;
   h.respond(() => [{ legs: [{ ...leg, tripId: 'later-trip', departureMin: 630, arrivalMin: 650 }] }]);
   await results.emit('touchstart', { touches: [{ clientY: 100, clientX: 0 }] });
+  await results.emit('touchmove', { touches: [{ clientY: 50, clientX: 0 }] });
   await results.emit('touchend', { changedTouches: [{ clientY: 20 }] });
   assert.equal(h.calls.at(-1).url, '/api/route/complex?from=a1,a2&to=b1,b2&limit=8&time=601');
   assert.equal(results.children.length, 2);
@@ -485,6 +486,7 @@ test('Trasa pull refresh preserves wrapper and scroll; error recovers; inactive 
   results.scrollTop=0; results.clientHeight=100; results.scrollHeight=500;
   const pull=async () => {
     await results.emit('touchstart',{touches:[{clientY:0,clientX:0}]});
+    await results.emit('touchmove',{touches:[{clientY:45,clientX:0}]});
     await results.emit('touchend',{changedTouches:[{clientY:90,clientX:0}]});
   };
   const count=h.calls.length;
@@ -516,6 +518,7 @@ test('automatic request is quiet; manual pull joins it; leave aborts and return 
   assert.equal(card.classList.contains('fullscreen-expanded'),true);
   results.scrollTop=0; results.clientHeight=100; results.scrollHeight=500;
   await results.emit('touchstart',{touches:[{clientY:0,clientX:0}]});
+  await results.emit('touchmove',{touches:[{clientY:45,clientX:0}]});
   const pulling=results.emit('touchend',{changedTouches:[{clientY:90,clientX:0}]});
   await flush(); assert.equal(indicator.style.height,'24px');
   assert.equal(h.calls.length,before+1);
@@ -561,6 +564,7 @@ test('only initial walker gets new warning; transfer warning stays in its timeli
   h.respond(()=>[corrected]);
   const results=h.get('route-results-list'); results.scrollTop=0; results.clientHeight=100; results.scrollHeight=500;
   await results.emit('touchstart',{touches:[{clientY:0,clientX:0}]});
+  await results.emit('touchmove',{touches:[{clientY:45,clientX:0}]});
   await results.emit('touchend',{changedTouches:[{clientY:90,clientX:0}]});
   assert.equal(results.children[0],wrapper);
   assert.equal(wrapper.querySelector('.trasa-initial-walk-warn').hidden,true);
@@ -584,4 +588,210 @@ test('gray card stays in its slot while new results arrive and fresh LIVE restor
   await new Promise(r=>setImmediate(r));
   assert.equal(results.children[0],wrapper); assert.equal(wrapper.classList.contains('trasa-departed'),false);
   assert.equal(wrapper.classList.contains('trasa-result-exit'),false);
+});
+
+test('upward bottom swipe loads later journeys; ordinary scrolling and cancelled gestures do not fetch', async () => {
+  const h=await setup();
+  await chooseStop(h,'from','Start',['a1']); await chooseStop(h,'to','End',['b1']);
+  h.respond(()=>[{legs:[leg]}]); await h.get('route-search-btn').click();
+  const results=h.get('route-results-list');
+  results.clientHeight=100; results.scrollHeight=500;
+  const swipe=async (scrollTop, endY, endX=0, cancel=false) => {
+    results.scrollTop=scrollTop;
+    let prevented=false;
+    await results.emit('touchstart',{touches:[{clientY:100,clientX:0}]});
+    await results.emit('touchmove',{touches:[{clientY:endY,clientX:endX}],preventDefault(){prevented=true;}});
+    if (cancel) await results.emit('touchcancel');
+    await results.emit('touchend',{changedTouches:[{clientY:endY,clientX:endX}]});
+    return prevented;
+  };
+  const before=h.calls.length;
+  assert.equal(await swipe(200,20),false); // Scroll upwards in the middle.
+  assert.equal(await swipe(0,20),false); // Scroll from the top towards later content.
+  assert.equal(await swipe(400,180),false); // Scroll back from the bottom.
+  assert.equal(await swipe(400,20,80),false); // Horizontal gesture.
+  await swipe(400,20,0,true);
+  assert.equal(h.calls.length,before);
+  h.respond(()=>[{legs:[{...leg,tripId:'later',departureMin:630}]}]);
+  assert.equal(await swipe(400,20),true);
+  assert.equal(h.calls.length,before+1);
+  assert.match(h.calls.at(-1).url,/&time=601$/);
+  assert.equal(results.children.length,2);
+  assert.equal(results.scrollTop,400);
+  assert.equal(await swipe(0,180),true);
+  assert.equal(h.calls.length,before+2);
+  assert.doesNotMatch(h.calls.at(-1).url,/&time=/);
+});
+
+test('claimed bottom swipe survives indicator resizing the results viewport', async () => {
+  const h = await setup();
+  await chooseStop(h, 'from', 'Start', ['a1']);
+  await chooseStop(h, 'to', 'End', ['b1']);
+  h.respond(() => [{ legs: [leg] }]);
+  await h.get('route-search-btn').click();
+  const results = h.get('route-results-list');
+  Object.assign(results, { scrollTop: 400, clientHeight: 100, scrollHeight: 500 });
+  await results.emit('touchstart', { touches: [{ clientY: 100, clientX: 0 }] });
+  await results.emit('touchmove', { touches: [{ clientY: 80, clientX: 0 }] });
+  const indicator = h.created.find(element => element.className === 'trasa-refresh-indicator trasa-later-indicator');
+  assert.equal(indicator.style.height, '10px');
+  // The indicator takes space from the flex child; it is temporarily no longer at the bottom.
+  results.clientHeight = 80;
+  let prevented = false;
+  await results.emit('touchmove', {
+    touches: [{ clientY: 20, clientX: 0 }], preventDefault() { prevented = true; }
+  });
+  assert.equal(prevented, true);
+  const before = h.calls.length;
+  h.respond(() => [{ legs: [{ ...leg, tripId: 'later', departureMin: 630 }] }]);
+  await results.emit('touchend', { changedTouches: [{ clientY: 20, clientX: 0 }] });
+  assert.equal(h.calls.length, before + 1);
+  assert.match(h.calls.at(-1).url, /&time=601$/);
+  assert.equal(results.children.length, 2);
+  assert.equal(results.scrollTop, 400);
+  assert.equal(indicator.style.height, '0');
+});
+
+for (const leaveWhileQueued of [false, true]) {
+  test(`bottom swipe queues later results behind LIVE; leave=${leaveWhileQueued}`, async () => {
+    const h = await setup();
+    await chooseStop(h, 'from', 'Start', ['a1']);
+    await chooseStop(h, 'to', 'End', ['b1']);
+    const now = Math.floor(Date.now() / 1000);
+    const j = { legs: [{ ...leg, scheduledDepartureEpoch: now + 600,
+      scheduledArrivalEpoch: now + 1200, departureEpoch: now + 600, arrivalEpoch: now + 1200 }] };
+    h.respond(() => [j]);
+    await h.get('route-search-btn').click();
+    const results = h.get('route-results-list'), wrapper = results.children[0];
+    Object.assign(results, { scrollTop: 400, clientHeight: 100, scrollHeight: 500 });
+    const indicator = h.created.find(e => e.className === 'trasa-refresh-indicator trasa-later-indicator');
+    assert.equal(indicator.textContent, 'Ładowanie…');
+    let resolveLive;
+    h.respond(() => new Promise(resolve => { resolveLive = resolve; }));
+    for (let i = 0; i < 15; i++) [...h.intervals.values()][0]();
+    await new Promise(resolve => setImmediate(resolve));
+    const before = h.calls.length;
+    assert.doesNotMatch(h.calls.at(-1).url, /&time=/);
+    const swipe = async () => {
+      await results.emit('touchstart', { touches: [{ clientY: 100, clientX: 0 }] });
+      await results.emit('touchmove', { touches: [{ clientY: 20, clientX: 0 }] });
+      return results.emit('touchend', { changedTouches: [{ clientY: 20, clientX: 0 }] });
+    };
+    const firstSwipe = swipe();
+    await new Promise(resolve => setImmediate(resolve));
+    const secondSwipe = swipe();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.calls.length, before);
+    if (leaveWhileQueued) h.planner.leavePlanner();
+    h.respond(() => [{ legs: [{ ...j.legs[0], tripId: 'later', departureMin: 630,
+      scheduledDepartureEpoch: now + 1800, departureEpoch: now + 1800 }] }]);
+    resolveLive([j]);
+    await Promise.all([firstSwipe, secondSwipe]);
+    assert.equal(h.calls.length, before + (leaveWhileQueued ? 0 : 1));
+    if (!leaveWhileQueued) {
+      assert.match(h.calls.at(-1).url, /&time=601$/);
+      assert.equal(results.children.length, 2);
+      assert.equal(results.children[0], wrapper);
+      assert.equal(results.scrollTop, 400);
+    }
+  });
+}
+
+test('top refresh and bottom pagination have separate indicators and request parameters', async () => {
+  const h = await setup();
+  await chooseStop(h, 'from', 'Start', ['a1']);
+  await chooseStop(h, 'to', 'End', ['b1']);
+  const now = Math.floor(Date.now() / 1000);
+  const j = { legs: [{ ...leg, scheduledDepartureEpoch: now + 600,
+    scheduledArrivalEpoch: now + 1200, departureEpoch: now + 600, arrivalEpoch: now + 1200 }] };
+  h.respond(() => [j]);
+  await h.get('route-search-btn').click();
+  const results = h.get('route-results-list'), wrapper = results.children[0];
+  const top = h.created.find(e => e.className === 'trasa-refresh-indicator');
+  const bottom = h.created.find(e => e.className === 'trasa-refresh-indicator trasa-later-indicator');
+  assert.equal(top.textContent, 'Odświeżanie…');
+  assert.equal(bottom.textContent, 'Ładowanie…');
+  Object.assign(results, { scrollTop: 400, clientHeight: 100, scrollHeight: 500 });
+  let resolve;
+  h.respond(() => new Promise(done => { resolve = done; }));
+  await results.emit('touchstart', { touches: [{ clientY: 100, clientX: 0 }] });
+  let prevented = false;
+  await results.emit('touchmove', { touches: [{ clientY: 99, clientX: 0 }],
+    preventDefault() { prevented = true; } });
+  assert.equal(prevented, true, 'claim the edge gesture before native overscroll starts');
+  await results.emit('touchmove', { touches: [{ clientY: 20, clientX: 0 }] });
+  assert.equal(bottom.style.height, '32px');
+  assert.equal(top.style.height, '0');
+  const later = results.emit('touchend', { changedTouches: [{ clientY: 20, clientX: 0 }] });
+  assert.match(h.calls.at(-1).url, /&time=601$/);
+  assert.equal(bottom.style.height, '24px');
+  resolve([{ legs: [{ ...j.legs[0], tripId: 'later', departureMin: 630,
+    scheduledDepartureEpoch: now + 1800, departureEpoch: now + 1800 }] }]);
+  await later;
+  assert.equal(results.children.length, 2);
+  assert.equal(results.children[0], wrapper);
+  assert.equal(results.scrollTop, 400);
+  assert.equal(bottom.style.height, '0');
+  results.scrollTop = 0;
+  await results.emit('touchstart', { touches: [{ clientY: 0, clientX: 0 }] });
+  await results.emit('touchmove', { touches: [{ clientY: 90, clientX: 0 }] });
+  assert.equal(top.style.height, '32px');
+  assert.equal(bottom.style.height, '0');
+  const refresh = results.emit('touchend', { changedTouches: [{ clientY: 90, clientX: 0 }] });
+  assert.doesNotMatch(h.calls.at(-1).url, /&time=/);
+  assert.equal(top.style.height, '24px');
+  assert.equal(bottom.style.height, '0');
+  resolve([j]);
+  await refresh;
+  assert.equal(results.children.length, 2);
+  assert.equal(results.children[0], wrapper);
+});
+
+test('bottom swipe tolerates initial finger jitter and sideways drift after claiming', async () => {
+  const h = await setup();
+  await chooseStop(h, 'from', 'Park Bronowice', ['park-bronowice03-kn8g8']);
+  await chooseStop(h, 'to', 'Lotnicza', ['lotnicza01-kyogp']);
+  const now = Math.floor(Date.now() / 1000);
+  const j = { legs: [{ ...leg, scheduledDepartureEpoch: now + 600,
+    scheduledArrivalEpoch: now + 1200, departureEpoch: now + 600, arrivalEpoch: now + 1200 }] };
+  h.respond(() => [j]);
+  await h.get('route-search-btn').click();
+  const results = h.get('route-results-list');
+  Object.assign(results, { scrollTop: 400, clientHeight: 100, scrollHeight: 500 });
+  const before = h.calls.length;
+  await results.emit('touchstart', { touches: [{ clientY: 200, clientX: 100 }] });
+  // A tiny initial movement down must not discard an otherwise upward swipe.
+  await results.emit('touchmove', { touches: [{ clientY: 202, clientX: 103 }] });
+  await results.emit('touchmove', { touches: [{ clientY: 175, clientX: 105 }] });
+  // The finger then drifts sideways while continuing mostly upwards.
+  await results.emit('touchmove', { touches: [{ clientY: 110, clientX: 132 }] });
+  h.respond(() => [{ legs: [{ ...j.legs[0], tripId: 'later', departureMin: 630,
+    scheduledDepartureEpoch: now + 1800, departureEpoch: now + 1800 }] }]);
+  await results.emit('touchend', { changedTouches: [{ clientY: 110, clientX: 132 }] });
+  assert.equal(h.calls.length, before + 1);
+  assert.match(h.calls.at(-1).url, /&time=601$/);
+  assert.equal(results.children.length, 2);
+});
+
+test('Trasa second tick updates the existing card without writing scrollTop and cancelling native smooth scroll', async () => {
+  const h = await setup();
+  await chooseStop(h, 'from', 'Start', ['a1']);
+  await chooseStop(h, 'to', 'End', ['b1']);
+  const now = Math.floor(Date.now() / 1000);
+  h.respond(() => [{ legs: [{ ...leg, scheduledDepartureEpoch: now + 600,
+    scheduledArrivalEpoch: now + 1200, departureEpoch: now + 600, arrivalEpoch: now + 1200 }] }]);
+  await h.get('route-search-btn').click();
+  const results = h.get('route-results-list'), wrapper = results.children[0];
+  let scroll = 80, writes = 0;
+  Object.defineProperty(results, 'scrollTop', {
+    get: () => scroll,
+    set: value => { scroll = value; writes++; }, configurable: true
+  });
+  for (let i = 0; i < 3; i++) {
+    // Native smooth scrolling changes position between successive UI updates.
+    scroll += 20;
+    [...h.intervals.values()][0]();
+  }
+  assert.equal(writes, 0);
+  assert.equal(results.children[0], wrapper);
 });

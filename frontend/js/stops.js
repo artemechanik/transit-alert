@@ -1,4 +1,5 @@
 import { apiFetch } from './backend-connection.js';
+import { createListMotion, captureListAnchor, restoreListAnchor } from './list-motion.js';
 // Стан Przystanek і його DOM-обробники мають одного власника.
 export function createStops({
     apiBaseUrl, locationService, getNearbyStops,
@@ -16,6 +17,8 @@ export function createStops({
     let isRefreshing = false;
     let startScrollTop = 0;
     let isAtBottom = false;
+    let listMotion;
+    let accordionTask = null;
     let stopSearchInput, stopSuggestionsBox, stopTitleContainer, stopNameDisplay, departuresList, stopScreenContainer, ptrIndicator, ptrBottomIndicator;
 
     // Список зупинок рейсу від поточної платформи; помилку обробляє викликач.
@@ -23,7 +26,8 @@ export function createStops({
       const res = await apiFetch(`${apiBaseUrl}/trips/${dep.tripId}/upcoming-stops?fromStopId=${encodeURIComponent(currentStopIdForDepartures)}`);
       if (!res.ok) throw new Error('not found');
       const stops = await res.json();
-      if (!panel.classList.contains('open')) return; // панель згорнули, поки йшов запит
+      await listMotion.whenIdle();
+      if (!panel.classList.contains('open') || panel.isConnected === false) return;
 
       const stopsHtml = stops.length
         ? stops.map(s => `<div class="dep-expand-stop${s.isPassed ? ' dep-expand-stop-passed' : ''}"><span>${s.name}</span><span class="dep-expand-eta">${s.eta}</span></div>`).join('')
@@ -37,6 +41,7 @@ export function createStops({
     }
 
     async function toggleDepExpand(card, panel, dep) {
+      listMotion.cancelScroll();
       const isOpen = panel.classList.contains('open');
       // Схлопуємо всі інші відкриті картки
       document.querySelectorAll('.dep-expand.open').forEach(p => { if (p !== panel) { p.classList.remove('open'); p.innerHTML = ''; } });
@@ -53,20 +58,24 @@ export function createStops({
         card.classList.add('open');
         panel.classList.add('open');
       panel.innerHTML = '<div class="dep-expand-loading">Ładowanie trasy...</div>';
+      let release;
+      const pending = new Promise(resolve => { release = resolve; });
+      accordionTask = pending;
 
       try {
         await renderDepExpand(panel, dep);
 
-        // --- НОВА ЛОГІКА ПЛАВНОГО СКРОЛУ ---
-        setTimeout(() => {
-          // 'nearest' означає, що екран підсунеться рівно настільки,
-          // щоб нижня частина панелі з кнопкою стала видимою
-          panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 150); // Чекаємо 150мс, поки відпрацює CSS-анімація розкриття
-        // ----------------------------------
+        // Let the accordion expand before giving its scroll priority over pagination.
+        await new Promise(resolve => setTimeout(resolve, 150));
+        if (panel.isConnected === false || !panel.classList.contains('open')
+            || stopScreenContainer.style.display === 'none') return;
+        listMotion.trackScroll(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
 
       } catch (e) {
         panel.innerHTML = '<div class="dep-expand-loading">Nie udało się załadować trasy</div>';
+      } finally {
+        release();
+        if (accordionTask === pending) accordionTask = null;
       }
     }
 
@@ -216,9 +225,10 @@ export function createStops({
       return d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
     }
 
-    async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset = 0) {
+    async function loadDepartures(stopId, isBackgroundRefresh = false, fetchOffset = 0, pageDirection = null) {
       pendingDepartureRequests++;
-      if (!isBackgroundRefresh && fetchOffset === 0) {
+      if (!isBackgroundRefresh && !pageDirection && fetchOffset === 0) {
+        listMotion.reset();
         departuresList.innerHTML = '<div style="text-align: center; margin-top: 40px; color: var(--text-muted);">Завантаження... <div class="svg-icon icon-hourglass"></div></div>';
       }
 
@@ -227,12 +237,20 @@ export function createStops({
         if (!res.ok) throw new Error('Не вдалося завантажити розклад');
 
         const fetchedDepartures = await res.json();
+        if (isBackgroundRefresh) {
+          // Keep both the current DOM and scroll position until manual movement finishes.
+          while (accordionTask || listMotion.isScrolling()) {
+            if (accordionTask) await accordionTask;
+            await listMotion.whenIdle();
+          }
+        }
+        if (stopId !== currentStopIdForDepartures) return;
 
         // 1. РОЗУМНИЙ МЕНЕДЖМЕНТ СПИСКУ
-        if (fetchOffset === 0 && !isBackgroundRefresh) {
+        if (!pageDirection && fetchOffset === 0 && !isBackgroundRefresh) {
           currentDeparturesData = fetchedDepartures;
         }
-            else if (fetchOffset < 0) {
+            else if (pageDirection === 'history') {
           // Свайп вниз (Історія) -> Додаємо 3 старі рейси
           const currentOldest = currentDeparturesData.length > 0 ? currentDeparturesData[0].minutesLeft : 0;
           const existingKeys = new Set(currentDeparturesData.map(d => `${d.route}-${d.scheduledTime}`));
@@ -245,12 +263,8 @@ export function createStops({
           const itemsToAdd = freshHistory.slice(0, 3).reverse();
           currentDeparturesData = [...itemsToAdd, ...currentDeparturesData];
 
-          // КОВЗНЕ ВІКНО: Видаляємо стільки ж знизу (якщо список не надто малий)
-          if (currentDeparturesData.length > 10) {
-            currentDeparturesData.splice(-itemsToAdd.length);
-          }
         }
-        else if (fetchOffset > 0) {
+        else if (pageDirection === 'later') {
           // Свайп вверх (Майбутнє) -> Додаємо 3 нові рейси
           const currentNewest = currentDeparturesData.length > 0 ? currentDeparturesData[currentDeparturesData.length - 1].minutesLeft : 0;
           const existingKeys = new Set(currentDeparturesData.map(d => `${d.route}-${d.scheduledTime}`));
@@ -263,10 +277,6 @@ export function createStops({
           const itemsToAdd = freshFuture.slice(0, 3);
           currentDeparturesData = [...currentDeparturesData, ...itemsToAdd];
 
-          // КОВЗНЕ ВІКНО: Видаляємо стільки ж зверху
-          if (currentDeparturesData.length > 10) {
-            currentDeparturesData.splice(0, itemsToAdd.length);
-          }
         }
         else if (isBackgroundRefresh) {
           // Якщо ми не дивимося історію/майбутнє — просто чисто оновлюємо список
@@ -290,6 +300,8 @@ export function createStops({
           // ЗАПАМ'ЯТОВУЄМО СКРОЛ ПЕРЕД ОЧИЩЕННЯМ!
           const oldScrollTop = departuresList.scrollTop;
           const oldScrollHeight = departuresList.scrollHeight;
+          const anchor = captureListAnchor(departuresList);
+          const motionItems = [];
 
           // Запам'ятовуємо відкриту панель зупинок, щоб перерендер її не закрив
           const openCard = departuresList.querySelector('.dep-card.open');
@@ -426,15 +438,23 @@ export function createStops({
             wrapper.appendChild(card);
             wrapper.appendChild(expandPanel);
             departuresList.appendChild(wrapper);
+            const key = `${dep.route}-${dep.scheduledTime}`;
+            wrapper.dataset.motionKey = key;
+            motionItems.push({ node: wrapper, key });
           });
 
           // М'ЯКО ВІДНОВЛЮЄМО СКРОЛ!
-          if (fetchOffset < 0) {
+          if (pageDirection === 'history') {
             // Якщо додали картки зверху, зсуваємо скрол вниз на їхню висоту
             departuresList.scrollTop = oldScrollTop + (departuresList.scrollHeight - oldScrollHeight);
           } else {
             // Інакше залишаємо екран рівно там, де він був
             departuresList.scrollTop = oldScrollTop;
+          }
+          restoreListAnchor(departuresList, anchor);
+          const added = listMotion.sync(motionItems, pageDirection !== null);
+          if (pageDirection && !isBackgroundRefresh) {
+            listMotion.revealAdded(added, pageDirection);
           }
         }
 
@@ -467,6 +487,7 @@ export function createStops({
     }
 
     function closeDepartureAccordion() {
+        listMotion?.cancelScroll();
         document.querySelectorAll('.dep-expand.open').forEach(p => {
             p.classList.remove('open');
             p.innerHTML = '';
@@ -484,14 +505,15 @@ export function createStops({
         stopTitleContainer = document.getElementById('stop-title-container');
         stopNameDisplay = document.getElementById('stop-name-display');
         departuresList = document.getElementById('departures-list');
+        listMotion = createListMotion(departuresList);
         stopScreenContainer = document.getElementById('screen-stop');
         ptrIndicator = document.createElement('div');
         ptrIndicator.id = 'ptr-indicator';
-        ptrIndicator.innerHTML = '↻ Odświeżanie...';
+        ptrIndicator.innerHTML = 'Odświeżanie…';
         departuresList.parentNode.insertBefore(ptrIndicator, departuresList);
         ptrBottomIndicator = document.createElement('div');
         ptrBottomIndicator.id = 'ptr-indicator-bottom';
-        ptrBottomIndicator.innerHTML = '↻ Ładowanie...';
+        ptrBottomIndicator.innerHTML = 'Ładowanie…';
         departuresList.parentNode.insertBefore(ptrBottomIndicator, departuresList.nextSibling);
         stopSearchInput.addEventListener('focus', loadNearbyStopsDefault);
         stopSearchInput.addEventListener('input', async (e) => {
@@ -546,11 +568,11 @@ export function createStops({
 
           // 1. Тягнемо ВНИЗ (за історією)
           if (dy > 0 && startScrollTop === 0) {
-            ptrIndicator.style.height = Math.min(dy, 50) + 'px';
+            ptrIndicator.style.height = Math.min(32, dy / 2) + 'px';
           }
           // 2. Тягнемо ВВЕРХ (за майбутнім), будучи на дні
           else if (dy < 0 && isAtBottom) {
-            ptrBottomIndicator.style.height = Math.min(-dy, 50) + 'px';
+            ptrBottomIndicator.style.height = Math.min(32, -dy / 2) + 'px';
           }
         }, { passive: true });
         departuresList.addEventListener('touchend', async (e) => {
@@ -560,8 +582,8 @@ export function createStops({
           // 1. Відпустили ІСТОРІЮ
           if (dy > 60 && startScrollTop === 0 && currentStopIdForDepartures) {
             isRefreshing = true;
-            ptrIndicator.style.height = '40px';
-            ptrIndicator.innerHTML = '↻ Ładowanie historii...';
+            ptrIndicator.style.height = '24px';
+            ptrIndicator.innerHTML = 'Ładowanie historii…';
 
             // РОЗУМНИЙ СТРИБОК У МИНУЛЕ: беремо час найстарішого автобуса на екрані і віднімаємо 30 хв
             if (currentDeparturesData.length > 0) {
@@ -570,17 +592,17 @@ export function createStops({
               topTimeOffset -= 60; // Запасний варіант, якщо екран порожній
             }
 
-            await loadDepartures(currentStopIdForDepartures, false, topTimeOffset);
+            await loadDepartures(currentStopIdForDepartures, false, topTimeOffset, 'history');
 
             ptrIndicator.style.height = '0';
-            setTimeout(() => { ptrIndicator.innerHTML = '↻ Odświeżanie...'; }, 200);
+            setTimeout(() => { ptrIndicator.innerHTML = 'Odświeżanie…'; }, 200);
             isRefreshing = false;
           }
           // 2. Відпустили МАЙБУТНЄ
           else if (dy < -60 && isAtBottom && currentStopIdForDepartures) {
             isRefreshing = true;
-            ptrBottomIndicator.style.height = '40px';
-            ptrBottomIndicator.innerHTML = '↻ Ładowanie przyszłości...';
+            ptrBottomIndicator.style.height = '24px';
+            ptrBottomIndicator.innerHTML = 'Ładowanie…';
 
             // РОЗУМНИЙ СТРИБОК У МАЙБУТНЄ: беремо час найдальшого автобуса і просимо наступні!
             if (currentDeparturesData.length > 0) {
@@ -590,10 +612,10 @@ export function createStops({
               bottomTimeOffset += 60; // Запасний варіант, якщо екран порожній
             }
 
-            await loadDepartures(currentStopIdForDepartures, false, bottomTimeOffset);
+            await loadDepartures(currentStopIdForDepartures, false, bottomTimeOffset, 'later');
 
             ptrBottomIndicator.style.height = '0';
-            setTimeout(() => { ptrBottomIndicator.innerHTML = '↻ Ładowanie...'; }, 200);
+            setTimeout(() => { ptrBottomIndicator.innerHTML = 'Ładowanie…'; }, 200);
             isRefreshing = false;
           }
           // 3. Не дотягнули

@@ -82,7 +82,7 @@ test('polling keeps the red blinking LIVE node and its animation instance', asyn
   const live=createPlannerLive({refreshResults:async()=>{},refreshOpenTrasaPassedStops:async()=>{}});
   live.enterPlannerLive(); await flush();
   const original=badge; assert.ok(original);
-  assert.match(original.style.cssText,/color:#ef4444/);
+  assert.match(original.style.cssText,/color:var\(--danger\)/);
   assert.match(original.style.cssText,/animation:trasaLiveBlink 1.5s infinite/);
   for(let i=0;i<15;i++) interval(); await flush();
   assert.equal(badge,original);

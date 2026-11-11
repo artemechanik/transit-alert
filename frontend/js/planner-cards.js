@@ -29,7 +29,7 @@ export function getLiveStatusBadge(isLive, delayMinutes) {
         return `<div style="display:flex; align-items:center; gap:2px; color: var(--blue);"><div class="svg-icon icon-fast" style="${iconStyle}"></div>-${Math.abs(delayMinutes)}m</div> <span style="opacity:0.4">•</span> `;
     } else {
         // Чітко за розкладом (зелений + іконка ok)
-        return `<div style="display:flex; align-items:center; color: #10b981;"><div class="svg-icon icon-ok" style="${iconStyle}"></div></div> <span style="opacity:0.4">•</span> `;
+        return `<div style="display:flex; align-items:center; color: var(--live-green);"><div class="svg-icon icon-ok" style="${iconStyle}"></div></div> <span style="opacity:0.4">•</span> `;
     }
 }
 
@@ -121,7 +121,7 @@ export function createPlannerCards({
         if (countdown < 60) {
             let numStr = countdown === 0 ? '<1' : countdown;
             let labelStr = countdown === 0 ? 'minuta' : getMinLabel(countdown);
-            let colorStr = countdown <= 30 ? '#10b981' : 'var(--text)';
+            let colorStr = countdown <= 30 ? 'var(--live-green)' : 'var(--text)';
 
             timerHtml = `
         <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
@@ -151,7 +151,7 @@ export function createPlannerCards({
         const toStop = splitStopName(endName);
 
         let timelineHtml = '<div class="trasa-timeline" style="position:relative; margin: 0px 0 2px;">';
-        timelineHtml += '<div style="position:absolute; left: 55px; top: 8px; bottom: 8px; border-left: 2px dotted var(--border); z-index: 1;"></div>';
+        timelineHtml += '<div class="trasa-timeline-connector" style="position:absolute; left: 55px; top: 8px; bottom: 8px; border-left: 2px dotted var(--border); z-index: 1;"></div>';
 
         const rowStyle = 'position:relative; padding:2px 0; display: flex; align-items: center;';
         const timeStyle = 'width: 44px; text-align: center; font-size: 15px; font-weight: 600; color: var(--text); flex-shrink: 0;';
@@ -160,7 +160,7 @@ export function createPlannerCards({
         // 1. ПЕРША ЗУПИНКА
         timelineHtml += `<div class="trasa-row" ${rowAttrs(firstTransitLeg, firstTransitLeg.departureMin)} style="${rowStyle}">
         <div class="time" style="${timeStyle}">${depTime}</div>
-        <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
+        <div class="trasa-stop-dot" style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
         <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">${fromStop.name} ${fromStop.code ? `<span class="stop-code" style="color:var(--text); font-size:15px; font-weight:600;">(${fromStop.code})</span>` : ''}</div>
     </div>`;
 
@@ -168,9 +168,9 @@ export function createPlannerCards({
         for (let i = 0; i < transitLegs.length - 1; i++) {
             const tStop = splitStopName(transitLegs[i].toStopName);
             const nextLeg = transitLegs[i + 1];
-            timelineHtml += `<div class="trasa-row" ${rowAttrs(transitLegs[i], transitLegs[i].arrivalMin)} data-next-dep="${nextLeg.departureMin}" data-transfer-walk="${transferWalkMin(transitLegs[i], nextLeg)}" style="${rowStyle} opacity: 0.8;">
+            timelineHtml += `<div class="trasa-row trasa-transfer-row" ${rowAttrs(transitLegs[i], transitLegs[i].arrivalMin)} data-next-dep="${nextLeg.departureMin}" data-transfer-walk="${transferWalkMin(transitLegs[i], nextLeg)}" style="${rowStyle} opacity: 0.8;">
             <div class="time" style="${timeStyle} font-size: 14px; font-weight: 500; color: var(--text-muted);">${coloredTimeHtml(transitLegs[i].arrivalMin, transitLegs[i].delayMinutes || 0)}</div>
-            <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--border); box-shadow: 0 0 0 3px var(--card);"></div></div>
+            <div class="trasa-stop-dot" style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--border); box-shadow: 0 0 0 3px var(--card);"></div></div>
             <div class="stop-name" style="flex: 1; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;"><span class="trasa-transfer-warn" hidden style="color: var(--danger); font-weight: 700;">⚠ </span>➔ ${tStop.name} ${tStop.code ? `<span class="stop-code" style="font-size: 14px; font-weight: 500; color: var(--text-muted);">(${tStop.code})</span>` : ''}</div>
         </div>`;
         }
@@ -178,12 +178,12 @@ export function createPlannerCards({
         // 3. ОСТАННЯ ЗУПИНКА
         timelineHtml += `<div class="trasa-row" ${rowAttrs(lastTransitLeg, lastTransitLeg.arrivalMin)} style="${rowStyle}">
         <div class="time" style="${timeStyle}">${arrTime}</div>
-        <div style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
+        <div class="trasa-stop-dot" style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
         <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">${toStop.name} ${toStop.code ? `<span class="stop-code" style="color:var(--text); font-size:15px; font-weight:600;">(${toStop.code})</span>` : ''}</div>
     </div>`;
 
         // 4. ТАЙМЕР АБСОЛЮТНИЙ (відцентрований відносно всього таймлайну!)
-        timelineHtml += `<div class="trasa-dep-min" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 5;">${isLive ? '<span class="trasa-live-blink" style="color:#ef4444;font-size:9px;font-weight:900;letter-spacing:.5px;margin-bottom:2px;animation:trasaLiveBlink 1.5s infinite;display:block;text-align:center">LIVE</span>' : ''}<div class="trasa-timer-content">${timerHtml}</div></div>`;
+        timelineHtml += `<div class="trasa-dep-min" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 5;">${isLive ? '<span class="trasa-live-blink" style="color:var(--danger);font-size:9px;font-weight:900;letter-spacing:.5px;margin-bottom:2px;animation:trasaLiveBlink 1.5s infinite;display:block;text-align:center">LIVE</span>' : ''}<div class="trasa-timer-content">${timerHtml}</div></div>`;
 
         timelineHtml += '</div>';
 

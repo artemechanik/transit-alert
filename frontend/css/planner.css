@@ -142,8 +142,11 @@
 
 /* Скрол-зона посередині */
 .trasa-middle-scroll {
-  flex-grow: 1;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y pinch-zoom;
 
   /* Оскільки ми сховали старі елементи, рамки та відступи тут більше не потрібні */
   padding: 0;
@@ -466,9 +469,39 @@
 :is(#route-selected-icon-from, #route-selected-icon-to).planner-icon-landmark { --planner-selected-icon: url("../icons/lucide/landmark.svg"); }
 
 #route-results-list { overscroll-behavior-y: contain; }
+/* Keep the background's scroll position, but prevent wheel/touch chaining
+   while the fixed accordion owns scrolling. Programmatic anchor restore works. */
+#route-results-list:has(.trasa-card.fullscreen-expanded) { overflow-y: hidden !important; }
+.trasa-card.fullscreen-expanded { overflow: hidden; }
 .trasa-wrapper { transition:opacity .25s; }
 .trasa-result-exit { opacity:0; pointer-events:none; }
 .trasa-departed .trasa-compact-header,
 .trasa-departed .trasa-middle-scroll,
 .trasa-departed .trasa-timeline > :not(.trasa-dep-min) { filter:grayscale(1); opacity:.55; }
 .trasa-departed .trasa-timer-content { filter:grayscale(1); opacity:.55; }
+
+.trasa-presentation-switch {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px 0;
+  flex-shrink: 0;
+}
+.trasa-presentation-switch button {
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.trasa-presentation-switch button[aria-pressed="true"] {
+  color: var(--text);
+  border-color: var(--blue);
+  font-weight: 700;
+}
+.trasa-presentation-switch button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}

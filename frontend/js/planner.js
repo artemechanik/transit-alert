@@ -1,5 +1,6 @@
 import { createResultsState } from './planner-results.js';
 import { createListMotion } from './list-motion.js';
+import { createPlannerPresentation } from './planner-presentation.js';
 import { apiFetch } from './backend-connection.js';
 import { createPlannerInputs } from './planner-inputs.js';
 import { createPlannerCards } from './planner-cards.js';
@@ -140,6 +141,10 @@ export function createPlanner({
         searchRouteBtn = document.getElementById('route-search-btn');
         routeResultsBox = document.getElementById('route-results-list');
         listMotion = createListMotion(routeResultsBox);
+        createPlannerPresentation(routeResultsBox, listMotion, {
+            classic: document.getElementById('trasa-presentation-classic'),
+            new: document.getElementById('trasa-presentation-new')
+        });
         indicator = document.createElement('div');
         indicator.textContent = 'Odświeżanie…'; indicator.className = 'trasa-refresh-indicator';
         routeResultsBox.parentNode.insertBefore(indicator, routeResultsBox);
@@ -174,9 +179,19 @@ export function createPlanner({
             }
         }
         routeResultsBox.addEventListener('touchstart', e => {
+            // Touches from the fixed accordion still bubble through the results list.
+            // Leave them to its native scroll container, even at a list boundary.
+            if (e.target.closest('.trasa-card.fullscreen-expanded')) {
+                clearGesture();
+                return;
+            }
             gesture = active && (routeResultsBox.scrollTop <= 0 || routeResultsBox.scrollTop + routeResultsBox.clientHeight >= routeResultsBox.scrollHeight - 2) && e.touches.length === 1 ? { x:e.touches[0].clientX, y:e.touches[0].clientY, top: routeResultsBox.scrollTop <= 0, bottom: routeResultsBox.scrollTop + routeResultsBox.clientHeight >= routeResultsBox.scrollHeight - 2 } : null;
         }, {passive:true});
         routeResultsBox.addEventListener('touchmove', e => {
+            if (e.target.closest('.trasa-card.fullscreen-expanded')) {
+                clearGesture();
+                return;
+            }
             if (!gesture) return;
             const touch = e.touches[0];
             if (e.touches.length !== 1) {

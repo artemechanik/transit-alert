@@ -795,3 +795,55 @@ test('Trasa second tick updates the existing card without writing scrollTop and 
   assert.equal(writes, 0);
   assert.equal(results.children[0], wrapper);
 });
+
+test('presentation switch retains the result DOM and shares the existing request and polling session', async () => {
+  const h = await setup();
+  await chooseStop(h, 'from', 'Park Akademicki', ['a1']);
+  await chooseStop(h, 'to', 'Felin', ['b1']);
+  h.respond(() => [{ legs: [leg] }]);
+  await h.get('route-search-btn').click();
+  const list = h.get('route-results-list');
+  const wrapper = list.children[0], card = wrapper.children[0];
+  const journeyKey = wrapper.dataset.journeyKey;
+  const calls = h.calls.length;
+  const intervals = [...h.intervals.keys()];
+  const html = card.innerHTML;
+  await h.get('trasa-presentation-new').click();
+  assert.equal(list.dataset.presentation, 'new');
+  assert.equal(list.children.length, 1);
+  assert.equal(list.children[0], wrapper);
+  assert.equal(wrapper.dataset.journeyKey, journeyKey);
+  assert.equal(wrapper.children[0], card);
+  assert.equal(card.innerHTML, html, 'the LIVE nodes are shared verbatim');
+  assert.equal(h.calls.length, calls, 'switching performs no network requests');
+  assert.deepEqual([...h.intervals.keys()], intervals, 'switching creates no polling timers');
+  await h.get('trasa-presentation-classic').click();
+  assert.equal(list.dataset.presentation, 'classic');
+  assert.equal(list.children[0], wrapper);
+  assert.equal(h.calls.length, calls);
+  assert.deepEqual([...h.intervals.keys()], intervals);
+});
+
+test('accordion touch scrolling never claims list refresh or pagination in either presentation', async () => {
+  const h = await setup();
+  await chooseStop(h, 'from', 'Start', ['a1']);
+  await chooseStop(h, 'to', 'End', ['b1']);
+  h.respond(() => [{ legs: [leg] }]);
+  await h.get('route-search-btn').click();
+  const results = h.get('route-results-list');
+  results.clientHeight = 100; results.scrollHeight = 500;
+  const nested = { closest: selector => selector === '.trasa-card.fullscreen-expanded' ? {} : null };
+  const calls = h.calls.length;
+  for (const mode of ['classic', 'new']) {
+    await h.get(`trasa-presentation-${mode}`).click();
+    for (const [top, end] of [[0, 180], [400, 20]]) {
+      results.scrollTop = top;
+      await results.emit('touchstart', { target: nested, touches: [{ clientY: 100, clientX: 0 }] });
+      let prevented = false;
+      await results.emit('touchmove', { target: nested, touches: [{ clientY: end, clientX: 0 }], preventDefault() { prevented = true; } });
+      await results.emit('touchend', { target: nested, changedTouches: [{ clientY: end, clientX: 0 }] });
+      assert.equal(prevented, false, 'native scrolling inside the accordion must remain available');
+      assert.equal(h.calls.length, calls, 'accordion scroll must not trigger list requests');
+    }
+  }
+});

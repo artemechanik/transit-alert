@@ -128,14 +128,14 @@ export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops, ref
                 }
 
                 const liveBadgeHtml = isLive
-                    ? `<span style="color: #ef4444; font-size: 9px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 2px; animation: trasaLiveBlink 1.5s infinite;">LIVE</span>`
+                    ? `<span style="color: var(--danger); font-size: 9px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 2px; animation: trasaLiveBlink 1.5s infinite;">LIVE</span>`
                     : '';
 
                 let timerHtml = '';
                 if (countdown < 60) {
                     let numStr = countdown === 0 ? '<1' : countdown;
                     let labelStr = countdown === 0 ? 'minuta' : getMinLabel(countdown);
-                    let colorStr = countdown <= 30 ? '#10b981' : 'var(--text)';
+                    let colorStr = countdown <= 30 ? 'var(--live-green)' : 'var(--text)';
 
                     timerHtml = `
                 <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
@@ -171,7 +171,7 @@ export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops, ref
                 if (isLive && !badge) {
                     badge = document.createElement('span');
                     badge.className = 'trasa-live-blink';
-                    badge.style.cssText = 'color:#ef4444;font-size:9px;font-weight:900;letter-spacing:.5px;margin-bottom:2px;animation:trasaLiveBlink 1.5s infinite;display:block;text-align:center';
+                    badge.style.cssText = 'color:var(--danger);font-size:9px;font-weight:900;letter-spacing:.5px;margin-bottom:2px;animation:trasaLiveBlink 1.5s infinite;display:block;text-align:center';
                     badge.textContent = 'LIVE';
                     timerEl.prepend(badge);
                 }

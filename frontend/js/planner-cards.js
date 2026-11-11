@@ -1,3 +1,5 @@
+import { setupJourneyTimeline } from './planner-timeline.js';
+import { expandedMarkup, bindExpandedPanels, updateExpandedLive, preserveInlineAnchor } from './planner-expanded.js';
 import { initialWalkRisk } from './planner-results.js';
 import { apiFetch } from './backend-connection.js';
 // Картки поїздок, розгортання зупинок і відкриття мінікарти.
@@ -34,7 +36,7 @@ export function getLiveStatusBadge(isLive, delayMinutes) {
 }
 
 export function createPlannerCards({
-    apiBaseUrl, showVehicleOnMap, addMinutesToTime, onAccordionOpen, onBack, getRoutePoints
+    apiBaseUrl, showVehicleOnMap, addMinutesToTime, onAccordionOpen, onBack, getRoutePoints, inlineMapServices
 }) {
     function splitStopName(fullName) {
         if (!fullName) return { name: '', code: '' };
@@ -241,6 +243,7 @@ export function createPlannerCards({
 
     function updateJourneyCard(wrapper, journey) {
         wrapper.journey = journey;
+        updateExpandedLive(wrapper, journey, addMinutesToTime);
         const walkWarning = wrapper.querySelector('.trasa-initial-walk-warn');
         if (walkWarning) walkWarning.hidden = !initialWalkRisk(journey, Date.now() / 1000);
         const transit = journey.legs.filter(l => l.route !== 'Пішки' && l.route);
@@ -258,7 +261,13 @@ export function createPlannerCards({
         const containers = document.querySelectorAll('.trasa-card.fullscreen-expanded .trasa-leg-stops[data-trip-id]');
         await Promise.all([...containers].map(async container => {
             const { tripId, fromStopId, toStopId } = container.dataset;
-            const stops = await fetchLegStops({ tripId, fromStopId, toStopId });
+            const panel = container.closest('.trasa-middle-scroll');
+            const token = panel?.lubusLoadToken;
+            const includeLive = container.closest('#route-results-list')?.dataset.presentation === 'new';
+            const stops = await fetchLegStops({ tripId, fromStopId, toStopId }, includeLive);
+            if (container.isConnected === false || panel?.lubusLoadToken !== token) return;
+            const siblings = [...(panel?.querySelectorAll('.trasa-leg-stops') || [])];
+            panel?.lubusTimeline?.update(siblings.indexOf(container), stops);
             const rows = container.querySelectorAll('.trasa-leg-stop');
             // Рядки рендерились із того самого запиту, тож порядок збігається; інакше — не чіпаємо
             if (stops.length !== rows.length) return;
@@ -266,18 +275,36 @@ export function createPlannerCards({
         }));
     }
 
-    async function fetchLegStops(leg) {
+    async function fetchLegStops(leg, includeLive = false) {
         if (!leg.tripId || leg.tripId === 'WALK' || !leg.fromStopId) return [];
         try {
-            const res = await apiFetch(`${apiBaseUrl}/trips/${leg.tripId}/upcoming-stops?fromStopId=${encodeURIComponent(leg.fromStopId)}`);
+            const res = await apiFetch(`${apiBaseUrl}/trips/${leg.tripId}/upcoming-stops?fromStopId=${encodeURIComponent(leg.fromStopId)}${includeLive ? '&includeLive=true&includePrevious=true' : ''}`);
             if (!res.ok) return [];
-            const stops = await res.json();
+            const response = await res.json();
+            const stops = Array.isArray(response) ? response : response.stops;
+            if (!Array.isArray(stops)) return [];
+            const live = !Array.isArray(response) ? response.live : null;
+            const boardingSequence = response.boardingStopSequence
+                ?? stops.find(s => s.stopId === leg.fromStopId)?.stopSequence;
+            const fromIndex = includeLive ? stops.findIndex(s => s.stopId === leg.fromStopId
+                && s.stopSequence === boardingSequence) : 0;
+            if (includeLive && fromIndex < 0) return [];
+            const journeyStops = includeLive ? stops.slice(fromIndex) : stops;
+            // Never guess which occurrence is the destination after boarding on a loop.
+            if (includeLive && journeyStops.filter(s => s.stopId === leg.toStopId).length !== 1) return [];
             // Матчимо по toStopId (реальний ID зупинки висадки), а не по назві —
             // назви можуть повторюватись раніше в маршруті й обрізати список зарано.
             const cutIdx = leg.toStopId
-                ? stops.findIndex(s => s.stopId === leg.toStopId)
+                ? journeyStops.findIndex(s => s.stopId === leg.toStopId)
                 : -1;
-            return cutIdx >= 0 ? stops.slice(0, cutIdx + 1) : stops.slice(0, 8);
+            const selected = cutIdx >= 0 ? journeyStops.slice(0, cutIdx + 1) : journeyStops.slice(0, 8);
+            selected.live = live;
+            selected.boardingSequence = boardingSequence;
+            if (includeLive) {
+                selected.timelineStops = stops.slice(0, fromIndex + cutIdx + 1);
+                selected.tripStops = stops; // LIVE may know the next stop beyond the chosen alighting.
+            }
+            return selected;
         } catch (e) {
             return [];
         }
@@ -286,12 +313,13 @@ export function createPlannerCards({
     async function toggleTrasaExpand(card, legs, transitLegs) {
         const isOpen = card.classList.contains('fullscreen-expanded');
         const scrollPanel = card.querySelector('.trasa-middle-scroll');
+        const restoreAnchor = preserveInlineAnchor(card);
 
         document.querySelectorAll('.trasa-card.fullscreen-expanded').forEach(c => {
             if (c !== card) {
                 c.classList.remove('fullscreen-expanded');
                 const p = c.querySelector('.trasa-middle-scroll');
-                if (p) { p.innerHTML = ''; p.style.display = 'none'; }
+                if (p) { p.lubusTimeline?.destroy(); p.lubusLoadToken = null; p.innerHTML = ''; p.style.display = 'none'; }
             }
         });
 
@@ -307,8 +335,14 @@ export function createPlannerCards({
             card.classList.add('fullscreen-expanded');
             scrollPanel.style.display = 'block';
             scrollPanel.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--text-muted);">Ładowanie trasy...</div>';
+        restoreAnchor();
+        const loadToken = {};
+        scrollPanel.lubusLoadToken = loadToken;
         try {
-            const legStopsResults = await Promise.all(transitLegs.map(fetchLegStops));
+            const includeLive = card.closest('#route-results-list')?.dataset.presentation === 'new';
+            const legStopsResults = await Promise.all(transitLegs.map(leg => fetchLegStops(leg, includeLive)));
+            // A closed/replaced accordion must not be populated by a late response.
+            if (!card.classList.contains('fullscreen-expanded') || scrollPanel.lubusLoadToken !== loadToken) return;
 
             let html = '';
             const mapActions = [];
@@ -415,7 +449,7 @@ export function createPlannerCards({
                             const lineBottom = !isLast ? '-50%' : '0';
 
                             return `
-                        <div class="trasa-leg-stop${s.isPassed ? ' dep-expand-stop-passed' : ''}" style="position: relative; padding: 10px 14px 10px 42px; display: flex; justify-content: space-between; align-items: center;">
+                        <div class="trasa-leg-stop${s.isPassed ? ' dep-expand-stop-passed' : ''}" data-journey-event="${s.stopId === leg.fromStopId ? 'Wsiądź' : s.stopId === leg.toStopId ? 'Wysiądź' : ''}" style="position: relative; padding: 10px 14px 10px 42px; display: flex; justify-content: space-between; align-items: center;">
                             <div style="position: absolute; left: ${dotLeft}; top: 50%; transform: translateY(-50%); width: ${dotSize}; height: ${dotSize}; border-radius: 50%; background: ${dotColor}; z-index: 2;"></div>
 
                             ${drawLineDown ? `<div style="position: absolute; left: 26px; top: 50%; bottom: ${lineBottom}; width: 2px; background: var(--border); z-index: 1;"></div>` : ''}
@@ -424,14 +458,20 @@ export function createPlannerCards({
                                 ${stopName}
                                 <span class="stop-code" style="color:${textColor}; font-size:13px; font-weight: 500;">${platformCode}</span>
                             </span>
-                            <span style="font-weight: ${fontWeight}; color: ${textColor}; font-size: 15px;">${realEta}</span>
+                            <span class="trasa-stop-time" style="font-weight: ${fontWeight}; color: ${textColor}; font-size: 15px;">${realEta}</span><span class="lubus-stop-time" data-scheduled-eta="${s.eta}">${realEta}</span>
                         </div>`;
                         }).join('') : '<div style="padding: 10px; text-align: center; color: var(--text-muted);">Brak danych</div>';
 
                         html += `<div class="trasa-leg-stops" data-trip-id="${leg.tripId || ''}" data-from-stop-id="${leg.fromStopId || ''}" data-to-stop-id="${leg.toStopId || ''}" style="padding-bottom: 0;">${stopsHtml}</div>`;
                         transitIdx++;
                     });
-            scrollPanel.innerHTML = html || '<div style="text-align:center; padding: 20px;">Błąd ładowania</div>';
+            const restoreLoadedAnchor = preserveInlineAnchor(card);
+            scrollPanel.innerHTML = expandedMarkup(html || '<p>Brak danych</p>', { legs });
+            bindExpandedPanels(scrollPanel, mapActions);
+            setupJourneyTimeline(scrollPanel, transitLegs, legStopsResults, mapActions, addMinutesToTime, inlineMapServices);
+            restoreLoadedAnchor();
+            const wrapper = card.parentNode;
+            if (wrapper?.journey) updateExpandedLive(wrapper, wrapper.journey, addMinutesToTime);
             scrollPanel.querySelectorAll('.dep-expand-map-btn').forEach((button, index) => {
                 button.addEventListener('click', mapActions[index]);
             });
@@ -444,20 +484,37 @@ export function createPlannerCards({
             };
 
         } catch (e) {
+            if (scrollPanel.lubusLoadToken !== loadToken || !card.classList.contains('fullscreen-expanded')) return;
             scrollPanel.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--danger);">Błąd serwera</div>';
         }
     }
 
     function closePlannerAccordion() {
-        document.querySelectorAll('.trasa-card.fullscreen-expanded').forEach(card => {
+        const openCards = [...document.querySelectorAll('.trasa-card.fullscreen-expanded')];
+        const restoreAnchor = openCards.length ? preserveInlineAnchor(openCards[0]) : () => {};
+        openCards.forEach(card => {
             card.classList.remove('fullscreen-expanded');
             const p = card.querySelector('.trasa-middle-scroll');
             if (p) {
+                p.lubusTimeline?.destroy();
+                p.lubusTimeline = null;
+                p.lubusLoadToken = null;
                 p.innerHTML = '';
                 p.style.display = 'none';
             }
         });
+        restoreAnchor();
     }
 
-    return { buildJourneyCard, updateJourneyCard, refreshOpenTrasaPassedStops, closePlannerAccordion };
+    function disposeJourneyCard(wrapper) {
+        wrapper.querySelector('.trasa-middle-scroll')?.lubusTimeline?.destroy();
+    }
+    function suspendPlannerMaps() {
+        document.querySelectorAll('.trasa-card.fullscreen-expanded .trasa-middle-scroll').forEach(panel => panel.lubusTimeline?.suspend());
+    }
+    function resumePlannerMaps() {
+        document.querySelectorAll('.trasa-card.fullscreen-expanded .trasa-middle-scroll').forEach(panel => panel.lubusTimeline?.resume());
+    }
+    return { buildJourneyCard, updateJourneyCard, refreshOpenTrasaPassedStops, closePlannerAccordion,
+        disposeJourneyCard, suspendPlannerMaps, resumePlannerMaps };
 }

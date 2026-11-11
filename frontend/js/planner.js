@@ -1,5 +1,5 @@
 import { createResultsState } from './planner-results.js';
-import { createListMotion } from './list-motion.js';
+import { createListMotion, captureListAnchor, restoreListAnchor } from './list-motion.js';
 import { createPlannerPresentation } from './planner-presentation.js';
 import { apiFetch } from './backend-connection.js';
 import { createPlannerInputs } from './planner-inputs.js';
@@ -8,7 +8,7 @@ import { createPlannerLive } from './planner-live.js';
 
 // Координація екрана Trasa: пошук, результати та завантаження пізніших поїздок.
 export function createPlanner({
-    apiBaseUrl, getMapTilerKey, locationService, getNearbyStops,
+    apiBaseUrl, getMapTilerKey, locationService, getNearbyStops, inlineMapServices,
     showVehicleOnMap, showToast, addMinutesToTime, onAccordionOpen, onBack
 }) {
     let initialized = false, active = false, query = null, state = createResultsState();
@@ -20,8 +20,8 @@ export function createPlanner({
         getRoutePoints, saveRecentRoute, renderRecentRoutes } = createPlannerInputs({
         apiBaseUrl, getMapTilerKey, locationService, getNearbyStops, showToast
     });
-    const { buildJourneyCard, updateJourneyCard, refreshOpenTrasaPassedStops, closePlannerAccordion } = createPlannerCards({
-        apiBaseUrl, showVehicleOnMap, addMinutesToTime, onAccordionOpen, onBack, getRoutePoints
+    const { buildJourneyCard, updateJourneyCard, refreshOpenTrasaPassedStops, closePlannerAccordion, disposeJourneyCard, suspendPlannerMaps, resumePlannerMaps } = createPlannerCards({
+        apiBaseUrl, showVehicleOnMap, addMinutesToTime, onAccordionOpen, onBack, getRoutePoints, inlineMapServices
     });
     const { enterPlannerLive, leavePlanner, updateTrasaCountdowns, startPlannerPolling } = createPlannerLive({
         apiBaseUrl, refreshOpenTrasaPassedStops, refreshResults, tickResults: () => { if (active && query) renderResults([]); }
@@ -72,6 +72,8 @@ export function createPlanner({
     }
     function renderResults(journeys, animateNew = false) {
         const scroll = routeResultsBox.scrollTop;
+        const anchor = routeResultsBox.dataset.presentation === 'new' && !listMotion.isScrolling()
+            ? captureListAnchor(routeResultsBox) : null;
         const entries = state.update(journeys, Date.now() / 1000);
         if (!entries.size) {
             if (!routeResultsBox.dataset.empty) {
@@ -94,7 +96,13 @@ export function createPlanner({
                 entry.removing = true;
                 entry.node.classList.add('trasa-result-exit');
                 const node = entry.node;
-                setTimeout(() => node.remove(), 250);
+                setTimeout(() => {
+                    const anchor = routeResultsBox.dataset.presentation === 'new' && !listMotion.isScrolling()
+                        ? captureListAnchor(routeResultsBox) : null;
+                    disposeJourneyCard(node);
+                    node.remove();
+                    if (anchor) restoreListAnchor(routeResultsBox, anchor);
+                }, 250);
 
             }
         }
@@ -111,8 +119,9 @@ export function createPlanner({
         const desired = ordered.map(([,e]) => e.node).filter(n => n && !pinned.some(p => p.node === n));
         for (const {node,index} of pinned) desired.splice(Math.min(index, desired.length), 0, node);
         desired.forEach((node,index) => { const current = routeResultsBox.children[index]; if (current !== node) routeResultsBox.insertBefore(node, current || null); });
-        if (!listMotion.isScrolling() && routeResultsBox.scrollTop !== scroll) {
-            routeResultsBox.scrollTop = scroll;
+        if (!listMotion.isScrolling()) {
+            const restored = anchor && restoreListAnchor(routeResultsBox, anchor);
+            if (!restored && routeResultsBox.scrollTop !== scroll) routeResultsBox.scrollTop = scroll;
         }
         const added = listMotion.sync(ordered.filter(([, entry]) => entry.node)
             .map(([key, entry]) => ({ key, node: entry.node })), animateNew);
@@ -120,12 +129,14 @@ export function createPlanner({
     }
     function enterPlanner() {
         active = true;
+        resumePlannerMaps();
         enterPlannerLive();
         updateRouteButtonState(true); updateRouteButtonState(false); renderRecentRoutes();
     }
     function leave() {
         active = false; generation++; controller?.abort(); loading = null; manualRefresh = false;
         leavePlanner();
+        suspendPlannerMaps();
         listMotion?.cancelScroll();
         if (indicator) indicator.style.height = '0';
         if (bottomIndicator) bottomIndicator.style.height = '0';
@@ -164,6 +175,7 @@ export function createPlanner({
             generation++; controller?.abort(); loading = null; manualRefresh = false; indicator.style.height = '0';
             bottomIndicator.style.height = '0';
             query = `${params(from,'from')}&${params(to,'to')}`;
+            [...routeResultsBox.children].forEach(disposeJourneyCard);
             state = createResultsState(); routeResultsBox.innerHTML = '';
             listMotion.reset();
             saveRecentRoute(from,to);
@@ -179,16 +191,18 @@ export function createPlanner({
             }
         }
         routeResultsBox.addEventListener('touchstart', e => {
-            // Touches from the fixed accordion still bubble through the results list.
-            // Leave them to its native scroll container, even at a list boundary.
-            if (e.target.closest('.trasa-card.fullscreen-expanded')) {
+            // Nested panel gestures belong to its native scroll container.
+            // The inline summary still permits ordinary list scrolling and swipes.
+            if (e.target.closest('.trasa-card.fullscreen-expanded')
+                && (routeResultsBox.dataset.presentation !== 'new' || e.target.closest('.trasa-middle-scroll'))) {
                 clearGesture();
                 return;
             }
             gesture = active && (routeResultsBox.scrollTop <= 0 || routeResultsBox.scrollTop + routeResultsBox.clientHeight >= routeResultsBox.scrollHeight - 2) && e.touches.length === 1 ? { x:e.touches[0].clientX, y:e.touches[0].clientY, top: routeResultsBox.scrollTop <= 0, bottom: routeResultsBox.scrollTop + routeResultsBox.clientHeight >= routeResultsBox.scrollHeight - 2 } : null;
         }, {passive:true});
         routeResultsBox.addEventListener('touchmove', e => {
-            if (e.target.closest('.trasa-card.fullscreen-expanded')) {
+            if (e.target.closest('.trasa-card.fullscreen-expanded')
+                && (routeResultsBox.dataset.presentation !== 'new' || e.target.closest('.trasa-middle-scroll'))) {
                 clearGesture();
                 return;
             }

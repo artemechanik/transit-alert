@@ -109,7 +109,7 @@
   100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-.trasa-card.fullscreen-expanded {
+#route-results-list:not([data-presentation="new"]) .trasa-card.fullscreen-expanded {
   position: fixed;
   /* Враховуємо "чубки" смартфонів та нижнє меню */
   top: calc(15px + var(--safe-top));
@@ -134,9 +134,9 @@
 }
 
 /* ВАЖЛИВО: ПРИХОВУЄМО ДУБЛІКАТИ при розгортанні */
-.trasa-card.fullscreen-expanded .trasa-legend,
-.trasa-card.fullscreen-expanded .trasa-timeline,
-.trasa-card.fullscreen-expanded .trasa-walk-note {
+#route-results-list:not([data-presentation="new"]) .trasa-card.fullscreen-expanded .trasa-legend,
+#route-results-list:not([data-presentation="new"]) .trasa-card.fullscreen-expanded .trasa-timeline,
+#route-results-list:not([data-presentation="new"]) .trasa-card.fullscreen-expanded .trasa-walk-note {
   display: none !important;
 }
 
@@ -196,7 +196,7 @@
 }
 
 /* Показуємо хрестик тільки в розгорнутому стані */
-.trasa-card.fullscreen-expanded .close-trasa-btn {
+#route-results-list:not([data-presentation="new"]) .trasa-card.fullscreen-expanded .close-trasa-btn {
   display: flex;
   /* НОВЕ: хрестик теж плавно з'являється */
   animation: fadeIn 0.4s ease forwards;
@@ -471,7 +471,7 @@
 #route-results-list { overscroll-behavior-y: contain; }
 /* Keep the background's scroll position, but prevent wheel/touch chaining
    while the fixed accordion owns scrolling. Programmatic anchor restore works. */
-#route-results-list:has(.trasa-card.fullscreen-expanded) { overflow-y: hidden !important; }
+#route-results-list:not([data-presentation="new"]):has(.trasa-card.fullscreen-expanded) { overflow-y: hidden !important; }
 .trasa-card.fullscreen-expanded { overflow: hidden; }
 .trasa-wrapper { transition:opacity .25s; }
 .trasa-result-exit { opacity:0; pointer-events:none; }
@@ -505,3 +505,125 @@
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
+
+/* One itinerary DOM serves both modes. Classic retains its original scroll/layout. */
+.lubus-tabs, .lubus-live, .lubus-map { display: none; }
+.lubus-journey { display: contents; }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-middle-scroll {
+  display: flex !important;
+  flex-direction: column;
+  flex: none;
+  overflow: hidden;
+}
+#route-results-list[data-presentation="new"] .fullscreen-expanded .lubus-tabs {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding: 8px 0 0;
+}
+.lubus-tabs button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px 10px 0 0;
+  background: var(--card);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.lubus-tabs button[aria-pressed="true"] { color: var(--blue); background: var(--bg); }
+.lubus-tabs button:focus-visible, .lubus-map-action:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .lubus-panel {
+  display: none;
+  height: 280px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y pinch-zoom;
+  background: var(--bg);
+  border-radius: 0 0 12px 12px;
+}
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-middle-scroll[data-lubus-tab="live"] .lubus-live,
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-middle-scroll[data-lubus-tab="journey"] .lubus-journey,
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-middle-scroll[data-lubus-tab="map"] .lubus-map { display: block; }
+.lubus-leg-summary, .lubus-map-leg { padding: 12px; border-bottom: 1px solid var(--border); }
+.lubus-leg-summary header { display: flex; align-items: center; gap: 12px; }
+.lubus-status { font-size: 12px; font-weight: 700; }
+.lubus-status-schedule, .lubus-note { color: var(--text-muted); }
+.lubus-status-late { color: var(--danger); }
+.lubus-status-early { color: var(--blue); }
+.lubus-status-on-time { color: var(--live-green); }
+.lubus-boarding { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 0; }
+.lubus-boarding dt { font-size: 12px; color: var(--text-muted); }
+.lubus-boarding dd { margin: 3px 0; font-weight: 700; overflow-wrap: anywhere; }
+.lubus-note { margin: 0; padding: 12px; font-size: 12px; line-height: 1.5; }
+.lubus-map-leg h3 { margin: 0; font-size: 16px; }
+.lubus-map-leg p { font-size: 13px; overflow-wrap: anywhere; }
+.lubus-map-action { font: inherit; font-size: 13px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--blue); background: var(--card); cursor: pointer; }
+.lubus-stop-time { display: none; }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-stop-time { display: none; }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .lubus-stop-time { display: inline; font-size: 12px; font-variant-numeric: tabular-nums; }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-leg-stop { padding: 8px 12px 8px 36px !important; gap: 10px; }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-leg-stop > span:first-of-type { font-size: 13px !important; }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-leg-stop[data-journey-event]:not([data-journey-event=""]) > span:first-of-type::after { content: var(--lubus-event); }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-leg-stop[data-journey-event="Wsiądź"] { --lubus-event: 'Wsiądź'; }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-leg-stop[data-journey-event="Wysiądź"] { --lubus-event: 'Wysiądź'; }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-leg-stop[data-journey-event]:not([data-journey-event=""]) > span:first-of-type::after { display: block; color: var(--blue); font-size: 11px; }
+
+/* fullscreen-expanded is the shared open-state marker. Only Classic is modal;
+   Nowa remains in normal list flow with its original summary above the tabs. */
+#route-results-list[data-presentation="new"] .trasa-wrapper { flex-shrink: 0; }
+#route-results-list[data-presentation="new"] .trasa-card.fullscreen-expanded {
+  display: flex;
+  flex-direction: column;
+}
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-details { order: 1; }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-middle-scroll { order: 2; }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .close-trasa-btn { display: none; }
+
+.lubus-classic-itinerary { display: contents; }
+.lubus-timeline { display: none; }
+#route-results-list[data-presentation="new"] .lubus-classic-itinerary { display: none; }
+#route-results-list[data-presentation="new"] .lubus-timeline { display: block; padding: 8px 10px; }
+.lubus-timeline-leg { margin-bottom: 12px; }
+.lubus-timeline-leg > header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 6px 0; background: var(--bg); }
+.lubus-timeline-leg > header > span { font-size: 11px; color: var(--text-muted); }
+.lubus-timeline button { font: inherit; font-size: 12px; color: var(--blue); background: var(--card); border: 1px solid var(--border); border-radius: 7px; padding: 6px; cursor: pointer; }
+.lubus-timeline button[aria-pressed="true"] { border-color: var(--blue); font-weight: 700; }
+.lubus-timeline button:focus-visible { outline: 2px solid var(--blue); }
+.lubus-timeline-stops { list-style: none; padding: 0; margin: 0 0 0 10px; border-left: 2px solid var(--border); }
+.lubus-timeline-stop { position: relative; display: flex; justify-content: space-between; gap: 8px; min-height: 37px; padding: 7px 0 7px 14px; font-size: 13px; color: var(--text-muted); }
+.lubus-timeline-stop::before { content: ''; position: absolute; left: -5px; top: 16px; width: 8px; height: 8px; background: var(--border); border-radius: 50%; }
+.lubus-timeline-stop.key-stop { color: var(--text); font-weight: 700; }
+.lubus-timeline-stop.key-stop::before { background: var(--blue); }
+.lubus-timeline-stop.passed { opacity: .5; }
+.lubus-timeline-stop small { display: block; font-size: 11px; font-weight: 400; margin-top: 2px; }
+.lubus-timeline-stop time { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lubus-bus { display: flex; align-items: center; gap: 6px; color: var(--blue); font-size: 12px; margin-bottom: 4px; }
+.lubus-bus button { margin-left: auto; }
+.lubus-vehicle-row { padding: 7px 0 3px 14px; }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-middle-scroll[data-lubus-tab="map"] .lubus-map { display: flex; flex-direction: column; overflow: hidden; }
+.lubus-map-toolbar { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px; flex: 0 0 auto; }
+.lubus-map-toolbar button { font: inherit; font-size: 12px; padding: 6px 8px; color: var(--blue); border: 1px solid var(--border); border-radius: 6px; background: var(--card); cursor: pointer; }
+.lubus-map-toolbar button[aria-pressed="true"] { border-color: var(--blue); font-weight: 700; }
+.lubus-map-toolbar .lubus-map-action { margin-left: auto; }
+.lubus-map-viewport { flex: 1 1 0; min-height: 0; position: relative; }
+.lubus-map-canvas { width: 100%; height: 100%; }
+.lubus-map-neutral { position: absolute; top: 6px; left: 6px; right: 6px; margin: 0; padding: 8px; border-radius: 7px; background: var(--card); color: var(--text-muted); font-size: 12px; pointer-events: none; }
+.lubus-inline-vehicle { position: absolute; padding: 4px 6px; color: var(--text); background: var(--card); border: 2px solid var(--blue); border-radius: 8px; font-size: 12px; font-weight: 800; }
+
+.lubus-map-canvas { touch-action: none; }
+/* Passenger state belongs only to the expanded Nowa LIVE panel. */
+.lubus-live .lubus-passenger-state { margin: 12px 0 8px; padding: 8px 10px; border-left: 3px solid currentColor; border-radius: 0 7px 7px 0; background: var(--card); }
+.lubus-live .lubus-passenger-state strong { font-size: 15px; }
+.lubus-live .lubus-passenger-state p { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+.lubus-live .lubus-passenger-state[data-tone="neutral"] { color: var(--text-muted); }
+.lubus-live .lubus-passenger-state[data-tone="info"] { color: var(--blue); }
+.lubus-live .lubus-passenger-state[data-tone="boarding"] { color: var(--live-green); }
+.lubus-live-next { margin: 8px 0 0; font-size: 12px; color: var(--text-muted); }
+.lubus-live-next strong { display: block; margin-top: 2px; color: var(--text); font-size: 15px; }
+.lubus-live-segments { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 12px 0; }
+.lubus-live-segments button { font: inherit; font-size: 12px; padding: 6px 8px; background: var(--card); color: var(--text-muted); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; }
+.lubus-live-segments button[aria-pressed="true"] { color: var(--blue); border-color: var(--blue); font-weight: 700; }
+.lubus-live-segments button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }

@@ -832,7 +832,7 @@ test('accordion touch scrolling never claims list refresh or pagination in eithe
   await h.get('route-search-btn').click();
   const results = h.get('route-results-list');
   results.clientHeight = 100; results.scrollHeight = 500;
-  const nested = { closest: selector => selector === '.trasa-card.fullscreen-expanded' ? {} : null };
+  const nested = { closest: selector => ['.trasa-card.fullscreen-expanded', '.trasa-middle-scroll'].includes(selector) ? {} : null };
   const calls = h.calls.length;
   for (const mode of ['classic', 'new']) {
     await h.get(`trasa-presentation-${mode}`).click();
@@ -846,4 +846,75 @@ test('accordion touch scrolling never claims list refresh or pagination in eithe
       assert.equal(h.calls.length, calls, 'accordion scroll must not trigger list requests');
     }
   }
+});
+
+test('Nowa summary leaves list swipes available while its expanded tabs own nested scrolling', async () => {
+  const h = await setup();
+  await chooseStop(h, 'from', 'Start', ['a1']);
+  await chooseStop(h, 'to', 'End', ['b1']);
+  h.respond(() => [{ legs: [leg] }]);
+  await h.get('route-search-btn').click();
+  await h.get('trasa-presentation-new').click();
+  const root = h.get('route-results-list');
+  root.scrollTop = 400; root.clientHeight = 100; root.scrollHeight = 500;
+  const summary = { closest: selector => selector === '.trasa-card.fullscreen-expanded' ? {} : null };
+  let prevented = false;
+  const calls = h.calls.length;
+  await root.emit('touchstart', { target: summary, touches: [{ clientX: 0, clientY: 100 }] });
+  await root.emit('touchmove', { target: summary, touches: [{ clientX: 0, clientY: 20 }], preventDefault() { prevented = true; } });
+  await root.emit('touchend', { target: summary, changedTouches: [{ clientX: 0, clientY: 20 }] });
+  assert.equal(prevented, true);
+  assert.ok(h.calls.length > calls, 'bottom swipe on inline summary still loads later journeys');
+});
+
+test('Nowa consumes one live stop snapshot per leg without a parallel GPS request or timer', async () => {
+  const h = await setup();
+  h.setNow(1800000000000);
+  await chooseStop(h, 'from', 'Start', ['a1']);
+  await chooseStop(h, 'to', 'End', ['b1']);
+  h.respond(() => [{ legs: [leg] }]);
+  await h.get('route-search-btn').click();
+  await h.get('trasa-presentation-new').click();
+  const root = h.get('route-results-list'), card = root.children[0].children[0];
+  card.closest = selector => selector === '#route-results-list' ? root : null;
+  h.respond(url => url.includes('includeLive=true') ? {
+    stops: [{stopId:'a1',stopSequence:1,name:'Start',eta:'10:00'}, {stopId:'b1',stopSequence:4,name:'End',eta:'10:10'}],
+    live: {tripId:'trip-7',currentStopSequence:4,currentStatus:'STOPPED_AT',gpsTimestamp:1800000000,isFresh:true}
+  } : []);
+  const before = h.calls.length, timers = [...h.intervals.keys()];
+  await card.click(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.length, before + 1);
+  assert.match(h.calls.at(-1).url, /upcoming-stops\?fromStopId=a1&includeLive=true/);
+  const timeline = card.querySelector('.trasa-middle-scroll').querySelector('.lubus-timeline');
+  assert.match(timeline.innerHTML, /7 · Teraz/);
+  assert.deepEqual([...h.intervals.keys()], timers);
+});
+
+test('Nowa includes real approach stops but preserves the selected boarding range and map context', async () => {
+  const h = await setup(); h.setNow(1800000000000);
+  await chooseStop(h, 'from', 'Start', ['a1']); await chooseStop(h, 'to', 'End', ['b1']);
+  h.respond(() => [{ legs: [leg] }]); await h.get('route-search-btn').click();
+  await h.get('trasa-presentation-new').click();
+  const root = h.get('route-results-list'), card = root.children[0].children[0];
+  card.closest = selector => selector === '#route-results-list' ? root : null;
+  h.respond(() => ({ boardingStopSequence: 12,
+    stops: [
+      {stopId:'previous',stopSequence:1,name:'Earlier',eta:'09:50',lat:51.1,lon:22.1},
+      {stopId:'current',stopSequence:4,name:'Current GPS stop',eta:'09:55',lat:51.2,lon:22.2},
+      {stopId:'a1',stopSequence:12,name:'Actual boarding',eta:'10:00',lat:51.3,lon:22.3},
+      {stopId:'b1',stopSequence:30,name:'Actual alighting',eta:'10:20',lat:51.4,lon:22.4}],
+    live:{tripId:'trip-7',currentStopSequence:4,currentStatus:'STOPPED_AT',gpsTimestamp:1800000000,isFresh:true,lat:51.2,lon:22.2}
+  }));
+  const before = h.calls.length;
+  await card.click(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.length, before+1);
+  assert.match(h.calls.at(-1).url, /includeLive=true&includePrevious=true/);
+  const panel = card.querySelector('.trasa-middle-scroll');
+  const html = panel.querySelector('.lubus-timeline').innerHTML;
+  assert.match(html, /Current GPS stop/); assert.match(html, /7 · Teraz/);
+  assert.doesNotMatch(html.split('data-sequence="12"')[0], /<small>Wsiądź/);
+  const mapButton = panel.querySelector('.dep-expand-map-btn');
+  await mapButton.click();
+  assert.equal(h.maps[0][0], 'trip-7');
+  assert.equal(h.maps[0][1].fromCoords[0], 22.3, 'fullscreen route still starts at boarding');
 });

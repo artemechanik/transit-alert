@@ -23,9 +23,10 @@ data class VehiclePosition(
     val lat: Double,
     val lon: Double,
     val bearing: Float,
-    val currentStopSequence: Int,
+    val currentStopSequence: Int?,
     val timestamp: Long,
     val delaySeconds: Int?, // додатнє = запізнення, від'ємне = випередження; null якщо невідомо
+    val currentStatus: String? = null,
 )
 
 /**
@@ -34,7 +35,7 @@ data class VehiclePosition(
  * на stop_departures/trip_stops без додаткової конвертації).
  */
 object LiveVehiclesCache {
-    private val positionsByTrip = ConcurrentHashMap<String, VehiclePosition>()
+    @Volatile private var positionsByTrip: Map<String, VehiclePosition> = emptyMap()
     private val logger = LoggerFactory.getLogger("LiveVehicles")
     private val client = HttpClient(CIO)
 
@@ -127,7 +128,7 @@ object LiveVehiclesCache {
 		    val v = entity.vehicle
 		    if (!v.hasPosition() || !v.trip.hasTripId()) continue
 		    
-		    targetStops.add(v.trip.tripId to v.currentStopSequence)
+		    if (v.hasCurrentStopSequence()) targetStops.add(v.trip.tripId to v.currentStopSequence)
 		}
 
 		// 2. Робимо ОДИН запит до бази даних!
@@ -152,10 +153,10 @@ object LiveVehiclesCache {
 		    if (!v.hasPosition() || !v.trip.hasTripId()) continue
 
 		    val tripId = v.trip.tripId
-		    val seq = v.currentStopSequence
+		    val seq = if (v.hasCurrentStopSequence()) v.currentStopSequence else null
 
 		    // Беремо плановий час не з бази, а зі словника
-		    val delaySeconds = actualTimes[tripId to seq]?.let { actualUnix ->
+		    val delaySeconds = seq?.let { actualTimes[tripId to it] }?.let { actualUnix ->
 		        scheduledMap[tripId to seq]?.let { scheduledMin ->
 		            computeDelaySeconds(scheduledMin, actualUnix)
 		        }
@@ -170,13 +171,22 @@ object LiveVehiclesCache {
 		        lon = v.position.longitude.toDouble(),
 		        bearing = v.position.bearing,
 		        currentStopSequence = seq,
+                currentStatus = if (v.hasCurrentStatus()) v.currentStatus.name else null,
 		        timestamp = v.timestamp,
 		        delaySeconds = delaySeconds,
 		    )
 		}
 
-        positionsByTrip.clear()
-        positionsByTrip.putAll(fresh)
+        positionsByTrip = fresh
         logger.info("Live-позиції оновлено: ${fresh.size} автобусів")
     }
 }
+
+// Same measurement-age policy as routing LIVE, including the inclusive boundary.
+internal fun isLiveObservationFresh(timestamp: Long, now: Long): Boolean =
+    timestamp > 0 && now - timestamp in 0..300
+
+internal fun tripLiveState(tripId: String, position: VehiclePosition?, now: Long): TripLiveState =
+    TripLiveState(tripId, position?.currentStopSequence, position?.currentStatus,
+        position?.timestamp?.takeIf { it > 0 }, position != null && isLiveObservationFresh(position.timestamp, now),
+        lat = position?.lat, lon = position?.lon)

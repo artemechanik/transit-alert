@@ -18,7 +18,7 @@ import java.time.LocalDateTime // <-- Додали цей імпорт
 private const val DIRECTIONS_WINDOW_MINUTES = 90
 
 internal fun routingLiveSnapshot(vehicles: List<VehiclePosition>, now: Long): Map<String, VehiclePosition> =
-    vehicles.filter { it.timestamp > 0 && now - it.timestamp in 0..300 }.associateBy { it.tripId }
+    vehicles.filter { isLiveObservationFresh(it.timestamp, now) }.associateBy { it.tripId }
 
 fun String.normalizePL(): String {
     return this.lowercase()

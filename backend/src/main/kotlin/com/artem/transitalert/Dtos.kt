@@ -114,6 +114,7 @@ data class JourneyResponse(
 @Serializable
 data class UpcomingStop(
     val stopId: String,
+    val stopSequence: Int? = null,
     val name: String,
     val platformCode: String? = null,
     val eta: String,
@@ -138,7 +139,7 @@ data class LiveVehicleResponse(
     val lat: Double,
     val lon: Double,
     val bearing: Float,
-    val currentStopSequence: Int,
+    val currentStopSequence: Int?,
     val delaySeconds: Int?,
 )
 
@@ -146,4 +147,26 @@ data class LiveVehicleResponse(
 data class TripDelayInfo(
     val delayMinutes: Int,
     val isRealTime: Boolean
+)
+
+@Serializable
+data class TripLiveState(
+    val tripId: String,
+    val currentStopSequence: Int?,
+    val currentStatus: String?,
+    val gpsTimestamp: Long?,
+    val isFresh: Boolean,
+    val lat: Double? = null,
+    val lon: Double? = null,
+)
+
+@Serializable
+data class TripStopsLiveResponse(
+    val stops: List<UpcomingStop>, val live: TripLiveState, val boardingStopSequence: Int? = null,
+)
+
+@Serializable
+data class StopOccurrenceConflict(
+    val error: String = "Ambiguous stopId; specify fromStopSequence",
+    val stopSequences: List<Int>,
 )

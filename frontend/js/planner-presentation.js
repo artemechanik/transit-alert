@@ -20,6 +20,7 @@ export function createPlannerPresentation(root, motion, buttons) {
         if (expandedKey) {
             const expanded = [...root.children].find(node => node.dataset.journeyKey === expandedKey);
             expanded?.querySelector('.trasa-card')?.classList.add('fullscreen-expanded');
+            expanded?.querySelector('.trasa-middle-scroll')?.lubusTimeline?.visibilityChanged();
         }
         restoreListAnchor(root, anchor);
     }

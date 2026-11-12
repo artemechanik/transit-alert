@@ -548,7 +548,7 @@ test('only initial walker gets new warning; transfer warning stays in its timeli
   const wrapper=h.get('route-results-list').children[0], html=wrapper.children[0].innerHTML;
   assert.equal((html.match(/trasa-initial-walk-warn/g)||[]).length,1);
   assert.match(html,/class="trasa-initial-walk"[^]*?icon-walk[^]*?class="trasa-initial-walk-warn"  style/);
-  assert.match(html,/class="trasa-row"[^]*?class="stop-name"[^]*?<span class="trasa-transfer-warn" hidden style="color: var\(--danger\); font-weight: 700;">⚠ <\/span>➔/);
+  assert.match(html,/class="trasa-row"[^]*?class="stop-name"[^]*?<span class="trasa-transfer-warn"  style="color: var\(--danger\); font-weight: 700;">⚠ <\/span>➔/);
   assert.doesNotMatch(html,/Zagrożona przesiadka/);
   assert.equal((html.match(/icon-walk/g)||[]).length,2);
   assert.equal(wrapper.classList.contains('trasa-departed'),false);

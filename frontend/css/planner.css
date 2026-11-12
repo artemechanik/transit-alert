@@ -617,16 +617,36 @@
 .lubus-inline-vehicle { position: absolute; padding: 4px 6px; color: var(--text); background: var(--card); border: 2px solid var(--blue); border-radius: 8px; font-size: 12px; font-weight: 800; }
 
 .lubus-map-canvas { touch-action: none; }
-/* Passenger state belongs only to the expanded Nowa LIVE panel. */
-.lubus-live .lubus-passenger-state { margin: 12px 0 8px; padding: 8px 10px; border-left: 3px solid currentColor; border-radius: 0 7px 7px 0; background: var(--card); }
-.lubus-live .lubus-passenger-state strong { font-size: 15px; }
-.lubus-live .lubus-passenger-state p { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.4; }
-.lubus-live .lubus-passenger-state[data-tone="neutral"] { color: var(--text-muted); }
-.lubus-live .lubus-passenger-state[data-tone="info"] { color: var(--blue); }
-.lubus-live .lubus-passenger-state[data-tone="boarding"] { color: var(--live-green); }
-.lubus-live-next { margin: 8px 0 0; font-size: 12px; color: var(--text-muted); }
-.lubus-live-next strong { display: block; margin-top: 2px; color: var(--text); font-size: 15px; }
-.lubus-live-segments { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 12px 0; }
-.lubus-live-segments button { font: inherit; font-size: 12px; padding: 6px 8px; background: var(--card); color: var(--text-muted); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; }
-.lubus-live-segments button[aria-pressed="true"] { color: var(--blue); border-color: var(--blue); font-weight: 700; }
+/* LIVE presentation follows lubus-card.html; interaction and panel scrolling stay shared. */
+.lubus-live .lubus-leg-summary { box-sizing: border-box; min-height: 100%; margin: 0; padding: 12px; border: 0; background: var(--bg); }
+.lubus-position { display: flex; gap: 10px; align-items: flex-start; }
+.lubus-position > .dep-route-box { flex: 0 0 30px; width: 30px; height: 30px; border-width: 1.5px; border-radius: 7px; font-size: 15px; font-weight: 800; background: var(--bg); }
+.lubus-live .lubus-passenger-state { min-width: 0; margin: 0; padding: 0; }
+.lubus-live .lubus-passenger-state p { margin: 0; font-size: 12px; color: var(--text-muted); }
+.lubus-live .lubus-passenger-state .lubus-state-label { margin: 0; }
+.lubus-live .lubus-passenger-state .lubus-live-next { margin-top: 4px; }
+.lubus-live .lubus-passenger-state strong { display: block; margin-top: 1px; color: var(--text); font-size: 16px; font-weight: 750; line-height: 1.2; overflow-wrap: anywhere; }
+.lubus-live .lubus-passenger-state[data-tone="boarding"] .lubus-state-label { color: var(--live-green); }
+.lubus-live-segments { display: flex; flex-direction: column; gap: 4px; flex: 0 0 30px; margin: 0; padding: 0; }
+.lubus-live-segments button { display: grid; place-items: center; width: 30px; min-height: 30px; padding: 2px; font: inherit; font-size: 12px; font-weight: 750; background: var(--bg); color: var(--text-muted); border: 1.5px solid var(--border); border-radius: 7px; cursor: pointer; }
+.lubus-live-segments button[aria-pressed="true"] { color: var(--blue); border-color: var(--blue); }
 .lubus-live-segments button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.lubus-boarding-metrics { display: flex; gap: 12px; margin: 10px 0 8px; }
+.lubus-boarding-metrics > div { flex: 1; min-width: 0; }
+.lubus-boarding-metrics dt { color: var(--text-muted); font-size: 12px; }
+.lubus-boarding-metrics dd { margin: 1px 0 0; color: var(--text); font-size: 16px; font-weight: 750; line-height: 1.2; overflow-wrap: anywhere; }
+.lubus-transfer-hint { border-top: 1px solid var(--border); padding-top: 8px; }
+.lubus-transfer-hint p { margin: 0; font-size: 13px; }
+.lubus-transfer-hint dl { margin: 0 0 6px; }
+.lubus-transfer-hint dt { font-size: 12px; color: var(--text-muted); }
+.lubus-transfer-hint dd { margin: 1px 0 0; font-size: 16px; font-weight: 750; line-height: 1.2; }
+.lubus-transfer-hint .lubus-change-note { color: var(--text-muted); line-height: 1.45; }
+.lubus-change-note strong { color: var(--text); }
+.lubus-transfer-hint .lubus-transfer-risk { color: var(--danger); font-weight: 700; margin-bottom: 6px; }
+/* Prototype tab dimensions; panel heights and overscroll policies above are unchanged. */
+#route-results-list[data-presentation="new"] .fullscreen-expanded .lubus-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: min(224px, calc(100% - 24px)); margin: 0 12px 0 auto; padding: 8px 0 0; }
+.lubus-tabs button { position: relative; min-height: 32px; padding: 4px 10px; border-radius: 12px 12px 0 0; }
+.lubus-tabs button + button { margin-left: -8px; }
+.lubus-tabs button[aria-pressed="true"] { z-index: 1; border-bottom-color: var(--bg); }
+
+.lubus-live .lubus-passenger-state .lubus-direction + .lubus-state-label { margin-top: 4px; }

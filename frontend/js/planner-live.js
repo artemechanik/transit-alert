@@ -1,3 +1,4 @@
+import { assessTransfer } from './planner-transfer.js';
 import { apiFetch } from './backend-connection.js';
 import { coloredTimeHtml, getLiveStatusBadge } from './planner-cards.js';
 
@@ -88,19 +89,18 @@ export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops, ref
                 if (timeEl) timeEl.innerHTML = coloredTimeHtml(rowLiveMin(row), parseInt(row.dataset.delay, 10));
             });
 
-            // 4. Перевірка пересадок: та сама умова, що в RoutingGraph —
-            // наступний рейс має відправитись не раніше ніж прибуття + пішки + 1 хв
+            // 4. Passenger-facing risk shared with LIVE. Routing eligibility is unchanged.
             rows.forEach((row, k) => {
                 if (row.dataset.nextDep === undefined || !rows[k + 1]) return;
                 const next = rows[k + 1];
                 const nextDepLive = parseInt(row.dataset.nextDep, 10)
                     + parseInt(next.dataset.delay, 10) - parseInt(next.dataset.delayInitial, 10);
-                const walk = parseInt(row.dataset.transferWalk || '0', 10);
-                const missed = rowLiveMin(row) + walk + 1 > nextDepLive;
+                const transfer = assessTransfer({ arrivalMin: rowLiveMin(row), departureMin: nextDepLive,
+                    walkMin: parseFloat(row.dataset.transferWalk ?? '0'), platformChange: row.dataset.transferPlatformChange });
 
                 const warn = row.querySelector('.trasa-transfer-warn');
-                if (warn) warn.hidden = !missed;
-                row.title = missed ? 'Możesz nie zdążyć na przesiadkę' : '';
+                if (warn) warn.hidden = !transfer.risky;
+                row.title = transfer.risky ? 'Ryzykowna przesiadka · możesz nie zdążyć' : '';
             });
 
             const firstRow = rows[0];

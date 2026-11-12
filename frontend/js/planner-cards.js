@@ -1,3 +1,4 @@
+import { assessTransfer, transferPlatformChange, transferWalkMinutes } from './planner-transfer.js';
 import { setupJourneyTimeline } from './planner-timeline.js';
 import { expandedMarkup, bindExpandedPanels, updateExpandedLive, preserveInlineAnchor } from './planner-expanded.js';
 import { initialWalkRisk } from './planner-results.js';
@@ -83,11 +84,6 @@ export function createPlannerCards({
             return `data-trip-id="${leg.tripId || ''}" data-min="${min}" data-delay="${d}" data-delay-initial="${d}" data-live="${leg.isRealTime ? 'true' : 'false'}"`;
         };
 
-        // Пішки між двома рейсами (сирі хвилини бекенда — та сама умова, що в роутингу)
-        const transferWalkMin = (fromLeg, toLeg) => legs
-            .slice(legs.indexOf(fromLeg) + 1, legs.indexOf(toLeg))
-            .filter(l => l.route === "Пішки" || !l.route)
-            .reduce((sum, l) => sum + Math.max(0, l.arrivalMin - l.departureMin), 0);
 
         const depTime = coloredTimeHtml(firstTransitLeg.departureMin, firstTransitLeg.delayMinutes || 0);
         const arrTime = coloredTimeHtml(lastTransitLeg.arrivalMin, lastTransitLeg.delayMinutes || 0);
@@ -170,10 +166,13 @@ export function createPlannerCards({
         for (let i = 0; i < transitLegs.length - 1; i++) {
             const tStop = splitStopName(transitLegs[i].toStopName);
             const nextLeg = transitLegs[i + 1];
-            timelineHtml += `<div class="trasa-row trasa-transfer-row" ${rowAttrs(transitLegs[i], transitLegs[i].arrivalMin)} data-next-dep="${nextLeg.departureMin}" data-transfer-walk="${transferWalkMin(transitLegs[i], nextLeg)}" style="${rowStyle} opacity: 0.8;">
+            const platformChange = transferPlatformChange(transitLegs[i], nextLeg);
+            const walkMin = transferWalkMinutes(legs, transitLegs[i], nextLeg);
+            const transfer = assessTransfer({ arrivalMin: transitLegs[i].arrivalMin, departureMin: nextLeg.departureMin, walkMin, platformChange });
+            timelineHtml += `<div class="trasa-row trasa-transfer-row" ${rowAttrs(transitLegs[i], transitLegs[i].arrivalMin)} data-next-dep="${nextLeg.departureMin}" data-transfer-walk="${walkMin ?? ""}" data-transfer-platform-change="${platformChange}" title="${transfer.risky ? 'Ryzykowna przesiadka · możesz nie zdążyć' : ''}" style="${rowStyle} opacity: 0.8;">
             <div class="time" style="${timeStyle} font-size: 14px; font-weight: 500; color: var(--text-muted);">${coloredTimeHtml(transitLegs[i].arrivalMin, transitLegs[i].delayMinutes || 0)}</div>
             <div class="trasa-stop-dot" style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--border); box-shadow: 0 0 0 3px var(--card);"></div></div>
-            <div class="stop-name" style="flex: 1; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;"><span class="trasa-transfer-warn" hidden style="color: var(--danger); font-weight: 700;">⚠ </span>➔ ${tStop.name} ${tStop.code ? `<span class="stop-code" style="font-size: 14px; font-weight: 500; color: var(--text-muted);">(${tStop.code})</span>` : ''}</div>
+            <div class="stop-name" style="flex: 1; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;"><span class="trasa-transfer-warn" ${transfer.risky ? '' : 'hidden'} style="color: var(--danger); font-weight: 700;">⚠ </span>➔ ${tStop.name} ${tStop.code ? `<span class="stop-code" style="font-size: 14px; font-weight: 500; color: var(--text-muted);">(${tStop.code})</span>` : ''}</div>
         </div>`;
         }
 
@@ -253,7 +252,11 @@ export function createPlannerCards({
             if (!leg) return;
             const min = index === 0 ? leg.departureMin : leg.arrivalMin;
             Object.assign(row.dataset, { min, delay:leg.delayMinutes || 0, delayInitial:leg.delayMinutes || 0, live:String(leg.isRealTime), departureEpoch:leg.departureEpoch });
-            if (row.dataset.nextDep !== undefined && transit[index]) row.dataset.nextDep = transit[index].departureMin;
+            if (row.dataset.nextDep !== undefined && transit[index]) {
+                row.dataset.nextDep = transit[index].departureMin;
+                row.dataset.transferWalk = transferWalkMinutes(journey.legs, leg, transit[index]) ?? '';
+                row.dataset.transferPlatformChange = transferPlatformChange(leg, transit[index]);
+            }
         });
     }
 

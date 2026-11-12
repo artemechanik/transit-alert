@@ -107,3 +107,28 @@ test('transfer risk remains independent of the initial walking warning', async (
   assert.equal(transferWarning.hidden,true); assert.equal(walkWarning.hidden,false);
   live.leavePlanner();
 });
+
+test('header and expanded LIVE share platform-change risk through both vehicles delay updates', async () => {
+  const warning={hidden:true};
+  const makeRow=dataset=>({dataset,querySelector:s=>s==='.trasa-transfer-warn'?warning:null});
+  const rows=[makeRow({tripId:'first',min:'600',delay:'0',delayInitial:'0'}),
+    makeRow({tripId:'first',min:'650',delay:'0',delayInitial:'0',nextDep:'653',transferWalk:'0',transferPlatformChange:'different'}),
+    makeRow({tripId:'second',min:'700',delay:'0',delayInitial:'0'})];
+  const timeline={querySelectorAll:()=>rows,querySelector:()=>null,closest:()=>null};
+  const {createPlannerLive}=await loadBrowserModule(new URL('../js/planner-live.js',import.meta.url),{
+    Date,AbortController,console,document:{querySelectorAll:()=>[timeline]},setInterval:()=>1,clearInterval(){}
+  });
+  const {renderExpandedLive}=await loadBrowserModule(new URL('../js/planner-expanded.js',import.meta.url),{});
+  const live=createPlannerLive({refreshResults:async()=>{},refreshOpenTrasaPassedStops:async()=>{}});
+  live.enterPlannerLive();await flush();
+  for(const [firstDelay,nextDelay,risky] of [[0,0,true],[0,1,false],[2,1,true],[0,2,false]]) {
+    rows[1].dataset.delay=String(firstDelay);rows[2].dataset.delay=String(nextDelay);
+    await live.updateTrasaCountdowns();
+    const journey={legs:[{route:'7',toStopId:'a',arrivalMin:650+firstDelay},
+      {route:'153',fromStopId:'b',departureMin:653+nextDelay}]};
+    const html=renderExpandedLive(journey,[],0,1000);
+    assert.equal(!warning.hidden,risky);
+    assert.equal(html.includes('Ryzykowna przesiadka'),risky);
+  }
+  live.leavePlanner();
+});

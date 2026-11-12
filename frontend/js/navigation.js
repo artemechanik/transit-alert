@@ -150,6 +150,9 @@ export function createNavigation({
     }
 
     function pushPlannerAccordionHistory() {
+        const current = window.history.state;
+        // Inline A → B replaces the open card, not the navigation layer.
+        if (current?.screen === 'route' && current.overlay === 'accordion') return;
         history.pushState({ screen: 'route', overlay: 'accordion' }, '');
     }
 

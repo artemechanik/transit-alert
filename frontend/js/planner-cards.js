@@ -36,7 +36,7 @@ export function getLiveStatusBadge(isLive, delayMinutes) {
 }
 
 export function createPlannerCards({
-    apiBaseUrl, showVehicleOnMap, addMinutesToTime, onAccordionOpen, onBack, getRoutePoints, inlineMapServices
+    apiBaseUrl, showVehicleOnMap, addMinutesToTime, onAccordionOpen, onBack, getRoutePoints, inlineMapServices, onInlineOpen, onInlineClose, onInlineLayout
 }) {
     function splitStopName(fullName) {
         if (!fullName) return { name: '', code: '' };
@@ -319,6 +319,7 @@ export function createPlannerCards({
             if (c !== card) {
                 c.classList.remove('fullscreen-expanded');
                 const p = c.querySelector('.trasa-middle-scroll');
+                onInlineClose?.(c.parentNode);
                 if (p) { p.lubusTimeline?.destroy(); p.lubusLoadToken = null; p.innerHTML = ''; p.style.display = 'none'; }
             }
         });
@@ -336,6 +337,7 @@ export function createPlannerCards({
             scrollPanel.style.display = 'block';
             scrollPanel.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--text-muted);">Ładowanie trasy...</div>';
         restoreAnchor();
+        onInlineOpen?.(card.parentNode);
         const loadToken = {};
         scrollPanel.lubusLoadToken = loadToken;
         try {
@@ -469,6 +471,7 @@ export function createPlannerCards({
             scrollPanel.innerHTML = expandedMarkup(html || '<p>Brak danych</p>', { legs });
             bindExpandedPanels(scrollPanel, mapActions);
             setupJourneyTimeline(scrollPanel, transitLegs, legStopsResults, mapActions, addMinutesToTime, inlineMapServices);
+            onInlineLayout?.();
             restoreLoadedAnchor();
             const wrapper = card.parentNode;
             if (wrapper?.journey) updateExpandedLive(wrapper, wrapper.journey, addMinutesToTime);
@@ -486,6 +489,7 @@ export function createPlannerCards({
         } catch (e) {
             if (scrollPanel.lubusLoadToken !== loadToken || !card.classList.contains('fullscreen-expanded')) return;
             scrollPanel.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--danger);">Błąd serwera</div>';
+            onInlineLayout?.();
         }
     }
 
@@ -493,6 +497,7 @@ export function createPlannerCards({
         const openCards = [...document.querySelectorAll('.trasa-card.fullscreen-expanded')];
         const restoreAnchor = openCards.length ? preserveInlineAnchor(openCards[0]) : () => {};
         openCards.forEach(card => {
+            onInlineClose?.(card.parentNode);
             card.classList.remove('fullscreen-expanded');
             const p = card.querySelector('.trasa-middle-scroll');
             if (p) {
@@ -507,6 +512,7 @@ export function createPlannerCards({
     }
 
     function disposeJourneyCard(wrapper) {
+        onInlineClose?.(wrapper);
         wrapper.querySelector('.trasa-middle-scroll')?.lubusTimeline?.destroy();
     }
     function suspendPlannerMaps() {

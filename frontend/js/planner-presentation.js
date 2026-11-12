@@ -2,7 +2,7 @@ import { captureListAnchor, restoreListAnchor } from './list-motion.js';
 
 // Both presentations use the same keyed wrappers, accordion and LIVE DOM contract.
 // Changing presentation never rebuilds cards or starts a data request.
-export function createPlannerPresentation(root, motion, buttons) {
+export function createPlannerPresentation(root, motion, buttons, cardPosition) {
     let current = 'classic';
     function select(value) {
         if (value === current || !['classic', 'new'].includes(value)) return;
@@ -12,6 +12,7 @@ export function createPlannerPresentation(root, motion, buttons) {
             node.querySelector('.trasa-card.fullscreen-expanded'))?.dataset.journeyKey;
         current = value;
         root.dataset.presentation = value;
+        cardPosition?.modeChanged();
         for (const [name, button] of Object.entries(buttons)) {
             button.ariaPressed = String(name === value);
         }

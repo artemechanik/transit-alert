@@ -36,7 +36,7 @@ class Element {
 
 async function setup(initialHistory = []) {
   const elements = new Map(), calls = [], maps = [], history = new Map(initialHistory), toasts = [], documents = [], timers = new Map();
-  let timelines = [], clockNow = null;
+  let timelines = [], clockNow = null, holdShortTimers = false;
   class PlannerTestDate extends Date {
     constructor(...args) { super(...(args.length ? args : [clockNow ?? Date.now()])); }
     static now() { return clockNow ?? Date.now(); }
@@ -46,7 +46,7 @@ async function setup(initialHistory = []) {
   let responder = () => [], position = { lat: 51.24, lon: 22.57 };
   const context = {
     console, Date: PlannerTestDate, AbortController,
-    setTimeout: (fn, delay) => { if (delay < 5000) { fn(); return 0; } const id = ++nextTimer; timers.set(id, fn); return id; },
+    setTimeout: (fn, delay) => { if (delay < 5000 && !holdShortTimers) { fn(); return 0; } const id = ++nextTimer; timers.set(id, fn); return id; },
     clearTimeout: id => timers.delete(id), setInterval: fn => { const id=++nextTimer; intervals.set(id,fn); return id; }, clearInterval: id => intervals.delete(id),
     localStorage: { getItem: k => history.get(k), setItem: (k, v) => history.set(k, v) },
     document: { getElementById: get, createElement: () => { const element = new Element(); created.push(element); return element; }, addEventListener: (type, fn) => documents.push({type,fn}),
@@ -66,6 +66,7 @@ async function setup(initialHistory = []) {
     onAccordionOpen() {}, onBack() {} });
   planner.initPlanner(); planner.enterPlanner();
   return { planner, get, calls, maps, history, toasts, documents, timers, intervals, created, setNow: value => { clockNow = value; }, setTimelines: value => { timelines = value; }, respond: fn => { responder = fn; },
+    holdShortTimers: value => { holdShortTimers = value; },
     move: p => { position = p; } };
 }
 
@@ -918,3 +919,60 @@ test('Nowa includes real approach stops but preserves the selected boarding rang
   assert.equal(h.maps[0][0], 'trip-7');
   assert.equal(h.maps[0][1].fromCoords[0], 22.3, 'fullscreen route still starts at boarding');
 });
+
+test('LIVE sorting waits for card alignment; manual interruption preserves the visible journey and late stops never realign', async () => {
+  const h=await setup();h.setNow(1800000000000);
+  await chooseStop(h,'from','Start',['a1']);await chooseStop(h,'to','End',['b1']);
+  const a={...leg,departureEpoch:1800000600,scheduledDepartureEpoch:1800000600,liveObservedEpoch:1800000000};
+  const b={...a,tripId:'second',departureEpoch:1800000900,scheduledDepartureEpoch:1800000900};
+  let journeys=[{legs:[a]},{legs:[b]}],resolveStops;
+  h.respond(url=>url.includes('upcoming-stops')?new Promise(resolve=>{resolveStops=resolve;}):journeys);
+  await h.get('route-search-btn').click();await h.get('trasa-presentation-new').click();
+  const root=h.get('route-results-list'),[first,second]=root.children,calls=[];
+  root.offsetTop=0;root.clientHeight=100;root.scrollTop=50;
+  root.scrollTo=options=>{calls.push(options);if(options.behavior==='instant')root.scrollTop=options.top;};
+  root.insertBefore=(node,current)=>{
+    root.children=root.children.filter(child=>child!==node);
+    const index=current?root.children.indexOf(current):root.children.length;
+    root.children.splice(index,0,node);root.children.forEach((child,i)=>{child.offsetTop=i*110;});
+  };
+  [first,second].forEach((node,i)=>{node.parentNode=root;node.offsetTop=i*110;node.offsetHeight=100;});
+  const card=second.children[0];card.parentNode=second;card.closest=s=>s==='#route-results-list'?root:null;
+  h.holdShortTimers(true);await card.click();
+  assert.equal(root.dataset.cardAligning,'true');assert.equal(calls[0].top,110);
+  journeys=[{legs:[{...a,departureEpoch:1800001000}]},{legs:[{...b,departureEpoch:1800000700}]}];
+  for(let i=0;i<15;i++)for(const tick of h.intervals.values())tick();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(root.children[0],first,'do not move cards during smooth alignment');
+  const visibleOffset=first.offsetTop-root.scrollTop;
+  await root.emit('wheel');await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(root.children[0],second,'apply the queued sort once the gesture owns scrolling');
+  assert.equal(first.offsetTop-root.scrollTop,visibleOffset,'preserve visible journey across the deferred sort');
+  const count=calls.length;
+  resolveStops({stops:[{stopId:'a1',stopSequence:1,name:'Start',eta:'10:00'}, {stopId:'b1',stopSequence:2,name:'End',eta:'10:10'}],boardingStopSequence:1,live:null});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.length,count,'late stop loading must not resume cancelled alignment');
+  assert.equal(root.dataset.cardAligning,undefined);
+});
+
+for (const [edge, direction] of [['top',1],['bottom',-1]]) {
+  test(`fitting Nowa LIVE uses the existing ${edge} swipe threshold; overflowing LIVE stays native`,async()=>{
+    const h=await setup();await chooseStop(h,'from','Start',['a1']);await chooseStop(h,'to','End',['b1']);
+    h.respond(()=>[{legs:[leg]}]);await h.get('route-search-btn').click();await h.get('trasa-presentation-new').click();
+    const root=h.get('route-results-list');root.clientHeight=100;root.scrollHeight=500;
+    const live={clientHeight:280,scrollHeight:280};
+    const target={closest:s=>s==='.lubus-live'?live:['.trasa-card.fullscreen-expanded','.trasa-middle-scroll'].includes(s)?{}:null};
+    async function swipe(distance){
+      root.scrollTop=edge==='top'?0:400;
+      const before=h.calls.length;let prevented=false;
+      await root.emit('touchstart',{target,touches:[{clientX:0,clientY:100}]});
+      await root.emit('touchmove',{target,touches:[{clientX:0,clientY:100+direction*distance}],preventDefault(){prevented=true;}});
+      await root.emit('touchend',{target,changedTouches:[{clientX:0,clientY:100+direction*distance}]});
+      return {requested:h.calls.length>before,prevented};
+    }
+    assert.equal((await swipe(59)).requested,false);
+    assert.equal((await swipe(60)).requested,false);
+    const claimed=await swipe(61);assert.equal(claimed.requested,true);assert.equal(claimed.prevented,true);
+    live.scrollHeight=500;const nested=await swipe(100);assert.equal(nested.requested,false);assert.equal(nested.prevented,false);
+  });
+}

@@ -514,6 +514,7 @@
   flex-direction: column;
   flex: none;
   overflow: hidden;
+  overscroll-behavior-y: auto;
 }
 #route-results-list[data-presentation="new"] .fullscreen-expanded .lubus-tabs {
   display: flex;
@@ -544,6 +545,8 @@
   background: var(--bg);
   border-radius: 0 0 12px 12px;
 }
+/* LIVE hands native scrolling to the list at its boundary; Podróż stays contained. */
+#route-results-list[data-presentation="new"] .fullscreen-expanded .lubus-live { overscroll-behavior-y: auto; }
 #route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-middle-scroll[data-lubus-tab="live"] .lubus-live,
 #route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-middle-scroll[data-lubus-tab="journey"] .lubus-journey,
 #route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-middle-scroll[data-lubus-tab="map"] .lubus-map { display: block; }

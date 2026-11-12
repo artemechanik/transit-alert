@@ -151,3 +151,14 @@ test('anchor preservation uses layout coordinates even while a card is visually 
   h.module.restoreListAnchor(h.root, anchor);
   assert.equal(h.root.scrollTop, 120);
 });
+
+test('scrollend from an inner journey panel does not end the outer list animation',async()=>{
+  const listeners={};let timer=0;
+  const root={addEventListener(type,fn){listeners[type]=fn;}};
+  const m=await loadBrowserModule(new URL('../js/list-motion.js',import.meta.url),{
+    setTimeout:()=>++timer,clearTimeout(){}
+  });
+  const motion=m.createListMotion(root);motion.trackScroll(()=>{});
+  listeners.scrollend({target:{}});assert.equal(motion.isScrolling(),true);
+  listeners.scrollend({target:root});assert.equal(motion.isScrolling(),false);
+});

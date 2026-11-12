@@ -1,3 +1,4 @@
+import { createPlannerCardPosition } from './planner-card-position.js';
 import { createResultsState } from './planner-results.js';
 import { createListMotion, captureListAnchor, restoreListAnchor } from './list-motion.js';
 import { createPlannerPresentation } from './planner-presentation.js';
@@ -15,13 +16,17 @@ export function createPlanner({
     let routeResultsBox, searchRouteBtn, indicator, bottomIndicator, loading = null, controller = null;
     let generation = 0, manualRefresh = false;
     let loadingLater = false, queuedLater = null;
-    let listMotion;
+    let listMotion, cardPosition;
+    let queuedReconcile = false;
     const { setupRouteAutocomplete, loadRouteDefaultSuggestions, updateRouteButtonState,
         getRoutePoints, saveRecentRoute, renderRecentRoutes } = createPlannerInputs({
         apiBaseUrl, getMapTilerKey, locationService, getNearbyStops, showToast
     });
     const { buildJourneyCard, updateJourneyCard, refreshOpenTrasaPassedStops, closePlannerAccordion, disposeJourneyCard, suspendPlannerMaps, resumePlannerMaps } = createPlannerCards({
-        apiBaseUrl, showVehicleOnMap, addMinutesToTime, onAccordionOpen, onBack, getRoutePoints, inlineMapServices
+        apiBaseUrl, showVehicleOnMap, addMinutesToTime, onAccordionOpen, onBack, getRoutePoints, inlineMapServices,
+        onInlineOpen: node => cardPosition?.open(node),
+        onInlineClose: node => cardPosition?.close(node),
+        onInlineLayout: () => cardPosition?.sync()
     });
     const { enterPlannerLive, leavePlanner, updateTrasaCountdowns, startPlannerPolling } = createPlannerLive({
         apiBaseUrl, refreshOpenTrasaPassedStops, refreshResults, tickResults: () => { if (active && query) renderResults([]); }
@@ -71,6 +76,15 @@ export function createPlanner({
         return loading;
     }
     function renderResults(journeys, animateNew = false) {
+        const deferOrder = cardPosition?.isAligning();
+        if (deferOrder && !queuedReconcile) {
+            queuedReconcile = true;
+            const version = generation;
+            listMotion.whenIdle().then(() => {
+                queuedReconcile = false;
+                if (active && version === generation) renderResults([]);
+            });
+        }
         const scroll = routeResultsBox.scrollTop;
         const anchor = routeResultsBox.dataset.presentation === 'new' && !listMotion.isScrolling()
             ? captureListAnchor(routeResultsBox) : null;
@@ -92,17 +106,20 @@ export function createPlanner({
         const pinned = [...routeResultsBox.children].map((node, index) => ({ node, index }))
             .filter(({node}) => entries.get(node.dataset.journeyKey)?.departedAt != null && !entries.get(node.dataset.journeyKey)?.expired);
         for (const [key, entry] of entries) {
-            if (entry.expired && entry.node && !entry.removing) {
+            if (!deferOrder && entry.expired && entry.node && !entry.removing) {
                 entry.removing = true;
                 entry.node.classList.add('trasa-result-exit');
                 const node = entry.node;
-                setTimeout(() => {
+                const remove = () => {
+                    if (cardPosition?.isAligning()) { listMotion.whenIdle().then(remove); return; }
                     const anchor = routeResultsBox.dataset.presentation === 'new' && !listMotion.isScrolling()
                         ? captureListAnchor(routeResultsBox) : null;
                     disposeJourneyCard(node);
                     node.remove();
+                    cardPosition?.sync();
                     if (anchor) restoreListAnchor(routeResultsBox, anchor);
-                }, 250);
+                };
+                setTimeout(remove, 250);
 
             }
         }
@@ -118,7 +135,8 @@ export function createPlanner({
         }
         const desired = ordered.map(([,e]) => e.node).filter(n => n && !pinned.some(p => p.node === n));
         for (const {node,index} of pinned) desired.splice(Math.min(index, desired.length), 0, node);
-        desired.forEach((node,index) => { const current = routeResultsBox.children[index]; if (current !== node) routeResultsBox.insertBefore(node, current || null); });
+        if (!deferOrder) desired.forEach((node,index) => { const current = routeResultsBox.children[index]; if (current !== node) routeResultsBox.insertBefore(node, current || null); });
+        cardPosition?.sync();
         if (!listMotion.isScrolling()) {
             const restored = anchor && restoreListAnchor(routeResultsBox, anchor);
             if (!restored && routeResultsBox.scrollTop !== scroll) routeResultsBox.scrollTop = scroll;
@@ -129,12 +147,14 @@ export function createPlanner({
     }
     function enterPlanner() {
         active = true;
+        cardPosition?.sync();
         resumePlannerMaps();
         enterPlannerLive();
         updateRouteButtonState(true); updateRouteButtonState(false); renderRecentRoutes();
     }
     function leave() {
         active = false; generation++; controller?.abort(); loading = null; manualRefresh = false;
+        cardPosition?.cancel();
         leavePlanner();
         suspendPlannerMaps();
         listMotion?.cancelScroll();
@@ -152,10 +172,11 @@ export function createPlanner({
         searchRouteBtn = document.getElementById('route-search-btn');
         routeResultsBox = document.getElementById('route-results-list');
         listMotion = createListMotion(routeResultsBox);
+        cardPosition = createPlannerCardPosition(routeResultsBox, listMotion);
         createPlannerPresentation(routeResultsBox, listMotion, {
             classic: document.getElementById('trasa-presentation-classic'),
             new: document.getElementById('trasa-presentation-new')
-        });
+        }, cardPosition);
         indicator = document.createElement('div');
         indicator.textContent = 'Odświeżanie…'; indicator.className = 'trasa-refresh-indicator';
         routeResultsBox.parentNode.insertBefore(indicator, routeResultsBox);
@@ -190,19 +211,26 @@ export function createPlanner({
                 indicator.style.height = '0'; bottomIndicator.style.height = '0';
             }
         }
+        function nestedPanelOwnsGesture(target) {
+            if (!target.closest('.trasa-card.fullscreen-expanded')) return false;
+            if (routeResultsBox.dataset.presentation !== 'new') return true;
+            if (!target.closest('.trasa-middle-scroll')) return false;
+            const live = target.closest('.lubus-live');
+            // A fitting LIVE panel has no native scrolling of its own. Reuse the
+            // ordinary list gestures; overflowing LIVE, Podróż and Mapa keep theirs.
+            return !live || live.scrollHeight > live.clientHeight + 1;
+        }
         routeResultsBox.addEventListener('touchstart', e => {
             // Nested panel gestures belong to its native scroll container.
             // The inline summary still permits ordinary list scrolling and swipes.
-            if (e.target.closest('.trasa-card.fullscreen-expanded')
-                && (routeResultsBox.dataset.presentation !== 'new' || e.target.closest('.trasa-middle-scroll'))) {
+            if (nestedPanelOwnsGesture(e.target)) {
                 clearGesture();
                 return;
             }
             gesture = active && (routeResultsBox.scrollTop <= 0 || routeResultsBox.scrollTop + routeResultsBox.clientHeight >= routeResultsBox.scrollHeight - 2) && e.touches.length === 1 ? { x:e.touches[0].clientX, y:e.touches[0].clientY, top: routeResultsBox.scrollTop <= 0, bottom: routeResultsBox.scrollTop + routeResultsBox.clientHeight >= routeResultsBox.scrollHeight - 2 } : null;
         }, {passive:true});
         routeResultsBox.addEventListener('touchmove', e => {
-            if (e.target.closest('.trasa-card.fullscreen-expanded')
-                && (routeResultsBox.dataset.presentation !== 'new' || e.target.closest('.trasa-middle-scroll'))) {
+            if (nestedPanelOwnsGesture(e.target)) {
                 clearGesture();
                 return;
             }

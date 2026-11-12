@@ -103,7 +103,7 @@ export function updateExpandedLive(wrapper, journey, addMinutesToTime) {
 // Restore by identity after a height change; numeric scrollTop alone is insufficient.
 export function preserveInlineAnchor(element) {
     const root = element.closest?.('#route-results-list');
-    if (root?.dataset.presentation !== 'new') return () => {};
+    if (root?.dataset.presentation !== 'new' || root.dataset.cardAligning === 'true') return () => {};
     const anchor = captureListAnchor(root);
     return () => restoreListAnchor(root, anchor);
 }

@@ -10,7 +10,9 @@ export function createListMotion(root) {
         for (const resolve of idleWaiters) resolve();
         idleWaiters.clear();
     };
-    root.addEventListener?.('scrollend', finishScroll);
+    root.addEventListener?.('scrollend', event => {
+        if (!event || event.target === root) finishScroll();
+    });
     root.addEventListener?.('scroll', () => {
         if (!scrolling || scrollTimer !== null) return;
         clearTimeout(settleTimer);
@@ -110,7 +112,7 @@ function layoutTop(element) {
     return top;
 }
 
-function itemLayoutTop(root, node) {
+export function itemLayoutTop(root, node) {
     return layoutTop(node) - layoutTop(root) - (root.clientTop || 0);
 }
 

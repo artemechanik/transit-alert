@@ -4,7 +4,7 @@ import { hasFreshLive } from './planner-results.js';
 export function legCountdown(leg, now) {
     const live = hasFreshLive(leg, now);
     const departure = live ? leg.departureEpoch : leg?.scheduledDepartureEpoch;
-    return { live, minutes: Number.isFinite(departure) ? Math.ceil((departure - now) / 60) : null };
+    return { live, departure, minutes: Number.isFinite(departure) ? Math.ceil((departure - now) / 60) : null };
 }
 
 // Kotlin omits the default delayMinutes=0 from JSON; explicit null stays unknown.
@@ -20,8 +20,15 @@ export function journeyCountdown(journey, now, index = 0) {
     return { ...timing, color: countdownColor(timing.live, leg?.delayMinutes) };
 }
 
-export function countdownMarkup({ minutes, color }) {
+export function countdownMarkup({ minutes, color, departure }, presentation = 'classic') {
     if (minutes === null) return `<span style="color:${color}">—</span>`;
+    if (presentation === 'new' && minutes <= 0) {
+        if (!Number.isFinite(departure)) return `<span style="color:${color}">—</span>`;
+        const clock = new Date(departure * 1000).toLocaleTimeString('pl-PL', {
+            hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw'
+        });
+        return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;height:38px;color:${color}"><span style="font-size:10px;font-weight:700;letter-spacing:.5px;opacity:.8">ODJAZD</span><span style="font-size:16px;font-weight:700;margin-top:2px">${clock}</span></div>`;
+    }
     const count = Math.max(0, minutes);
     const label = count === 1 ? 'minuta' : count % 10 >= 2 && count % 10 <= 4
         && (count % 100 < 12 || count % 100 > 14) ? 'minuty' : 'minut';

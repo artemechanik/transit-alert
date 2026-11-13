@@ -2,7 +2,7 @@
 export function createNavigation({
     closeVehicleMapModal, stopVehicleTracking,
     enterStops, enterPlanner, leavePlanner, openReports, closeForms,
-    closePlannerAccordion, closeDepartureAccordion
+    closePlannerAccordion, closeDepartureAccordion, isPlannerAccordionOpen = () => false
 }) {
     let initialized = false;
     let historyInitialized = false;
@@ -73,6 +73,8 @@ export function createNavigation({
           if (!currentState || currentState.screen !== screenId) {
               window.history.pushState({ screen: screenId }, "");
           }
+          // The retained card needs its own Back layer above this visit's route entry.
+          if (screenId === 'route' && isPlannerAccordionOpen()) pushPlannerAccordionHistory();
       }
     }
 

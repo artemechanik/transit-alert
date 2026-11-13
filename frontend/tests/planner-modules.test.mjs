@@ -1029,3 +1029,72 @@ test('editing during a search and subsequent LIVE refreshes never hide the searc
   await button.click();assert.equal(button.dataset.collapsed,'true');
   h.planner.leavePlanner();
 });
+
+test('Nowa pin keeps the same card slot through LIVE sorting and unpin uses the original departure deadline', async () => {
+ const flush=()=>new Promise(resolve=>setImmediate(resolve));
+ const h=await setup(),now=2000000000;h.setNow(now*1000);
+ await chooseStop(h,'from','Start',['a1']);await chooseStop(h,'to','End',['b1']);
+ const first={...leg,scheduledDepartureEpoch:now+100,departureEpoch:now+100,scheduledArrivalEpoch:now+600,arrivalEpoch:now+600,liveObservedEpoch:now};
+ const second={...first,tripId:'next',scheduledDepartureEpoch:now+200,departureEpoch:now+200};
+ let journeys=[{legs:[first]},{legs:[second]}];h.respond(()=>journeys);
+ await h.get('route-search-btn').click();
+ const root=h.get('route-results-list'),wrapper=root.children[1],card=wrapper.children[0];
+ root.insertBefore=(node,current)=>{root.children=root.children.filter(n=>n!==node);const at=current?root.children.indexOf(current):root.children.length;root.children.splice(at,0,node);};
+ wrapper.remove=()=>{root.children=root.children.filter(n=>n!==wrapper);};
+ card.closest=()=>root;card.classList.add('fullscreen-expanded');
+ const pin=wrapper.querySelector('.trasa-pin-button');
+ const target={closest:s=>s==='.trasa-pin-button'?pin:null};
+ let backs=0; // Pin clicks must be consumed before the accordion's open/Back path.
+ card.querySelector=()=>{backs++;throw Error('pin click reached accordion');};
+ const requests=h.calls.length,intervals=[...h.intervals.keys()],storage=[...h.history];
+ await card.emit('click',{target});assert.equal(pin.ariaPressed,'true');assert.equal(backs,0);
+ assert.equal(wrapper.classList.contains('trasa-pinned'),true);
+ assert.equal(wrapper.classList.contains('trasa-departed'),false);
+ assert.equal(h.calls.length,requests);assert.deepEqual([...h.intervals.keys()],intervals);assert.deepEqual([...h.history],storage);
+ // A forecast would now put the pinned second card first. Its DOM slot stays put.
+ journeys=[{legs:[{...first,departureEpoch:now+300}]},{legs:[{...second,departureEpoch:now+50}]}];
+ for(let i=0;i<15;i++) [...h.intervals.values()][0]();await flush();await flush();
+ assert.equal(root.children[1],wrapper);assert.equal(pin.ariaPressed,'true');
+ assert.equal(wrapper.journey.legs[0].departureEpoch,now+50,'LIVE forecast updated before departure');
+ h.setNow((now+60)*1000);[...h.intervals.values()][0]();
+ assert.equal(wrapper.classList.contains('trasa-departed'),true,'departure detected at +60');
+ assert.equal(wrapper.classList.contains('trasa-pinned'),true,'departure retains the contrast exemption');
+ assert.match(wrapper.querySelector('.trasa-timer-content').innerHTML,/>ODJAZD</);
+ h.setNow((now+121)*1000);[...h.intervals.values()][0]();
+ assert.equal(root.children[1],wrapper);assert.equal(wrapper.classList.contains('trasa-result-exit'),false);
+ await card.emit('click',{target});assert.equal(pin.ariaPressed,'false');
+ assert.equal(wrapper.classList.contains('trasa-pinned'),false,'unpin restores ordinary departed styling');
+ assert.equal(wrapper.classList.contains('trasa-result-exit'),true,'unpin marks the overdue card for removal');
+ assert.equal(root.children.includes(wrapper),false,'unpin after the grace period removes the card');
+ assert.equal(backs,0);h.planner.leavePlanner();
+});
+
+test('pins are unavailable to classic/collapsed cards, survive screen visits and end on a new search or manual unpin', async () => {
+ const h=await setup(),now=2000000000;h.setNow(now*1000);
+ await chooseStop(h,'from','Start',['a1']);await chooseStop(h,'to','End',['b1']);
+ const j={legs:[{...leg,scheduledDepartureEpoch:now+10,departureEpoch:now+10,scheduledArrivalEpoch:now+600,arrivalEpoch:now+600,liveObservedEpoch:now}]};
+ h.respond(()=>[j]);await h.get('route-search-btn').click();
+ const root=h.get('route-results-list');
+ function controls(wrapper) {
+  const card=wrapper.children[0],pin=wrapper.querySelector('.trasa-pin-button');card.closest=()=>root;
+  wrapper.remove=()=>{root.children=root.children.filter(n=>n!==wrapper);};
+  return {card,pin,toggle:()=>card.emit('click',{target:{closest:s=>s==='.trasa-pin-button'?pin:null}})};
+ }
+ let c=controls(root.children[0]);await c.toggle();assert.equal(c.pin.ariaPressed,'false','collapsed card cannot pin');
+ c.card.classList.add('fullscreen-expanded');root.dataset.presentation='classic';
+ await c.toggle();assert.equal(c.pin.ariaPressed,'false','classic cannot pin');
+ root.dataset.presentation='new';await c.toggle();assert.equal(c.pin.ariaPressed,'true');
+ const original=root.children[0];await h.get('route-search-btn').click();
+ assert.notEqual(root.children[0],original);c=controls(root.children[0]);assert.equal(c.pin.ariaPressed,'false');
+ c.card.classList.add('fullscreen-expanded');await c.toggle();assert.equal(c.pin.ariaPressed,'true');
+ h.planner.leavePlanner();h.planner.enterPlanner();
+ assert.equal(c.pin.ariaPressed,'true','screen visits preserve the pin before departure');
+ h.setNow((now+11)*1000);[...h.intervals.values()][0]();
+ h.setNow((now+100)*1000);[...h.intervals.values()][0]();assert.equal(root.children.length,1);
+ h.planner.leavePlanner();assert.equal(h.intervals.size,0);
+ h.planner.enterPlanner();
+ assert.equal(root.children.length,1,'returning to Trasa keeps the pinned journey after departure');
+ assert.equal(c.pin.ariaPressed,'true');
+ await c.toggle();assert.equal(root.children.length,0,'manual unpin still restores expiration after return');
+ h.planner.leavePlanner();
+});

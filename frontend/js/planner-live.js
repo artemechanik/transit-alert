@@ -117,8 +117,8 @@ export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops, ref
                 const departure = firstRow.dataset.departureEpoch ? Number(firstRow.dataset.departureEpoch)
                     : new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(expectedDepartureMin / 60), expectedDepartureMin % 60, 0).getTime() / 1000;
                 const timing = journey ? journeyCountdown(journey, now.getTime() / 1000)
-                    : { minutes: Math.ceil((departure - now.getTime() / 1000) / 60), color: countdownColor(isLive, firstDelay) };
-                const html = countdownMarkup(timing);
+                    : { departure, minutes: Math.ceil((departure - now.getTime() / 1000) / 60), color: countdownColor(isLive, firstDelay) };
+                const html = countdownMarkup(timing, timeline.closest('#route-results-list')?.dataset.presentation);
 
                 let content = timerEl.querySelector('.trasa-timer-content');
                 if (!content) {

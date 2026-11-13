@@ -3,13 +3,22 @@ import { createPlanner } from '../../js/planner.js';
 import { createNavigation } from '../../js/navigation.js';
 const now = Math.floor(Date.now() / 1000);
 window.fixture = { ready: false, routeRequests: 0, headerBacks: 0 };
+// Advance application time without waiting for the departure grace period.
+const NativeDate = window.Date;
+let clockOffset = 0;
+window.Date = class extends NativeDate {
+    constructor(...args) { super(...(args.length ? args : [NativeDate.now() + clockOffset])); }
+    static now() { return NativeDate.now() + clockOffset; }
+};
+fixture.advanceClock = seconds => { clockOffset += seconds * 1000; };
 window.fetch = async url => ({ ok: true, json: async () => {
     if (url.includes('/route/complex')) {
         fixture.routeRequests++;
         return Array.from({ length: 12 }, (_,i) => ({ legs: [{ tripId: `t${i}`, route: '7',
             fromStopId: 'a', toStopId: 'b', fromStopName: 'A 01', toStopName: 'B 01',
             departureMin: 600+i, arrivalMin: 620+i,
-            scheduledDepartureEpoch: now+3600+i*60, departureEpoch: now+3600+i*60 }] }));
+            scheduledDepartureEpoch: now+3600+i*60, departureEpoch: now+3600+i*60,
+            scheduledArrivalEpoch: now+4800+i*60, arrivalEpoch: now+4800+i*60 }] }));
     }
     if (url.includes('upcoming-stops')) return { boardingStopSequence: 1,
         stops: Array.from({ length: 30 }, (_,i) => ({ stopId: i===0?'a':i===29?'b':`s${i}`,
@@ -28,7 +37,8 @@ const planner = createPlanner({ apiBaseUrl: '', getMapTilerKey: () => '',
     onBack() { fixture.headerBacks++; nav.back(); } });
 nav = createNavigation({ closeVehicleMapModal() {}, stopVehicleTracking() {}, enterStops() {},
     enterPlanner: () => planner.enterPlanner(), leavePlanner: () => planner.leavePlanner(), openReports() {}, closeForms() {},
-    closePlannerAccordion: () => planner.closePlannerAccordion(), closeDepartureAccordion() {} });
+    closePlannerAccordion: () => planner.closePlannerAccordion(), closeDepartureAccordion() {},
+    isPlannerAccordionOpen: () => planner.isPlannerAccordionOpen() });
 nav.initNavigation(); history.replaceState({screen:'route'}, '');
 planner.initPlanner(); planner.enterPlanner(); document.querySelector('#recent-routes-list .stop-card').click();
 await new Promise(resolve => setTimeout(resolve,60)); document.querySelector('#trasa-presentation-new').click();

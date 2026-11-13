@@ -41,7 +41,15 @@ export function initialWalkRisk(journey, now) {
 
 export function createResultsState() {
     const entries = new Map();
-    return { entries, update(journeys, now) {
+    return { entries,
+        setPinned(key, pinned) {
+            const entry = entries.get(key);
+            if (!entry || entry.expired) return false;
+            entry.pinned = !!pinned;
+            return true;
+        },
+        clearPins() { for (const entry of entries.values()) entry.pinned = false; },
+        update(journeys, now) {
         for (const journey of journeys) {
             const key = journeyKey(journey), old = entries.get(key);
             if (old?.expired) continue;
@@ -60,7 +68,7 @@ export function createResultsState() {
                 if (deadline > now && hasFreshLive(first, now)) entry.departedAt = null;
                 else if (deadline <= now && entry.departedAt == null) entry.departedAt = now;
             }
-            entry.expired = entry.departedAt != null && now >= entry.departedAt + 60;
+            entry.expired = !entry.pinned && entry.departedAt != null && now >= entry.departedAt + 60;
         }
         // Keep tombstones only through their service day, bounded by this search.
         for (const [key, entry] of entries) {

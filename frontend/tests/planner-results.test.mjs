@@ -90,3 +90,35 @@ test('walking warning uses the displayed 1.8 correction and rounding without aff
  assert.equal(initialWalkRisk(j,1000),false);
  j.legs.shift();assert.equal(initialWalkRisk(j,1000),false);
 });
+
+test('pinning before or after departure retains the keyed entry through missing results and stale LIVE', () => {
+ for (const pinAfterDeparture of [false,true]) {
+  const state=createResultsState(),j=journey(),key=journeyKey(j),node={};
+  state.update([j],999);state.entries.get(key).node=node;
+  if(pinAfterDeparture) state.update([],1020);
+  assert.equal(state.setPinned(key,true),true);
+  state.update([],1021);state.update([journey(true)],2000);state.update([],90000);
+  const entry=state.entries.get(key);
+  assert.equal(entry.pinned,true);assert.equal(entry.expired,false);assert.equal(entry.node,node);
+  assert.equal(state.setPinned('unknown',true),false);
+ }
+});
+
+test('unpinning resumes the original 60 second deadline without resurrecting expired results', () => {
+ const state=createResultsState(),j=journey(),key=journeyKey(j);
+ state.update([j],999);state.setPinned(key,true);state.update([],1000);
+ state.setPinned(key,false);state.update([],1059);assert.equal(state.entries.get(key).expired,false);
+ state.setPinned(key,true);state.update([],1200);assert.equal(state.entries.get(key).expired,false);
+ state.setPinned(key,false);state.update([],1200);assert.equal(state.entries.get(key).expired,true);
+ assert.equal(state.setPinned(key,true),false);
+ state.update([j],1201);assert.equal(state.entries.get(key).expired,true);
+});
+
+test('clearing session pins and creating a new search leave legacy expiration intact', () => {
+ const state=createResultsState(),j=journey(),key=journeyKey(j);
+ state.update([j],1000);state.setPinned(key,true);state.update([],1200);
+ state.clearPins();state.update([],1200);
+ assert.equal(state.entries.get(key).pinned,false);assert.equal(state.entries.get(key).expired,true);
+ const next=createResultsState();next.update([j],1200);
+ assert.ok(!next.entries.get(key).pinned);next.update([],1260);assert.equal(next.entries.get(key).expired,true);
+});

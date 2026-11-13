@@ -24,9 +24,18 @@ export function createPlanner({
     });
     const { buildJourneyCard, updateJourneyCard, refreshOpenTrasaPassedStops, closePlannerAccordion, disposeJourneyCard, suspendPlannerMaps, resumePlannerMaps } = createPlannerCards({
         apiBaseUrl, showVehicleOnMap, addMinutesToTime, onAccordionOpen, onBack, getRoutePoints, inlineMapServices,
+        getPresentation: () => routeResultsBox?.dataset.presentation,
         onInlineOpen: node => cardPosition?.open(node),
         onInlineClose: node => cardPosition?.close(node),
-        onInlineLayout: () => cardPosition?.sync()
+        onInlineLayout: () => cardPosition?.sync(),
+        onPinToggle: node => {
+            const key = node.dataset.journeyKey;
+            const entry = state.entries.get(key);
+            if (entry && state.setPinned(key, !entry.pinned)) {
+                updateJourneyCard(node, entry.journey, !!entry.pinned);
+                renderResults([]);
+            }
+        }
     });
     const { enterPlannerLive, leavePlanner, updateTrasaCountdowns, startPlannerPolling } = createPlannerLive({
         apiBaseUrl, refreshOpenTrasaPassedStops, refreshResults, tickResults: () => { if (active && query) renderResults([]); }
@@ -103,9 +112,12 @@ export function createPlanner({
         }
         const ordered = [...entries.entries()].filter(([, e]) => !e.expired)
             .sort((a, b) => a[1].journey.legs.find(l => l.route !== 'Пішки').departureEpoch - b[1].journey.legs.find(l => l.route !== 'Пішки').departureEpoch);
-        // Departed wrappers remain at their existing index while other slots update.
+        // Pinned and departed wrappers retain their list slot while other results update.
         const pinned = [...routeResultsBox.children].map((node, index) => ({ node, index }))
-            .filter(({node}) => entries.get(node.dataset.journeyKey)?.departedAt != null && !entries.get(node.dataset.journeyKey)?.expired);
+            .filter(({node}) => {
+                const entry = entries.get(node.dataset.journeyKey);
+                return entry && !entry.expired && (entry.pinned || entry.departedAt != null);
+            });
         for (const [key, entry] of entries) {
             if (!deferOrder && entry.expired && entry.node && !entry.removing) {
                 entry.removing = true;
@@ -131,7 +143,7 @@ export function createPlanner({
                 entry.node.dataset.journeyKey = key;
                 routeResultsBox.appendChild(entry.node);
             }
-            updateJourneyCard(entry.node, entry.journey);
+            updateJourneyCard(entry.node, entry.journey, !!entry.pinned);
             entry.node.classList.toggle('trasa-departed', entry.departedAt != null);
         }
         const desired = ordered.map(([,e]) => e.node).filter(n => n && !pinned.some(p => p.node === n));
@@ -148,6 +160,7 @@ export function createPlanner({
     }
     function enterPlanner() {
         active = true;
+        if (query) renderResults([]);
         cardPosition?.sync();
         resumePlannerMaps();
         enterPlannerLive();
@@ -294,5 +307,9 @@ export function createPlanner({
         });
         routeResultsBox.addEventListener('touchcancel', clearGesture);
     }
-    return { initPlanner, enterPlanner, leavePlanner: leave, closePlannerAccordion, renderRecentRoutes };
+    function isPlannerAccordionOpen() {
+        const card = routeResultsBox?.querySelector('.trasa-card.fullscreen-expanded');
+        return !!card && !card.closest('.trasa-result-exit');
+    }
+    return { initPlanner, enterPlanner, leavePlanner: leave, closePlannerAccordion, isPlannerAccordionOpen, renderRecentRoutes };
 }

@@ -52,6 +52,7 @@ function startApp() {
       openReports: () => reports.openReports(),
       closeForms: () => reports.closeForms(),
       closePlannerAccordion: () => planner.closePlannerAccordion(),
+      isPlannerAccordionOpen: () => planner.isPlannerAccordionOpen(),
       closeDepartureAccordion: () => stops.closeDepartureAccordion()
     });
 

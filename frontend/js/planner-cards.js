@@ -38,7 +38,7 @@ export function getLiveStatusBadge(isLive, delayMinutes) {
 }
 
 export function createPlannerCards({
-    apiBaseUrl, showVehicleOnMap, addMinutesToTime, onAccordionOpen, onBack, getRoutePoints, inlineMapServices, onInlineOpen, onInlineClose, onInlineLayout
+    apiBaseUrl, showVehicleOnMap, addMinutesToTime, onAccordionOpen, onBack, getRoutePoints, inlineMapServices, onInlineOpen, onInlineClose, onInlineLayout, onPinToggle, getPresentation = () => 'classic'
 }) {
     function splitStopName(fullName) {
         if (!fullName) return { name: '', code: '' };
@@ -96,7 +96,7 @@ export function createPlannerCards({
 
         const delay = firstTransitLeg.delayMinutes || 0;
         const isLive = firstTransitLeg.isRealTime || false;
-        const timerHtml = countdownMarkup(journeyCountdown(journey, Date.now() / 1000));
+        const timerHtml = countdownMarkup(journeyCountdown(journey, Date.now() / 1000), getPresentation());
 
         const startName = firstTransitLeg.fromStopName;
         const endName = lastTransitLeg.toStopName;
@@ -178,6 +178,7 @@ export function createPlannerCards({
         card.innerHTML = `
         <button class="close-trasa-btn" title="Zamknij">✕</button>
         ${compactHeaderHtml}
+        <button type="button" class="trasa-pin-button" aria-pressed="false" title="Zachowaj połączenie na liście po odjeździe">📌 Przypnij podróż</button>
         <div class="trasa-middle-scroll" style="display: none;"></div>
         <div class="trasa-details">
             ${timelineHtml}
@@ -185,6 +186,12 @@ export function createPlannerCards({
     `;
 
         card.addEventListener('click', (e) => {
+            if (e.target.closest('.trasa-pin-button')) {
+                e.stopPropagation();
+                if (card.classList.contains('fullscreen-expanded')
+                    && card.closest('#route-results-list')?.dataset.presentation === 'new') onPinToggle?.(wrapper);
+                return;
+            }
             if (e.target.closest('.dep-expand-map-btn')) return;
             const current = wrapper.journey || journey;
             toggleTrasaExpand(card, current.legs, current.legs.filter(l => l.route !== "Пішки" && l.route));
@@ -195,12 +202,19 @@ export function createPlannerCards({
         return wrapper;
     }
 
-    function updateJourneyCard(wrapper, journey) {
+    function updateJourneyCard(wrapper, journey, pinned = false) {
         wrapper.journey = journey;
+        wrapper.classList.toggle('trasa-pinned', pinned);
+        const pin = wrapper.querySelector('.trasa-pin-button');
+        if (pin) {
+            pin.ariaPressed = String(pinned);
+            pin.textContent = pinned ? '📌 Odepnij podróż' : '📌 Przypnij podróż';
+            pin.title = pinned ? 'Przestań zachowywać połączenie na liście' : 'Zachowaj połączenie na liście po odjeździe';
+        }
         const now = Date.now() / 1000;
         updateExpandedLive(wrapper, journey, addMinutesToTime, now);
         const timer = wrapper.querySelector('.trasa-timer-content');
-        const timerHtml = countdownMarkup(journeyCountdown(journey, now));
+        const timerHtml = countdownMarkup(journeyCountdown(journey, now), getPresentation());
         if (timer && timer.innerHTML !== timerHtml) timer.innerHTML = timerHtml;
         const walkWarning = wrapper.querySelector('.trasa-initial-walk-warn');
         if (walkWarning) walkWarning.hidden = !initialWalkRisk(journey, now);

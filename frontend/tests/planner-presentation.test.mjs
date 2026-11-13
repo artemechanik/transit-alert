@@ -90,3 +90,14 @@ test('new is the default; only an explicit classic URL selects the retained old 
   assert.equal(h.root.dataset.presentation,'classic');assert.equal(h.buttons.classic.ariaPressed,'true');
   h.view.select('new');assert.equal(h.root.dataset.presentation,'new');
 });
+
+test('switching presentation immediately updates the same departed timer without rebuilding the card', async () => {
+  const h=await setup(),node=h.visible,timer={innerHTML:''};
+  node.journey={legs:[{route:'7',scheduledDepartureEpoch:1000}]};
+  const query=node.querySelector;
+  node.querySelector=selector=>selector==='.trasa-timer-content'?timer:query(selector);
+  h.view.select('new');assert.match(timer.innerHTML,/>ODJAZD</);assert.doesNotMatch(timer.innerHTML,/&lt;1/);
+  h.view.select('classic');assert.match(timer.innerHTML,/&lt;1/);assert.doesNotMatch(timer.innerHTML,/ODJAZD/);
+  h.view.select('new');assert.match(timer.innerHTML,/>ODJAZD</);
+  assert.equal(node.querySelector('.trasa-timer-content'),timer);assert.equal(node.card.expanded,true);
+});

@@ -83,3 +83,43 @@ test('header retains less-than-one-minute label at zero and after departure', ()
         assert.doesNotMatch(html,/Teraz/);
     }
 });
+
+test('Nowa changes exactly at departure from the existing countdown to the boarding departure time', () => {
+    const scheduled=Date.parse('2026-11-13T09:00:00Z')/1000;
+    const predicted=scheduled+120;
+    const journey={legs:[{...leg,scheduledDepartureEpoch:scheduled,departureEpoch:predicted,liveObservedEpoch:predicted-120}]};
+    for(const now of [predicted-61,predicted-1]) {
+        const value=timing.journeyCountdown(journey,now);
+        assert.equal(timing.countdownMarkup(value,'new'),timing.countdownMarkup(value),'pre-departure markup stays identical');
+    }
+    for(const now of [predicted,predicted+1,predicted+60]) {
+        const html=timing.countdownMarkup(timing.journeyCountdown(journey,now),'new');
+        assert.match(html,/>ODJAZD</);assert.match(html,/>10:02</);
+        assert.doesNotMatch(html,/&lt;1|minuta|TERAZ|ODJECHAŁ/);
+    }
+});
+
+test('Nowa uses scheduled boarding time without a trustworthy LIVE forecast', () => {
+    const scheduled=Date.parse('2026-11-13T09:00:00Z')/1000, now=scheduled+200;
+    for(const patch of [{isRealTime:false},{liveObservedEpoch:undefined},{liveObservedEpoch:now-301},{liveObservedEpoch:now+1},{departureEpoch:null}]) {
+        const value=timing.journeyCountdown({legs:[{...leg,scheduledDepartureEpoch:scheduled,departureEpoch:scheduled+120,liveObservedEpoch:now,...patch}]},now);
+        assert.equal(value.live,false);
+        const html=timing.countdownMarkup(value,'new');
+        assert.match(html,/>ODJAZD</);assert.match(html,/>10:00</);
+        assert.match(html,/color:var\(--text-muted\)/);assert.doesNotMatch(html,/&lt;1|minuta/);
+    }
+});
+
+test('Nowa keeps the first boarding time on transfers; explicit segment timing and summer midnight stay correct', () => {
+    const firstEpoch=Date.parse('2026-07-13T21:58:00Z')/1000;
+    const first={...leg,isRealTime:false,scheduledDepartureEpoch:firstEpoch};
+    const next={...first,tripId:'second',scheduledDepartureEpoch:firstEpoch+600};
+    const journey={legs:[{route:'Пішки'},first,{route:'Пішки'},next]};
+    const now=firstEpoch+180;
+    const html=timing.countdownMarkup(timing.journeyCountdown(journey,now),'new');
+    assert.match(html,/>ODJAZD</);assert.match(html,/>23:58</);
+    assert.equal(timing.journeyCountdown(journey,now,1).minutes,7);
+    const nextHtml=timing.countdownMarkup(timing.journeyCountdown(journey,firstEpoch+601,1),'new');
+    assert.match(nextHtml,/>00:08</);
+    assert.match(timing.countdownMarkup(timing.journeyCountdown({legs:[{route:'7'}]},now),'new'),/—/);
+});

@@ -60,3 +60,6 @@ fb.py
 
 /lubus-roadmap.html
 /lubus-roadmap-progress.json
+
+# Generated image artifacts
+/generated_images/

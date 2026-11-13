@@ -7,6 +7,12 @@ export function legCountdown(leg, now) {
     return { live, departure, minutes: Number.isFinite(departure) ? Math.ceil((departure - now) / 60) : null };
 }
 
+export function departureClock(departure) {
+    return Number.isFinite(departure) ? new Date(departure * 1000).toLocaleTimeString('pl-PL', {
+        hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw'
+    }) : '—';
+}
+
 // Kotlin omits the default delayMinutes=0 from JSON; explicit null stays unknown.
 export function countdownColor(live, delayMinutes = 0) {
     if (!live || !Number.isFinite(delayMinutes)) return 'var(--text-muted)';
@@ -24,9 +30,7 @@ export function countdownMarkup({ minutes, color, departure }, presentation = 'c
     if (minutes === null) return `<span style="color:${color}">—</span>`;
     if (presentation === 'new' && minutes <= 0) {
         if (!Number.isFinite(departure)) return `<span style="color:${color}">—</span>`;
-        const clock = new Date(departure * 1000).toLocaleTimeString('pl-PL', {
-            hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw'
-        });
+        const clock = departureClock(departure);
         return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;height:38px;color:${color}"><span style="font-size:10px;font-weight:700;letter-spacing:.5px;opacity:.8">ODJAZD</span><span style="font-size:16px;font-weight:700;margin-top:2px">${clock}</span></div>`;
     }
     const count = Math.max(0, minutes);

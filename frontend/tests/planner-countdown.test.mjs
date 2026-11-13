@@ -123,3 +123,18 @@ test('Nowa keeps the first boarding time on transfers; explicit segment timing a
     assert.match(nextHtml,/>00:08</);
     assert.match(timing.countdownMarkup(timing.journeyCountdown({legs:[{route:'7'}]},now),'new'),/—/);
 });
+
+test('Nowa boarding clock matches precise departure with an early fractional-minute prediction', async () => {
+ const {updateBoardingTime}=await loadBrowserModule(url('planner-cards'),{});
+ const scheduled=Date.parse('2026-11-13T09:05:00Z')/1000,now=scheduled-60;
+ const first={...leg,departureMin:605,scheduledDepartureEpoch:scheduled,departureEpoch:scheduled-30,liveObservedEpoch:now};
+ const node={innerHTML:''},wrapper={querySelector:()=>node},journey={legs:[{route:'Пішки'},first]};
+ updateBoardingTime(wrapper,journey,now,'new');assert.equal(node.innerHTML,'10:04');
+ assert.equal(timing.journeyCountdown(journey,now).minutes,1);
+ assert.equal(timing.departureClock(timing.journeyCountdown(journey,now).departure),'10:04');
+ updateBoardingTime(wrapper,journey,now,'classic');assert.equal(node.innerHTML,'10:05');
+ for(const patch of [{isRealTime:false},{liveObservedEpoch:now-301},{liveObservedEpoch:now+1}]) {
+  updateBoardingTime(wrapper,{legs:[{...first,...patch}]},now,'new');assert.equal(node.innerHTML,'10:05');
+ }
+ updateBoardingTime(wrapper,{legs:[{route:'7'}]},now,'new');assert.equal(node.innerHTML,'—');
+});

@@ -1,7 +1,7 @@
 import { journeyCountdown, countdownMarkup, countdownColor } from './planner-countdown.js';
 import { assessTransfer } from './planner-transfer.js';
 import { apiFetch } from './backend-connection.js';
-import { coloredTimeHtml, getLiveStatusBadge } from './planner-cards.js';
+import { coloredTimeHtml, getLiveStatusBadge, updateBoardingTime } from './planner-cards.js';
 
 // Власник LIVE-сесії, запиту затримок і таймера Trasa.
 export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops, refreshResults, tickResults }) {
@@ -80,15 +80,20 @@ export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops, ref
 
             // 3. Кожен рядок бере затримку СВОГО рейсу. Якщо рейс зараз без GPS —
             // лишаємо останню відому затримку, а не скидаємо в 0
-            rows.forEach(row => {
+            const wrapper = timeline.closest('.trasa-wrapper');
+            const presentation = timeline.closest('#route-results-list')?.dataset.presentation;
+            rows.forEach((row, index) => {
                 const info = liveDelays[row.dataset.tripId];
                 if (info && info.isRealTime) {
                     row.dataset.delay = info.delayMinutes;
                     row.dataset.live = 'true';
                 }
                 const timeEl = row.querySelector('.time');
-                if (timeEl) timeEl.innerHTML = coloredTimeHtml(rowLiveMin(row), parseInt(row.dataset.delay, 10));
+                if (timeEl && !(index === 0 && presentation === 'new' && wrapper?.journey)) {
+                    timeEl.innerHTML = coloredTimeHtml(rowLiveMin(row), parseInt(row.dataset.delay, 10));
+                }
             });
+            if (presentation === 'new' && wrapper?.journey) updateBoardingTime(wrapper, wrapper.journey, now.getTime() / 1000, presentation);
 
             // 4. Passenger-facing risk shared with LIVE. Routing eligibility is unchanged.
             rows.forEach((row, k) => {

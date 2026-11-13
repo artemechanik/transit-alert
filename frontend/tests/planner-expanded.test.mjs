@@ -108,7 +108,7 @@ test('boarding countdown uses fresh predictions and falls back to scheduled epoc
 
 test('transfer advice uses platform IDs, escapes names and never assumes missing IDs match', async () => {
     const m=await load();
-    const first={...leg,toStopId:'platform-01'}, next={...leg,route:'7',fromStopId:'platform-01'};
+    const first={...leg,toStopId:'platform-01'}, next={...leg,route:'7',fromStopId:'platform-01',scheduledDepartureEpoch:Date.parse('2026-11-12T23:10:00Z')/1000};
     const render=(patch={})=>m.renderExpandedLive({legs:[first,{...next,...patch}]},[],0,1000);
     assert.match(render(),/Zostań na tym samym przystanku/);
     assert.match(render(),/Wsiądź do 7 · według rozkładu<\/dt><dd><time>00:10<\/time>/);
@@ -145,7 +145,7 @@ test('LIVE omits repeated first-leg stops but retains the manually selected tran
 test('prototype transfer shows departure, walking-adjusted waiting and risk without mutating results', async () => {
     const m=await load();
     const first={...leg,toStopId:'a',toStopName:'Park 02',arrivalMin:1185};
-    const next={...leg,tripId:'next',fromStopId:'b',fromStopName:'Park 04',route:'7',departureMin:1189};
+    const next={...leg,tripId:'next',fromStopId:'b',fromStopName:'Park 04',route:'7',departureMin:1189,scheduledDepartureEpoch:Date.parse('2026-11-13T18:49:00Z')/1000};
     const journey={legs:[first,{route:'Пішки',departureMin:1185,arrivalMin:1187},next]};
     const before=JSON.stringify(journey);
     let html=m.renderExpandedLive(journey,[],0,1000);
@@ -169,7 +169,7 @@ test('prototype transfer label sits above time and omits LIVE while retaining sc
     const m=await load();
     const current={...leg,toStopId:'a',toStopName:'Long platform name 02',arrivalMin:600,
         isRealTime:true,departureEpoch:1000,liveObservedEpoch:1000};
-    const next={...current,route:'7',fromStopId:'a',departureMin:605};
+    const next={...current,route:'7',fromStopId:'a',departureMin:605,departureEpoch:Date.parse('2026-11-13T09:05:00Z')/1000,scheduledDepartureEpoch:Date.parse('2026-11-13T09:05:00Z')/1000};
     let html=m.renderExpandedLive({legs:[current,next]},[],0,1000);
     assert.doesNotMatch(html,/będziesz około|lubus-transfer-heading/);
     assert.match(html, /Wsiądź do 7<\/dt><dd><time>10:05<\/time>/);
@@ -284,4 +284,20 @@ test('leave advice uses displayed approach, current departure and schedule label
     assert.match(html,/lubus-walk-risk/);assert.doesNotMatch(html,/lubus-journey-advice|Wyrusz/);
     delete first.scheduledDepartureEpoch;
     assert.doesNotMatch(m.renderExpandedLive(journey,[],0,1000),/Wyrusz/);
+});
+
+test('transfer boarding clock uses the next segment precise forecast and updates with LIVE trust', async () => {
+ const m=await load(),scheduled=Date.parse('2026-11-13T09:05:00Z')/1000,now=scheduled-60;
+ const first={...leg,route:'1',scheduledDepartureEpoch:scheduled-1800,isRealTime:false};
+ const next={...leg,route:'7',tripId:'next',departureMin:605,scheduledDepartureEpoch:scheduled,departureEpoch:scheduled-30,isRealTime:true,liveObservedEpoch:now};
+ const third={...leg,route:'8',tripId:'third',scheduledDepartureEpoch:scheduled+6900,isRealTime:false};
+ const journey={legs:[first,next,third]};
+ assert.match(m.renderExpandedLive(journey,[],0,now),/Wsiądź do 7<\/dt><dd><time>10:04<\/time>/);
+ next.departureEpoch=scheduled-90;
+ assert.match(m.renderExpandedLive(journey,[],0,now),/<time>10:03<\/time>/);
+ next.liveObservedEpoch=now-301;
+ assert.match(m.renderExpandedLive(journey,[],0,now),/Wsiądź do 7 · według rozkładu<\/dt><dd><time>10:05<\/time>/);
+ const selected=m.renderExpandedLive(journey,[],1,now);
+ assert.match(selected,/1 minutę/);assert.match(selected,/Wsiądź do 8 · według rozkładu<\/dt><dd><time>12:00<\/time>/);
+ assert.doesNotMatch(selected,/<time>10:03<\/time>|<time>10:04<\/time>/);
 });

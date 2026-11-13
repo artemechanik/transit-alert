@@ -137,11 +137,12 @@ test('periodic LIVE timer refresh preserves Nowa departure time and classic fall
   const epoch=Date.parse('2026-11-13T09:02:00Z')/1000;
   let seconds=epoch-1;
   class Clock extends Date { constructor(...args){super(...(args.length?args:[seconds*1000]));} static now(){return seconds*1000;} }
-  const first={route:'7',tripId:'first',departureEpoch:epoch,scheduledDepartureEpoch:epoch-120,isRealTime:true,liveObservedEpoch:epoch-120};
+  const first={route:'7',tripId:'first',departureMin:602,departureEpoch:epoch,scheduledDepartureEpoch:epoch-120,isRealTime:true,liveObservedEpoch:epoch-120};
   const wrapper={journey:{legs:[first,{...first,tripId:'second',departureEpoch:epoch+600,scheduledDepartureEpoch:epoch+600}]}};
-  const root={dataset:{presentation:'new'}},content={innerHTML:''},badge={};
+  const root={dataset:{presentation:'new'}},content={innerHTML:''},badge={},boarding={innerHTML:''};
+  wrapper.querySelector=s=>s==='.trasa-boarding-time'?boarding:null;
   const timer={querySelector:s=>s==='.trasa-timer-content'?content:s==='.trasa-live-blink'?badge:null};
-  const row={dataset:{tripId:'first',min:'602',delay:'0',delayInitial:'0',live:'true'},querySelector:()=>null};
+  const row={dataset:{tripId:'first',min:'602',delay:'0',delayInitial:'0',live:'true'},querySelector:s=>s==='.time'?boarding:null};
   const timeline={querySelectorAll:()=>[row],querySelector:s=>s==='.trasa-dep-min'?timer:null,
     closest:s=>s==='.trasa-wrapper'?wrapper:s==='#route-results-list'?root:null};
   const {createPlannerLive}=await loadBrowserModule(new URL('../js/planner-live.js',import.meta.url),{
@@ -152,9 +153,10 @@ test('periodic LIVE timer refresh preserves Nowa departure time and classic fall
   for(const offset of [0,1,60]) {
     seconds=epoch+offset;await live.updateTrasaCountdowns();
     assert.match(content.innerHTML,/>ODJAZD</);assert.match(content.innerHTML,/>10:02</);
+    assert.equal(boarding.innerHTML,'10:02','periodic refresh must not overwrite the precise boarding time');
     assert.doesNotMatch(content.innerHTML,/&lt;1/);
   }
-  first.liveObservedEpoch=seconds-301;await live.updateTrasaCountdowns();assert.match(content.innerHTML,/>10:00</);
+  first.liveObservedEpoch=seconds-301;await live.updateTrasaCountdowns();assert.match(content.innerHTML,/>10:00</);assert.equal(boarding.innerHTML,'10:00');
   root.dataset.presentation='classic';await live.updateTrasaCountdowns();assert.match(content.innerHTML,/&lt;1/);
   live.leavePlanner();
 });

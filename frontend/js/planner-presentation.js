@@ -1,5 +1,6 @@
 import { captureListAnchor, restoreListAnchor } from './list-motion.js';
 import { journeyCountdown, countdownMarkup } from './planner-countdown.js';
+import { updateBoardingTime } from './planner-cards.js';
 
 // Both presentations use the same keyed wrappers, accordion and LIVE DOM contract.
 // Changing presentation never rebuilds cards or starts a data request.
@@ -19,7 +20,11 @@ export function createPlannerPresentation(root, motion, buttons, cardPosition, s
         }
         for (const node of root.children) {
             const timer = node.querySelector('.trasa-timer-content');
-            if (node.journey && timer) timer.innerHTML = countdownMarkup(journeyCountdown(node.journey, Date.now() / 1000), current);
+            if (node.journey) {
+                const now = Date.now() / 1000;
+                if (timer) timer.innerHTML = countdownMarkup(journeyCountdown(node.journey, now), current);
+                updateBoardingTime(node, node.journey, now, current);
+            }
         }
         // The entry identified by journeyKey retains its exact DOM, including
         // loaded stops, internal scroll and the navigation history overlay.

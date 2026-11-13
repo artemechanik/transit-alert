@@ -1,4 +1,4 @@
-import { legCountdown, journeyCountdown } from './planner-countdown.js';
+import { legCountdown, journeyCountdown, departureClock } from './planner-countdown.js';
 import { assessTransfer, transferPlatformChange, transferWalkMinutes } from './planner-transfer.js';
 import { hasFreshLive, boardingDeadline, initialWalkRisk, initialWalkMinutes } from './planner-results.js';
 import { passengerLiveState } from './planner-live-state.js';
@@ -8,8 +8,6 @@ import { captureListAnchor, restoreListAnchor } from './list-motion.js';
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const transitLegs = journey => journey.legs.filter(leg => leg.route && leg.route !== 'Пішки');
-const time = minutes => Number.isFinite(minutes)
-    ? `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}` : '—';
 
 const quantity = (value, one, few, many) => `${value} ${value === 1 ? one
     : value % 10 >= 2 && value % 10 <= 4 && (value % 100 < 12 || value % 100 > 14) ? few : many}`;
@@ -63,7 +61,7 @@ function transferHint(journey, transit, index, now) {
             : `${duration(Math.floor(transfer.waitingMin))} oczekiwania${platformChange === 'different' ? ' po przejściu' : ''}.`;
     return `<section class="lubus-transfer-hint" data-risk="${transfer.risky}" aria-label="Przesiadka">
         ${transfer.risky ? '<p class="lubus-transfer-risk" role="status">⚠ Ryzykowna przesiadka</p>' : ''}
-        <dl><div><dt>Wsiądź do ${escapeHtml(next.route)}${hasFreshLive(next, now) ? '' : ' · według rozkładu'}</dt><dd><time>${time(next.departureMin)}</time></dd></div></dl>
+        <dl><div><dt>Wsiądź do ${escapeHtml(next.route)}${hasFreshLive(next, now) ? '' : ' · według rozkładu'}</dt><dd><time>${departureClock(legCountdown(next, now).departure)}</time></dd></div></dl>
         <p class="lubus-change-note">${wait ? `<strong>${wait}</strong> ` : ''}${instruction}${walking}</p>
     </section>`;
 }
@@ -163,7 +161,7 @@ export function bindExpandedPanels(panel, mapActions) {
 
 export function updateExpandedLive(wrapper, journey, addMinutesToTime, now = Date.now() / 1000) {
     const timeline = wrapper.querySelector('.trasa-middle-scroll')?.lubusTimeline;
-    timeline?.predictions(journey);
+    timeline?.predictions(journey, now);
     wrapper.querySelectorAll('.lubus-stop-time').forEach(node => {
         const tripId = node.closest('.trasa-leg-stops').dataset.tripId;
         const leg = transitLegs(journey).find(leg => leg.tripId === tripId);

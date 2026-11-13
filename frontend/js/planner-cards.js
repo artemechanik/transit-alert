@@ -1,4 +1,4 @@
-import { journeyCountdown, countdownMarkup } from './planner-countdown.js';
+import { legCountdown, journeyCountdown, countdownMarkup, departureClock } from './planner-countdown.js';
 import { assessTransfer, transferPlatformChange, transferWalkMinutes } from './planner-transfer.js';
 import { setupJourneyTimeline } from './planner-timeline.js';
 import { expandedMarkup, bindExpandedPanels, updateExpandedLive, preserveInlineAnchor } from './planner-expanded.js';
@@ -13,10 +13,22 @@ function formatTime(minutes) {
 }
 
 export function coloredTimeHtml(min, delay) {
-    const timeStr = formatTime(min);
+    return colorTime(formatTime(min), delay);
+}
+
+function colorTime(timeStr, delay) {
     if (delay > 0) return `<span style="color: var(--danger); font-weight: 700;">${timeStr}</span>`;
     if (delay < 0) return `<span style="color: var(--early); font-weight: 700;">${timeStr}</span>`;
     return timeStr;
+}
+
+export function updateBoardingTime(wrapper, journey, now, presentation) {
+    const first = journey.legs.find(leg => leg.route && leg.route !== 'Пішки');
+    const time = wrapper.querySelector('.trasa-boarding-time');
+    if (!first || !time) return;
+    const clock = presentation === 'new' ? departureClock(legCountdown(first, now).departure) : formatTime(first.departureMin);
+    const html = colorTime(clock, first.delayMinutes || 0);
+    if (time.innerHTML !== html) time.innerHTML = html;
 }
 
 export function getLiveStatusBadge(isLive, delayMinutes) {
@@ -56,6 +68,7 @@ export function createPlannerCards({
     }
 
     function buildJourneyCard(journey) {
+        const now = Date.now() / 1000;
         const legs = journey.legs;
         if (!legs || legs.length === 0) return null;
 
@@ -86,7 +99,9 @@ export function createPlannerCards({
         };
 
 
-        const depTime = coloredTimeHtml(firstTransitLeg.departureMin, firstTransitLeg.delayMinutes || 0);
+        const depTime = getPresentation() === 'new'
+            ? colorTime(departureClock(legCountdown(firstTransitLeg, now).departure), firstTransitLeg.delayMinutes || 0)
+            : coloredTimeHtml(firstTransitLeg.departureMin, firstTransitLeg.delayMinutes || 0);
         const arrTime = coloredTimeHtml(lastTransitLeg.arrivalMin, lastTransitLeg.delayMinutes || 0);
         // Рахуємо суто час від посадки в перший автобус до висадки з останнього
         // departureMin/arrivalMin від бекенда вже з урахуванням затримки
@@ -96,7 +111,7 @@ export function createPlannerCards({
 
         const delay = firstTransitLeg.delayMinutes || 0;
         const isLive = firstTransitLeg.isRealTime || false;
-        const timerHtml = countdownMarkup(journeyCountdown(journey, Date.now() / 1000), getPresentation());
+        const timerHtml = countdownMarkup(journeyCountdown(journey, now), getPresentation());
 
         const startName = firstTransitLeg.fromStopName;
         const endName = lastTransitLeg.toStopName;
@@ -112,7 +127,7 @@ export function createPlannerCards({
 
         // 1. ПЕРША ЗУПИНКА
         timelineHtml += `<div class="trasa-row" ${rowAttrs(firstTransitLeg, firstTransitLeg.departureMin)} style="${rowStyle}">
-        <div class="time" style="${timeStyle}">${depTime}</div>
+        <div class="time trasa-boarding-time" style="${timeStyle}">${depTime}</div>
         <div class="trasa-stop-dot" style="${dotWrapperStyle}"><div style="width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--card);"></div></div>
         <div class="stop-name" style="flex: 1; font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; padding-right: 65px;">${fromStop.name} ${fromStop.code ? `<span class="stop-code" style="color:var(--text); font-size:15px; font-weight:600;">(${fromStop.code})</span>` : ''}</div>
     </div>`;
@@ -212,6 +227,7 @@ export function createPlannerCards({
             pin.title = pinned ? 'Przestań zachowywać połączenie na liście' : 'Zachowaj połączenie na liście po odjeździe';
         }
         const now = Date.now() / 1000;
+        if (getPresentation() === 'new') updateBoardingTime(wrapper, journey, now, 'new');
         updateExpandedLive(wrapper, journey, addMinutesToTime, now);
         const timer = wrapper.querySelector('.trasa-timer-content');
         const timerHtml = countdownMarkup(journeyCountdown(journey, now), getPresentation());

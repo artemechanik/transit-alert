@@ -212,6 +212,8 @@ def run():
             departure_text = js('fixture.pinned.querySelector(".trasa-timer-content").textContent')
             departure_clock = js('new Date(fixture.pinned.journey.legs[0].scheduledDepartureEpoch*1000).toLocaleTimeString("pl-PL",{hour:"2-digit",minute:"2-digit",timeZone:"Europe/Warsaw"})')
             assert 'ODJAZD' in departure_text and departure_clock in departure_text and '<1' not in departure_text
+            assert js('fixture.pinned.querySelector(".trasa-boarding-time").textContent') == departure_clock
+            assert js('fixture.pinned.querySelector(".lubus-timeline-stop.key-stop time").textContent') == departure_clock
             assert abs(js('fixture.pinned.querySelector(".trasa-card").getBoundingClientRect().height')-js('fixture.cardHeightBeforeDeparture')) < 1
             js('document.querySelector("#trasa-presentation-classic").click()')
             assert '<1' in js('fixture.pinned.querySelector(".trasa-timer-content").textContent')

@@ -1098,3 +1098,30 @@ test('pins are unavailable to classic/collapsed cards, survive screen visits and
  await c.toggle();assert.equal(root.children.length,0,'manual unpin still restores expiration after return');
  h.planner.leavePlanner();
 });
+
+test('Nowa boarding HH:MM and countdown update together from precise per-leg timestamps, classic keeps minute fields', async () => {
+ const h=await setup(),scheduled=Date.parse('2026-11-13T09:05:00Z')/1000,now=scheduled-60;
+ h.setNow(now*1000);await chooseStop(h,'from','Start',['a1']);await chooseStop(h,'to','End',['b1']);
+ const first={...leg,delayMinutes:0,departureMin:605,arrivalMin:630,scheduledDepartureEpoch:scheduled,scheduledArrivalEpoch:scheduled+1500,departureEpoch:scheduled-30,liveObservedEpoch:now};
+ const next={...first,route:'8',tripId:'second',departureMin:660,scheduledDepartureEpoch:scheduled+3300,departureEpoch:scheduled+3270};
+ let journey={legs:[first,next]};h.respond(()=>[journey]);await h.get('route-search-btn').click();
+ const root=h.get('route-results-list'),wrapper=root.children[0],boarding=wrapper.querySelector('.trasa-boarding-time'),timer=wrapper.querySelector('.trasa-timer-content');
+ const card=wrapper.children[0];card.closest=()=>root;card.classList.add('fullscreen-expanded');
+ await card.emit('click',{target:{closest:s=>s==='.trasa-pin-button'?wrapper.querySelector(s):null}});
+ assert.equal(boarding.innerHTML,'10:04');assert.match(timer.innerHTML,/>1<\/span>/);
+ assert.match(wrapper.children[0].innerHTML,/class="time trasa-boarding-time"[^>]*>10:04</);
+ const timeline={selectedIndex:()=>1,observations:()=>[],predictions(){},visibilityChanged(){}};
+ wrapper.querySelector('.trasa-middle-scroll').lubusTimeline=timeline;
+ const calls=h.calls.length;h.setNow((scheduled-29)*1000);[...h.intervals.values()][0]();
+ assert.match(timer.innerHTML,/>ODJAZD</);assert.match(timer.innerHTML,/>10:04</);assert.equal(boarding.innerHTML,'10:04');assert.equal(h.calls.length,calls);
+ assert.match(wrapper.querySelector('.lubus-live').innerHTML,/55 minut/,'selected LIVE segment uses the second bus');
+ // A newer LIVE response moves only the first forecast into a different minute.
+ journey={legs:[{...first,departureEpoch:scheduled-90,liveObservedEpoch:scheduled-29},next]};
+ for(let i=0;i<14;i++)[...h.intervals.values()][0]();await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));
+ assert.equal(boarding.innerHTML,'10:03');assert.match(timer.innerHTML,/>10:03</);assert.equal(timeline.selectedIndex(),1);
+ // Staleness is handled on the same one-second tick, without waiting for another request.
+ h.setNow((scheduled+272)*1000);[...h.intervals.values()][0]();
+ assert.equal(boarding.innerHTML,'10:05');assert.match(timer.innerHTML,/>10:05</);
+ await h.get('trasa-presentation-classic').click();assert.equal(boarding.innerHTML,'10:05');assert.match(timer.innerHTML,/&lt;1/);
+ h.planner.leavePlanner();
+});

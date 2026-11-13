@@ -113,3 +113,34 @@ test('approach stops extend backwards without moving boarding or alighting label
     assert.equal(m.timelineRows(segment,1000).rows[0].stopSequence, 1);
     assert.doesNotMatch(m.renderJourneyTimeline([segment],0,1000), /Teraz|class="lubus-timeline-stop passed/);
 });
+
+test('each Wsiądź occurrence uses its own precise boarding timestamp, leaving other stop times unchanged', async () => {
+ const m=await load(),scheduled=Date.parse('2026-11-13T09:05:00Z')/1000,now=scheduled-60;
+ const all=[10,20,30,40].map(stopSequence=>({stopSequence,stopId:stopSequence===10||stopSequence===30?'repeat':'other',name:'Stop '+stopSequence,eta:'12:30'}));
+ const selected=all.slice(2);selected.boardingSequence=30;selected.timelineStops=all;
+ const first={...leg,tripId:'one',route:'1',departureMin:605,departureEpoch:scheduled-30,scheduledDepartureEpoch:scheduled,isRealTime:true,liveObservedEpoch:now};
+ const second={...first,tripId:'two',route:'2',departureEpoch:scheduled+3990,scheduledDepartureEpoch:scheduled+4020};
+ const segments=[{leg:first,stops:selected},{leg:second,stops:selected}];
+ const html=m.renderJourneyTimeline(segments,1,now);
+ assert.match(html,/data-segment="0"[\s\S]*?data-sequence="30"[\s\S]*?Wsiądź[\s\S]*?<time>10:04<\/time>/);
+ assert.match(html,/data-segment="1"[\s\S]*?data-sequence="30"[\s\S]*?Wsiądź[\s\S]*?<time>11:11<\/time>/);
+ assert.equal((html.match(/<time>12:30<\/time>/g)||[]).length,2);
+ first.liveObservedEpoch=now-301;
+ assert.match(m.renderJourneyTimeline(segments,1,now),/data-segment="0"[\s\S]*?<time>10:05<\/time>/);
+});
+
+test('timeline prediction refresh uses the same freshness instant as the outer countdown', async () => {
+ const scheduled=Date.parse('2026-11-13T09:05:00Z')/1000,now=scheduled-60;
+ class Clock extends Date { static now(){return (now+1)*1000;} }
+ const m=await loadBrowserModule(new URL('../js/planner-timeline.js',import.meta.url),{Date:Clock});
+ const first={...leg,departureEpoch:scheduled-30,scheduledDepartureEpoch:scheduled,isRealTime:true,liveObservedEpoch:now-300};
+ const rows=[{stopSequence:10,name:'Boarding',eta:'10:05'},{stopSequence:20,name:'End',eta:'10:20'}];rows.boardingSequence=10;
+ const view={innerHTML:'',querySelectorAll:()=>[],querySelector:()=>null,addEventListener(){}};
+ const scroller={scrollTop:0,getBoundingClientRect:()=>({top:0}),addEventListener(){}};
+ const panel={dataset:{lubusTab:'live'},closest:()=>({dataset:{presentation:'new'}}),querySelector:s=>s==='.lubus-timeline'?view:s==='.lubus-journey'?scroller:null};
+ m.setupJourneyTimeline(panel,[first],[rows],[]);
+ assert.match(view.innerHTML,/<time>10:05<\/time>/,'the later default clock sees stale LIVE');
+ panel.lubusTimeline.predictions({legs:[first]},now);
+ assert.match(view.innerHTML,/<time>10:04<\/time>/,'the shared tick keeps both displays on the same freshness boundary');
+ assert.equal(panel.lubusTimeline.selectedIndex(),0);
+});

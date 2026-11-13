@@ -156,13 +156,13 @@
     letter-spacing: 0.5px; /* Трохи розширюємо цифри для читабельності */
   }
   .status-delay { color: var(--danger); }       /* Червоний для запізнень */
-  .status-early { color: var(--blue); }         /* Синій для випередження */
+  .status-early { color: var(--early); }         /* Колір випередження */
   .status-ontime { color: #10b981; }            /* Зелений для вчасних */
   .status-sched { color: var(--text-muted); font-size: 12px; } /* Сірий для розкладу */
 
   .time-mod { margin-left: 4px; font-weight: 600; }
   .time-delay { color: var(--danger); }
-  .time-early { color: var(--blue); }
+  .time-early { color: var(--early); }
 
 /* --- БАЗОВИЙ СТИЛЬ ДЛЯ ВСІХ НОВИХ ІКОНОК --- */
 .svg-icon {

@@ -6,6 +6,7 @@
   :root {
       color-scheme: light;
     --blue: #4a9eff;
+    --early: #b56100;
     --blue-dark: #125499;
     --danger: #e53935;
     --danger-dark: #b71c1c;
@@ -23,6 +24,7 @@
     :root[data-theme="dark"] {
         color-scheme: dark;
       --blue: #b56100;
+      --early: #4a9eff;
       --blue-dark: #2f7fd6;
       --danger: #ff5449;
       --danger-dark: #d32f2f;

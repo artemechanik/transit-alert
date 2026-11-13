@@ -2,8 +2,8 @@ import { captureListAnchor, restoreListAnchor } from './list-motion.js';
 
 // Both presentations use the same keyed wrappers, accordion and LIVE DOM contract.
 // Changing presentation never rebuilds cards or starts a data request.
-export function createPlannerPresentation(root, motion, buttons, cardPosition) {
-    let current = 'classic';
+export function createPlannerPresentation(root, motion, buttons, cardPosition, search = typeof location === 'undefined' ? '' : location.search) {
+    let current = new URLSearchParams(search).get('trasa') === 'classic' ? 'classic' : 'new';
     function select(value) {
         if (value === current || !['classic', 'new'].includes(value)) return;
         motion.cancelScroll();
@@ -27,6 +27,7 @@ export function createPlannerPresentation(root, motion, buttons, cardPosition) {
     }
     root.dataset.presentation = current;
     for (const [name, button] of Object.entries(buttons)) {
+        button.ariaPressed = String(name === current);
         button.addEventListener('click', () => select(name));
     }
     return { select };

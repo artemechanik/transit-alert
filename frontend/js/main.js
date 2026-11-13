@@ -69,7 +69,9 @@ function startApp() {
     reports.initReports();
 
     const planner = createPlanner({
-      inlineMapServices: { maplibregl: window.maplibregl, themeService, getMapTilerKey },
+      inlineMapServices: { maplibregl: window.maplibregl, themeService, getMapTilerKey, animation: markerAnimation,
+        createVehicleElement: tripMap.createVehicleElement,
+        drawRouteShape: tripMap.drawRouteShape, renderRouteShape: tripMap.renderRouteShape },
       apiBaseUrl, getMapTilerKey, locationService, getNearbyStops,
       showVehicleOnMap: tripMap.showVehicleOnMap, showToast,
       addMinutesToTime: (timeStr, mins) => stops.addMinutesToTime(timeStr, mins),

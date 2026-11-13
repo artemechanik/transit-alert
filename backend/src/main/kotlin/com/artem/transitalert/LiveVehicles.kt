@@ -189,4 +189,4 @@ internal fun isLiveObservationFresh(timestamp: Long, now: Long): Boolean =
 internal fun tripLiveState(tripId: String, position: VehiclePosition?, now: Long): TripLiveState =
     TripLiveState(tripId, position?.currentStopSequence, position?.currentStatus,
         position?.timestamp?.takeIf { it > 0 }, position != null && isLiveObservationFresh(position.timestamp, now),
-        lat = position?.lat, lon = position?.lon)
+        lat = position?.lat, lon = position?.lon, bearing = position?.bearing)

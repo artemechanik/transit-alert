@@ -121,7 +121,7 @@ test('header and expanded LIVE share platform-change risk through both vehicles 
   const {renderExpandedLive}=await loadBrowserModule(new URL('../js/planner-expanded.js',import.meta.url),{});
   const live=createPlannerLive({refreshResults:async()=>{},refreshOpenTrasaPassedStops:async()=>{}});
   live.enterPlannerLive();await flush();
-  for(const [firstDelay,nextDelay,risky] of [[0,0,true],[0,1,false],[2,1,true],[0,2,false]]) {
+  for(const [firstDelay,nextDelay,risky] of [[0,0,true],[0,2,true],[0,3,false],[2,3,true],[0,4,false]]) {
     rows[1].dataset.delay=String(firstDelay);rows[2].dataset.delay=String(nextDelay);
     await live.updateTrasaCountdowns();
     const journey={legs:[{route:'7',toStopId:'a',arrivalMin:650+firstDelay},

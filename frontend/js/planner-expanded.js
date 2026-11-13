@@ -1,5 +1,6 @@
+import { legCountdown, journeyCountdown } from './planner-countdown.js';
 import { assessTransfer, transferPlatformChange, transferWalkMinutes } from './planner-transfer.js';
-import { hasFreshLive } from './planner-results.js';
+import { hasFreshLive, boardingDeadline, initialWalkRisk, initialWalkMinutes } from './planner-results.js';
 import { passengerLiveState } from './planner-live-state.js';
 import { captureListAnchor, restoreListAnchor } from './list-motion.js';
 
@@ -28,15 +29,19 @@ function tripDirection(segment, leg) {
     return name;
 }
 
-function boardingMetrics(leg, state, now) {
-    const fresh = hasFreshLive(leg, now);
-    const departure = fresh ? leg.departureEpoch : leg.scheduledDepartureEpoch;
-    const remaining = Number.isFinite(departure) ? Math.ceil((departure - now) / 60) : null;
+function boardingMetrics(journey, index, state, now) {
+    const { live: fresh, minutes: remaining, color } = journeyCountdown(journey, now, index);
     const count = state.state !== 'in_progress' && Number.isInteger(state.stopsToBoarding)
         ? `<div><dt>Do wejścia</dt><dd>${quantity(state.stopsToBoarding, 'przystanek', 'przystanki', 'przystanków')}</dd></div>` : '';
-    const eta = remaining === null ? '' : `<div><dt>${fresh ? 'Za około' : 'Według rozkładu'}</dt><dd>${remaining < 0
+    const eta = remaining === null ? '' : `<div><dt>${fresh ? 'Za około' : 'Według rozkładu'}</dt><dd style="color:${color}">${remaining < 0
         ? 'Termin odjazdu minął' : remaining === 0 ? 'Teraz' : quantity(remaining, 'minutę', 'minuty', 'minut')}</dd></div>`;
     return count || eta ? `<dl class="lubus-boarding-metrics">${count}${eta}</dl>` : '';
+}
+
+function initialWalkHint(journey, index, now) {
+    if (index !== 0 || !initialWalkRisk(journey, now)) return '';
+    const minutes = Math.max(0, legCountdown(transitLegs(journey)[0], now).minutes);
+    return `<div class="lubus-walk-risk" role="status"><strong>⚠ Możesz nie zdążyć na przystanek</strong><p>Odjazd ${minutes ? `za ${minutes} min` : 'teraz'} · dojście około ${initialWalkMinutes(journey)} min</p></div>`;
 }
 
 function transferHint(journey, transit, index, now) {
@@ -63,6 +68,27 @@ function transferHint(journey, transit, index, now) {
     </section>`;
 }
 
+function journeyAdvice(journey, leg, index, state, now) {
+    const fresh = hasFreshLive(leg, now);
+    const delay = leg.delayMinutes === undefined ? 0 : leg.delayMinutes;
+    const known = fresh && Number.isFinite(delay);
+    const tone = !known ? 'neutral' : delay > 0 ? 'late' : delay < 0 ? 'early' : 'on-time';
+    const punctuality = !known ? 'Brak aktualnych danych o punktualności.'
+        : delay > 0 ? `Pojazd ma ${delay} min opóźnienia.`
+            : delay < 0 ? `Pojazd jedzie ${Math.abs(delay)} min przed rozkładem.`
+                : 'Pojazd jedzie zgodnie z rozkładem.';
+    const walk = initialWalkMinutes(journey);
+    const remaining = boardingDeadline(journey, now) - now - walk * 60;
+    let leave = '';
+    if (index === 0 && state.state !== 'in_progress' && walk > 0 && Number.isFinite(remaining) && remaining >= 0) {
+        const minutes = Math.floor(remaining / 60);
+        leave = remaining === 0 ? 'Wyrusz teraz.' : minutes < 1 ? 'Wyrusz najpóźniej za mniej niż minutę — najlepiej wcześniej.'
+            : `Wyrusz najpóźniej za ${minutes} min — najlepiej wcześniej.`;
+        if (!fresh) leave += ' Według rozkładu.';
+    }
+    return `<section class="lubus-journey-advice" data-tone="${tone}" aria-label="Wskazówka podróży"><p class="lubus-punctuality">${punctuality}</p>${leave ? `<p class="lubus-leave-hint">${leave}</p>` : ''}</section>`;
+}
+
 export function renderExpandedLive(journey, segments = [], selectedIndex = 0, now = Date.now() / 1000) {
     const transit = transitLegs(journey);
     const index = Number.isInteger(selectedIndex) && transit[selectedIndex] ? selectedIndex : 0;
@@ -72,10 +98,10 @@ export function renderExpandedLive(journey, segments = [], selectedIndex = 0, no
     const direction = tripDirection(segments[index], leg);
     const badge = route => `<span class="dep-route-box${parseInt(route, 10) >= 150 ? ' trolleybus' : ''}">${escapeHtml(route)}</span>`;
     const selector = transit.length > 1
-        ? `<nav class="lubus-live-segments" aria-label="Wybierz odcinek połączenia">${transit.map((l,i) => `<button type="button" data-live-segment="${i}" aria-pressed="${i === index}" aria-label="Linia ${escapeHtml(l.route)}">${escapeHtml(l.route)}</button>`).join('')}</nav>`
-        : badge(leg.route);
+        ? `<nav class="lubus-live-segments" aria-label="Wybierz odcinek połączenia">${transit.map((l,i) => `<button type="button" data-live-segment="${i}" aria-pressed="${i === index}" aria-label="Linia ${escapeHtml(l.route)}">${badge(l.route)}</button>`).join('')}</nav>`
+        : `<span class="lubus-single-line">${badge(leg.route)}</span>`;
     return `<section class="lubus-leg-summary" aria-label="Odcinek ${index + 1}">
-        <div class="lubus-position">
+        <div class="lubus-position lubus-position-linked">
           ${selector}
           <div class="lubus-passenger-state" data-state="${state.state}" data-tone="${state.tone}" role="status">
             ${direction ? `<p class="lubus-direction">Kierunek:<strong>${escapeHtml(direction)}</strong></p>` : ''}
@@ -83,8 +109,10 @@ export function renderExpandedLive(journey, segments = [], selectedIndex = 0, no
             ${state.nextStop ? `<p class="lubus-live-next">Następny przystanek:<strong>${escapeHtml(state.nextStop.name)} ${escapeHtml(state.nextStop.platformCode)}</strong></p>` : ''}
           </div>
         </div>
-        ${boardingMetrics(leg, state, now)}
-        ${transferHint(journey, transit, index, now)}
+        ${boardingMetrics(journey, index, state, now)}
+        <div class="lubus-message-slot">${initialWalkHint(journey, index, now)
+            || transferHint(journey, transit, index, now)
+            || journeyAdvice(journey, leg, index, state, now)}</div>
     </section>`;
 }
 
@@ -133,7 +161,7 @@ export function bindExpandedPanels(panel, mapActions) {
     });
 }
 
-export function updateExpandedLive(wrapper, journey, addMinutesToTime) {
+export function updateExpandedLive(wrapper, journey, addMinutesToTime, now = Date.now() / 1000) {
     const timeline = wrapper.querySelector('.trasa-middle-scroll')?.lubusTimeline;
     timeline?.predictions(journey);
     wrapper.querySelectorAll('.lubus-stop-time').forEach(node => {
@@ -145,7 +173,7 @@ export function updateExpandedLive(wrapper, journey, addMinutesToTime) {
     });
     const panel = wrapper.querySelector('.lubus-live');
     if (!panel) return;
-    const html = renderExpandedLive(journey, timeline?.observations(), timeline?.selectedIndex());
+    const html = renderExpandedLive(journey, timeline?.observations(), timeline?.selectedIndex(), now);
     if (panel.innerHTML !== html) {
         const restoreAnchor = preserveInlineAnchor(wrapper);
         panel.innerHTML = html;

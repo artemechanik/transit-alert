@@ -106,17 +106,7 @@ export function createTripMap({
           }
 
           function createVehicleMarker(currentVehicle) {
-            const el = document.createElement('div');
-            el.className = 'vehicle-marker-icon';
-            const bearing = currentVehicle.bearing || 0;
-            el.innerHTML = `
-        <div style="position: relative; width: 100%; height: 100%; z-index: 1;">
-          <svg class="vehicle-arrow" data-bearing="${bearing}" style="transform: rotate(${bearing - trackingMap.getBearing()}deg);" viewBox="0 0 100 100">
-            <polygon points="50,10 90,90 10,90" />
-          </svg>
-          <div class="vehicle-marker-dot">${currentVehicle.route || '🚌'}</div>
-        </div>
-      `;
+            const el = createVehicleElement(currentVehicle, trackingMap.getBearing());
             const marker = new maplibregl.Marker({ element: el })
               .setLngLat([currentVehicle.lon, currentVehicle.lat])
               .addTo(trackingMap);
@@ -232,6 +222,19 @@ export function createTripMap({
       }
     }
 
+    // Shared visual used by the modal and embedded trip maps.
+    function createVehicleElement(vehicle, mapBearing = 0) {
+        const el = document.createElement('div');
+        el.className = 'vehicle-marker-icon';
+        const bearing = Number.isFinite(vehicle.bearing) ? vehicle.bearing : 0;
+        const route = String(vehicle.route || '🚌').replace(/[&<>"']/g, char =>
+            ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'})[char]);
+        el.innerHTML = `<div style="position:relative;width:100%;height:100%;z-index:1">
+          <svg class="vehicle-arrow" data-bearing="${bearing}" style="transform:rotate(${bearing - mapBearing}deg)" viewBox="0 0 100 100"><polygon points="50,10 90,90 10,90" /></svg>
+          <div class="vehicle-marker-dot">${route}</div></div>`;
+        return el;
+    }
+
     function findNearestVertexIndex(point, coords) {
       let minDist = Infinity;
       let bestIdx = 0;
@@ -291,9 +294,9 @@ export function createTripMap({
       return nearestPoint;
     }
 
-    async function drawRouteShape(tripId, context, isCurrent, onGeometry) {
+    async function drawRouteShape(tripId, context, isCurrent, onGeometry, signal) {
       try {
-        const res = await apiFetch(`${apiBaseUrl}/api/trip-stops/${tripId}`);
+        const res = await apiFetch(`${apiBaseUrl}/api/trip-stops/${tripId}`, { signal });
         if (!res.ok) return;
         const stops = await res.json();
         if (!isCurrent()) return;
@@ -309,7 +312,7 @@ export function createTripMap({
 
         // 2. Геометрія від OSRM
         const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsString}?geometries=geojson&overview=full`;
-        const osrmRes = await fetch(osrmUrl);
+        const osrmRes = await fetch(osrmUrl, { signal });
         const osrmData = await osrmRes.json();
         if (!isCurrent()) return;
 
@@ -322,7 +325,7 @@ export function createTripMap({
 
         onGeometry({ routeGeoJSON, stops, context });
       } catch (e) {
-        console.error('Помилка побудови маршруту:', e);
+        if (e.name !== 'AbortError') console.error('Помилка побудови маршруту:', e);
       }
     }
 
@@ -459,6 +462,7 @@ export function createTripMap({
 
     return {
         showVehicleOnMap,
+        createVehicleElement, drawRouteShape, renderRouteShape,
         closeVehicleMapModal,
         fetchVehiclePosition,
         handleThemeChange,

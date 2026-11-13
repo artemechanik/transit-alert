@@ -3,17 +3,21 @@ import assert from 'node:assert/strict';
 import { loadBrowserModule } from './helpers/load-browser-module.mjs';
 const load = () => loadBrowserModule(new URL('../js/planner-transfer.js', import.meta.url), {});
 
-test('presentation risk uses three minutes only for a confirmed platform change and keeps longer walks', async () => {
+test('presentation risk requires three spare minutes after walking, including same-platform transfers', async () => {
     const {assessTransfer:f} = await load();
     for (const [platformChange,walkMin,gap,risky,waiting,walk] of [
-        ['same',0,0,true,0,0], ['same',0,1,false,1,0],
-        ['different',0,3,true,0,3], ['different',0,4,false,1,3],
+        ['same',0,0,true,0,0], ['same',0,1,true,1,0],
+        ['same',0,2,true,2,0], ['same',0,2.99,true,2.99,0],
+        ['same',0,3,false,3,0], ['same',0,4,false,4,0],
+        ['different',0,3,true,0,3], ['different',0,4,true,1,3],
+        ['different',0,5,true,2,3], ['different',0,6,false,3,3],
         ['different',2,2,true,-1,3], ['different',6,6,true,0,6],
-        ['different',6,7,false,1,6], ['unknown',0,1,false,1,0],
-        ['different',3.5,4,true,0.5,3.5],
+        ['different',6,8,true,2,6], ['different',6,9,false,3,6],
+        ['unknown',0,1,true,1,0], ['unknown',0,3,false,3,0],
+        ['different',3.5,4,true,0.5,3.5], ['different',3.5,6.5,false,3,3.5],
     ]) {
         const result=f({arrivalMin:1450,departureMin:1450+gap,walkMin,platformChange});
-        assert.equal(result.risky,risky);assert.equal(result.waitingMin,waiting);assert.equal(result.walkMin,walk);
+        assert.equal(result.risky,risky);assert.ok(Math.abs(result.waitingMin-waiting)<1e-9);assert.equal(result.walkMin,walk);
     }
     for (const patch of [{arrivalMin:null},{departureMin:NaN},{walkMin:null},{walkMin:-1}]) {
         const result=f({arrivalMin:10,departureMin:20,walkMin:0,...patch});

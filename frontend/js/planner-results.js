@@ -25,13 +25,20 @@ export function boardingDeadline(journey, now) {
     const departure = hasFreshLive(first, now) ? first.departureEpoch : first?.scheduledDepartureEpoch;
     return Number.isFinite(departure) ? departure : Infinity;
 }
+// Display correction for straight-line walking estimates; never a routing constraint.
+export function displayWalkMinutes(rawMinutes) {
+    return Number.isFinite(rawMinutes) ? Math.round(Math.max(0, rawMinutes) * 1.8) : 0;
+}
+export function initialWalkMinutes(journey) {
+    const first = journey.legs[0];
+    return first && (!first.route || first.route === 'Пішки')
+        ? displayWalkMinutes(first.arrivalMin - first.departureMin) : 0;
+}
 export function initialWalkRisk(journey, now) {
-    const firstIndex = journey.legs.findIndex(l => l.route !== 'Пішки' && l.route);
-    if (firstIndex <= 0) return false;
-    const walk = journey.legs.slice(0, firstIndex)
-        .reduce((sum, leg) => sum + Math.max(0, leg.arrivalMin - leg.departureMin), 0);
+    const walk = initialWalkMinutes(journey);
     return walk > 0 && now + walk * 60 > boardingDeadline(journey, now);
 }
+
 export function createResultsState() {
     const entries = new Map();
     return { entries, update(journeys, now) {

@@ -18,5 +18,5 @@ export function assessTransfer({ arrivalMin, departureMin, walkMin, platformChan
     }
     const walk = platformChange === 'different' ? Math.max(3, walkMin) : walkMin;
     const waitingMin = departureMin - arrivalMin - walk;
-    return { walkMin: walk, waitingMin, risky: waitingMin < 1 };
+    return { walkMin: walk, waitingMin, risky: waitingMin < 3 };
 }

@@ -1,7 +1,8 @@
+import { journeyCountdown, countdownMarkup } from './planner-countdown.js';
 import { assessTransfer, transferPlatformChange, transferWalkMinutes } from './planner-transfer.js';
 import { setupJourneyTimeline } from './planner-timeline.js';
 import { expandedMarkup, bindExpandedPanels, updateExpandedLive, preserveInlineAnchor } from './planner-expanded.js';
-import { initialWalkRisk } from './planner-results.js';
+import { initialWalkRisk, initialWalkMinutes, displayWalkMinutes } from './planner-results.js';
 import { apiFetch } from './backend-connection.js';
 // Картки поїздок, розгортання зупинок і відкриття мінікарти.
 function formatTime(minutes) {
@@ -14,7 +15,7 @@ function formatTime(minutes) {
 export function coloredTimeHtml(min, delay) {
     const timeStr = formatTime(min);
     if (delay > 0) return `<span style="color: var(--danger); font-weight: 700;">${timeStr}</span>`;
-    if (delay < 0) return `<span style="color: var(--blue); font-weight: 700;">${timeStr}</span>`;
+    if (delay < 0) return `<span style="color: var(--early); font-weight: 700;">${timeStr}</span>`;
     return timeStr;
 }
 
@@ -28,8 +29,8 @@ export function getLiveStatusBadge(isLive, delayMinutes) {
         // Запізнюється (червоний + іконка slow)
         return `<div style="display:flex; align-items:center; gap:2px; color: var(--danger);"><div class="svg-icon icon-slow" style="${iconStyle}"></div>+${delayMinutes}m</div> <span style="opacity:0.4">•</span> `;
     } else if (delayMinutes < 0) {
-        // Поспішає (синій + іконка fast)
-        return `<div style="display:flex; align-items:center; gap:2px; color: var(--blue);"><div class="svg-icon icon-fast" style="${iconStyle}"></div>-${Math.abs(delayMinutes)}m</div> <span style="opacity:0.4">•</span> `;
+        // Випередження: окремий колір теми + іконка fast
+        return `<div style="display:flex; align-items:center; gap:2px; color: var(--early);"><div class="svg-icon icon-fast" style="${iconStyle}"></div>-${Math.abs(delayMinutes)}m</div> <span style="opacity:0.4">•</span> `;
     } else {
         // Чітко за розкладом (зелений + іконка ok)
         return `<div style="display:flex; align-items:center; color: var(--live-green);"><div class="svg-icon icon-ok" style="${iconStyle}"></div></div> <span style="opacity:0.4">•</span> `;
@@ -68,11 +69,11 @@ export function createPlannerCards({
 
         const initialWalkLeg = (firstLeg.route === "Пішки" || !firstLeg.route) ? firstLeg : null;
         const walkMinRaw = initialWalkLeg ? Math.max(0, initialWalkLeg.arrivalMin - initialWalkLeg.departureMin) : 0;
-        const walkMin = Math.round(walkMinRaw * 1.8); // Наш множник для реальності
+        const walkMin = initialWalkMinutes(journey);
 
         const finalWalkLeg = (lastLeg.route === "Пішки" || !lastLeg.route) ? lastLeg : null;
         const finalWalkMinRaw = finalWalkLeg ? Math.max(0, finalWalkLeg.arrivalMin - finalWalkLeg.departureMin) : 0;
-        const finalWalkMin = Math.round(finalWalkMinRaw * 1.8); // Наш множник для реальності
+        const finalWalkMin = displayWalkMinutes(finalWalkMinRaw);
 
         // Коригуємо загальний час у дорозі, щоб математика зійшлася
         const extraWalkTime = (walkMin - walkMinRaw) + (finalWalkMin - finalWalkMinRaw);
@@ -93,55 +94,9 @@ export function createPlannerCards({
         const transitEnd = lastTransitLeg.arrivalMin;
         const duration = Math.max(0, transitEnd - transitStart);
 
-        const now = new Date();
         const delay = firstTransitLeg.delayMinutes || 0;
         const isLive = firstTransitLeg.isRealTime || false;
-        let expectedDepartureMin = firstTransitLeg.departureMin;
-
-        // ❌ ВСІ ХАКИ З 1440 ВИДАЛЕНО! ❌
-        // Більше не треба перевіряти "нічні" чи "завтрашні" рейси.
-        // Якщо бекенд прислав 1450 хвилин (00:10 ночі наступного дня),
-        // JS Date сам перекине дату на завтра!
-
-        const depDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(expectedDepartureMin / 60), expectedDepartureMin % 60, 0);
-        const diffMs = depDate - now;
-        let countdown = Math.max(0, Math.floor(diffMs / 60000));
-
-        function getMinLabel(m) {
-            if (m === 1) return 'minuta';
-            const mod10 = m % 10;
-            const mod100 = m % 100;
-            if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'minuty';
-            return 'minut';
-        }
-
-        let timerHtml = '';
-        if (countdown < 60) {
-            let numStr = countdown === 0 ? '<1' : countdown;
-            let labelStr = countdown === 0 ? 'minuta' : getMinLabel(countdown);
-            let colorStr = countdown <= 30 ? 'var(--live-green)' : 'var(--text)';
-
-            timerHtml = `
-        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
-            <span style="font-size:26px; font-weight:800; color:${colorStr}; letter-spacing:-1px;">${numStr}</span>
-            <span style="font-size:10px; font-weight:700; color:${colorStr}; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; opacity:0.8;">${labelStr}</span>
-        </div>`;
-        } else {
-        const h = Math.floor(countdown / 60);
-        const m = countdown % 60;
-        const hStr = String(h).padStart(1, '0');
-        const mStr = String(m).padStart(2, '0');
-
-        timerHtml = `
-    <div style="display:flex; flex-direction:column; align-items:center; line-height:1;">
-        <span style="font-size:10px; font-weight:600; color:var(--text); opacity:0.8; margin-bottom:3px;">
-            odjazd za:
-        </span>
-        <span style="font-size:16px; font-weight:700; color:var(--text);">
-            ${hStr}h ${mStr}m
-        </span>
-    </div>`;
-    }
+        const timerHtml = countdownMarkup(journeyCountdown(journey, Date.now() / 1000));
 
         const startName = firstTransitLeg.fromStopName;
         const endName = lastTransitLeg.toStopName;
@@ -242,9 +197,13 @@ export function createPlannerCards({
 
     function updateJourneyCard(wrapper, journey) {
         wrapper.journey = journey;
-        updateExpandedLive(wrapper, journey, addMinutesToTime);
+        const now = Date.now() / 1000;
+        updateExpandedLive(wrapper, journey, addMinutesToTime, now);
+        const timer = wrapper.querySelector('.trasa-timer-content');
+        const timerHtml = countdownMarkup(journeyCountdown(journey, now));
+        if (timer && timer.innerHTML !== timerHtml) timer.innerHTML = timerHtml;
         const walkWarning = wrapper.querySelector('.trasa-initial-walk-warn');
-        if (walkWarning) walkWarning.hidden = !initialWalkRisk(journey, Date.now() / 1000);
+        if (walkWarning) walkWarning.hidden = !initialWalkRisk(journey, now);
         const transit = journey.legs.filter(l => l.route !== 'Пішки' && l.route);
         const rows = [...wrapper.querySelectorAll('.trasa-row[data-trip-id]')];
         rows.forEach((row, index) => {
@@ -360,7 +319,7 @@ export function createPlannerCards({
                         // БЛОК 1: Пішохідний перехід
                         if (isWalk) {
                             const walkMinRaw = Math.max(0, leg.arrivalMin - leg.departureMin);
-                            const walkMin = Math.round(walkMinRaw * 1.8);
+                            const walkMin = displayWalkMinutes(walkMinRaw);
 
                             // Якщо це найперший крок (старт з адреси)
                             if (i === 0) {

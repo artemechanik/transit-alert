@@ -2,14 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadBrowserModule } from './helpers/load-browser-module.mjs';
 
-async function setup() {
+async function setup(search = '?trasa=classic') {
   const root = { children: [], dataset: {}, scrollTop: 130, offsetTop: 0 };
   let cancellations = 0;
   const buttons = Object.fromEntries(['classic', 'new'].map(name => [name, {
     ariaPressed: String(name === 'classic'),
     addEventListener(type, callback) { this.click = callback; }
   }]));
-  const module = await loadBrowserModule(new URL('../js/planner-presentation.js', import.meta.url), {});
+  const module = await loadBrowserModule(new URL('../js/planner-presentation.js', import.meta.url), { URLSearchParams });
   const motion = { cancelScroll() { cancellations++; } };
   function node(key, top, expanded = false) {
     const card = { expanded, scrollTop: 51, stops: ['boarding', 'destination'],
@@ -38,7 +38,7 @@ async function setup() {
       }
     }
   });
-  const view = module.createPlannerPresentation(root, motion, buttons);
+  const view = module.createPlannerPresentation(root, motion, buttons, undefined, search);
   return { root, buttons, view, visible, first, last, cancellations: () => cancellations };
 }
 
@@ -76,4 +76,17 @@ test('empty list, unchanged selection and unsupported variants do not disturb st
   h.view.select('new');
   assert.equal(h.root.dataset.presentation, 'new');
   assert.equal(h.root.children.length, 0);
+});
+
+
+test('new is the default; only an explicit classic URL selects the retained old presentation', async () => {
+  for(const search of ['', '?from=a&to=b', '?trasa=new', '?trasa=invalid']) {
+    const h=await setup(search);
+    assert.equal(h.root.dataset.presentation,'new');
+    assert.equal(h.buttons.new.ariaPressed,'true');assert.equal(h.buttons.classic.ariaPressed,'false');
+    assert.equal(h.cancellations(),0);
+  }
+  const h=await setup('?from=a&trasa=classic&to=b');
+  assert.equal(h.root.dataset.presentation,'classic');assert.equal(h.buttons.classic.ariaPressed,'true');
+  h.view.select('new');assert.equal(h.root.dataset.presentation,'new');
 });

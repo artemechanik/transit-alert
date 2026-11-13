@@ -20,7 +20,7 @@ class TripTimelineStateTest {
         if (seq != null) v.currentStopSequence = seq
         if (status != null) v.currentStatus = status
         if (timestamp != null) v.timestamp = timestamp
-        if (gps) v.setPosition(G.Position.newBuilder().setLatitude(51f).setLongitude(22f))
+        if (gps) v.setPosition(G.Position.newBuilder().setLatitude(51f).setLongitude(22f).setBearing(123f))
         val f = G.FeedMessage.newBuilder().setHeader(G.FeedHeader.newBuilder().setGtfsRealtimeVersion("2.0"))
         if (present) f.addEntity(G.FeedEntity.newBuilder().setId("v").setVehicle(v))
         return G.FeedMessage.parseFrom(f.build().toByteArray())
@@ -39,6 +39,7 @@ class TripTimelineStateTest {
             assertEquals(7, live.currentStopSequence)
             assertEquals(1000L, live.gpsTimestamp)
             assertTrue(live.isFresh)
+            assertEquals(123f, live.bearing)
         }
         update()
         val pos = assertNotNull(LiveVehiclesCache.byTripId(trip))
@@ -71,6 +72,7 @@ class TripTimelineStateTest {
         val state = tripLiveState(trip, null, 1000)
         assertEquals(trip, state.tripId); assertFalse(state.isFresh)
         assertNull(state.gpsTimestamp); assertNull(state.currentStatus); assertNull(state.currentStopSequence)
+        assertNull(state.bearing)
         update(9, timestamp = 1000); clear(); assertNull(LiveVehiclesCache.byTripId(trip))
     }
     private fun stop(id: String, sequence: Int) = UpcomingStop(stopId = id, stopSequence = sequence, name = id, eta = "10:00")

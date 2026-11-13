@@ -1,3 +1,4 @@
+import { journeyCountdown, countdownMarkup, countdownColor } from './planner-countdown.js';
 import { assessTransfer } from './planner-transfer.js';
 import { apiFetch } from './backend-connection.js';
 import { coloredTimeHtml, getLiveStatusBadge } from './planner-cards.js';
@@ -111,61 +112,19 @@ export function createPlannerLive({ apiBaseUrl, refreshOpenTrasaPassedStops, ref
             // 5. Таймер відправлення — за першим рейсом
             const timerEl = timeline.querySelector('.trasa-dep-min');
             if (timerEl) {
+                const journey = timeline.closest('.trasa-wrapper')?.journey;
                 const expectedDepartureMin = rowLiveMin(firstRow);
-
-                // --- ЧИСТА МАТЕМАТИКА ТАЙМЕРА (БЕЗ 1440) ---
-                // JS Date сам перемкне день вперед, якщо expectedDepartureMin >= 1440
-                const depDate = firstRow.dataset.departureEpoch ? new Date(Number(firstRow.dataset.departureEpoch) * 1000) : new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(expectedDepartureMin / 60), expectedDepartureMin % 60, 0);
-                const diffMs = depDate - now;
-                let countdown = Math.max(0, Math.floor(diffMs / 60000));
-
-                function getMinLabel(m) {
-                    if (m === 1) return 'minuta';
-                    const mod10 = m % 10;
-                    const mod100 = m % 100;
-                    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'minuty';
-                    return 'minut';
-                }
-
-                const liveBadgeHtml = isLive
-                    ? `<span style="color: var(--danger); font-size: 9px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 2px; animation: trasaLiveBlink 1.5s infinite;">LIVE</span>`
-                    : '';
-
-                let timerHtml = '';
-                if (countdown < 60) {
-                    let numStr = countdown === 0 ? '<1' : countdown;
-                    let labelStr = countdown === 0 ? 'minuta' : getMinLabel(countdown);
-                    let colorStr = countdown <= 30 ? 'var(--live-green)' : 'var(--text)';
-
-                    timerHtml = `
-                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1;">
-                    ${liveBadgeHtml}
-                    <span style="font-size:26px; font-weight:800; color:${colorStr}; letter-spacing:-1px;">${numStr}</span>
-                    <span style="font-size:10px; font-weight:700; color:${colorStr}; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; opacity:0.8;">${labelStr}</span>
-                </div>`;
-                } else {
-                    const h = Math.floor(countdown / 60);
-                    const m = countdown % 60;
-                    const hStr = String(h).padStart(1, '0');
-                    const mStr = String(m).padStart(2, '0');
-
-                    timerHtml = `
-                <div style="display:flex; flex-direction:column; align-items:center; line-height:1;">
-                    <span style="font-size:10px; font-weight:600; color:var(--text); opacity:0.8; margin-bottom:3px;">
-                        odjazd za:
-                    </span>
-                    <span style="font-size:16px; font-weight:700; color:var(--text);">
-                        ${hStr}h ${mStr}m
-                    </span>
-                </div>`;
-                }
+                const departure = firstRow.dataset.departureEpoch ? Number(firstRow.dataset.departureEpoch)
+                    : new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(expectedDepartureMin / 60), expectedDepartureMin % 60, 0).getTime() / 1000;
+                const timing = journey ? journeyCountdown(journey, now.getTime() / 1000)
+                    : { minutes: Math.ceil((departure - now.getTime() / 1000) / 60), color: countdownColor(isLive, firstDelay) };
+                const html = countdownMarkup(timing);
 
                 let content = timerEl.querySelector('.trasa-timer-content');
                 if (!content) {
                     timerEl.innerHTML = '<div class="trasa-timer-content"></div>';
                     content = timerEl.querySelector('.trasa-timer-content');
                 }
-                const html = timerHtml.replace(liveBadgeHtml, '');
                 if (content.innerHTML !== html) content.innerHTML = html;
                 let badge = timerEl.querySelector('.trasa-live-blink');
                 if (isLive && !badge) {

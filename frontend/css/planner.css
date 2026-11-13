@@ -249,7 +249,9 @@
 
 /* Калібруємо ріжки для розміру 28px (згорнута картка в шапці) */
 .trasa-compact-header .dep-route-box.trolleybus::before,
-.trasa-compact-header .dep-route-box.trolleybus::after {
+.trasa-compact-header .dep-route-box.trolleybus::after,
+.lubus-position .dep-route-box.trolleybus::before,
+.lubus-position .dep-route-box.trolleybus::after {
   height: 5px !important;
   top: -5px !important;
   width: 2px !important;
@@ -328,7 +330,9 @@
 
 /* Калібруємо ріжки для розміру 28px (згорнута картка в шапці) */
 .trasa-compact-header .dep-route-box.trolleybus::before,
-.trasa-compact-header .dep-route-box.trolleybus::after {
+.trasa-compact-header .dep-route-box.trolleybus::after,
+.lubus-position .dep-route-box.trolleybus::before,
+.lubus-position .dep-route-box.trolleybus::after {
   height: 5px !important;
   top: -5px !important;
   width: 2px !important;
@@ -555,7 +559,7 @@
 .lubus-status { font-size: 12px; font-weight: 700; }
 .lubus-status-schedule, .lubus-note { color: var(--text-muted); }
 .lubus-status-late { color: var(--danger); }
-.lubus-status-early { color: var(--blue); }
+.lubus-status-early { color: var(--early); }
 .lubus-status-on-time { color: var(--live-green); }
 .lubus-boarding { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 0; }
 .lubus-boarding dt { font-size: 12px; color: var(--text-muted); }
@@ -614,21 +618,21 @@
 .lubus-map-viewport { flex: 1 1 0; min-height: 0; position: relative; }
 .lubus-map-canvas { width: 100%; height: 100%; }
 .lubus-map-neutral { position: absolute; top: 6px; left: 6px; right: 6px; margin: 0; padding: 8px; border-radius: 7px; background: var(--card); color: var(--text-muted); font-size: 12px; pointer-events: none; }
-.lubus-inline-vehicle { position: absolute; padding: 4px 6px; color: var(--text); background: var(--card); border: 2px solid var(--blue); border-radius: 8px; font-size: 12px; font-weight: 800; }
 
 .lubus-map-canvas { touch-action: none; }
 /* LIVE presentation follows lubus-card.html; interaction and panel scrolling stay shared. */
 .lubus-live .lubus-leg-summary { box-sizing: border-box; min-height: 100%; margin: 0; padding: 12px; border: 0; background: var(--bg); }
 .lubus-position { display: flex; gap: 10px; align-items: flex-start; }
-.lubus-position > .dep-route-box { flex: 0 0 30px; width: 30px; height: 30px; border-width: 1.5px; border-radius: 7px; font-size: 15px; font-weight: 800; background: var(--bg); }
+.lubus-single-line { position: relative; flex: 0 0 28px; color: var(--blue); }
+.lubus-position .dep-route-box { width: 28px; height: 28px; border-width: 1.5px; border-radius: 6px; font-size: 13px; font-weight: 700; background: var(--bg); color: inherit; border-color: currentColor; }
 .lubus-live .lubus-passenger-state { min-width: 0; margin: 0; padding: 0; }
 .lubus-live .lubus-passenger-state p { margin: 0; font-size: 12px; color: var(--text-muted); }
 .lubus-live .lubus-passenger-state .lubus-state-label { margin: 0; }
 .lubus-live .lubus-passenger-state .lubus-live-next { margin-top: 4px; }
 .lubus-live .lubus-passenger-state strong { display: block; margin-top: 1px; color: var(--text); font-size: 16px; font-weight: 750; line-height: 1.2; overflow-wrap: anywhere; }
 .lubus-live .lubus-passenger-state[data-tone="boarding"] .lubus-state-label { color: var(--live-green); }
-.lubus-live-segments { display: flex; flex-direction: column; gap: 4px; flex: 0 0 30px; margin: 0; padding: 0; }
-.lubus-live-segments button { display: grid; place-items: center; width: 30px; min-height: 30px; padding: 2px; font: inherit; font-size: 12px; font-weight: 750; background: var(--bg); color: var(--text-muted); border: 1.5px solid var(--border); border-radius: 7px; cursor: pointer; }
+.lubus-live-segments { display: flex; flex-direction: column; gap: 8px; flex: 0 0 28px; margin: 0; padding: 0; }
+.lubus-live-segments button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; font: inherit; background: transparent; color: var(--text-muted); border: 0; border-radius: 6px; cursor: pointer; }
 .lubus-live-segments button[aria-pressed="true"] { color: var(--blue); border-color: var(--blue); }
 .lubus-live-segments button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .lubus-boarding-metrics { display: flex; gap: 12px; margin: 10px 0 8px; }
@@ -650,3 +654,45 @@
 .lubus-tabs button[aria-pressed="true"] { z-index: 1; border-bottom-color: var(--bg); }
 
 .lubus-live .lubus-passenger-state .lubus-direction + .lubus-state-label { margin-top: 4px; }
+
+/* Link the selected route badge to the description it controls. */
+.lubus-position-linked .lubus-passenger-state { position: relative; align-self: stretch; padding-left: 8px; }
+.lubus-position-linked .lubus-passenger-state::before { content: ''; position: absolute; left: -5px; top: 0; bottom: 0; width: 1.5px; background: var(--blue); pointer-events: none; }
+.lubus-position-linked .lubus-live-segments button { position: relative; }
+.lubus-position-linked > .lubus-single-line::after,
+.lubus-position-linked .lubus-live-segments button[aria-pressed="true"]::after { content: ''; position: absolute; left: 100%; top: 50%; width: 6px; height: 1.5px; background: var(--blue); pointer-events: none; }
+
+/* Collapse the search action without abruptly resizing the results viewport. */
+#route-search-btn {
+  min-height: 0;
+  max-height: 44px;
+  overflow: hidden;
+  opacity: 1;
+  visibility: visible;
+  transition: max-height 220ms ease, padding 220ms ease, margin-top 220ms ease, opacity 160ms ease, visibility 0s;
+}
+#route-search-btn[data-collapsed="true"] {
+  max-height: 0;
+  padding-block: 0 !important;
+  margin-top: 0 !important;
+  opacity: 0;
+  visibility: hidden;
+  box-shadow: none;
+  pointer-events: none;
+  transition: max-height 220ms ease, padding 220ms ease, margin-top 220ms ease, opacity 160ms ease, visibility 0s 220ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  #route-search-btn, #route-search-btn[data-collapsed="true"] { transition: none; }
+}
+
+.lubus-walk-risk { margin: 8px 0; color: var(--danger); font-size: 13px; line-height: 1.4; }
+.lubus-walk-risk p { margin: 3px 0 0; color: var(--text-muted); font-size: 12px; }
+
+/* A single footer message: boarding risk, transfer, or ordinary journey advice. */
+.lubus-journey-advice { border-top: 1px solid var(--border); padding-top: 8px; font-size: 13px; line-height: 1.45; }
+.lubus-journey-advice p { margin: 0; }
+.lubus-journey-advice .lubus-leave-hint { margin-top: 5px; color: var(--text-muted); }
+.lubus-journey-advice[data-tone="late"] .lubus-punctuality { color: var(--danger); }
+.lubus-journey-advice[data-tone="early"] .lubus-punctuality { color: var(--early); }
+
+.trasa-presentation-switch[hidden] { display: none; }

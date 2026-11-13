@@ -14,7 +14,7 @@ export function createPlanner({
 }) {
     let initialized = false, active = false, query = null, state = createResultsState();
     let routeResultsBox, searchRouteBtn, indicator, bottomIndicator, loading = null, controller = null;
-    let generation = 0, manualRefresh = false;
+    let generation = 0, manualRefresh = false, searchFormRevision = 0;
     let loadingLater = false, queuedLater = null;
     let listMotion, cardPosition;
     let queuedReconcile = false;
@@ -61,6 +61,7 @@ export function createPlanner({
                 const journeys = await response.json();
                 if (!active || version !== generation) return;
                 renderResults(journeys, later);
+                return journeys.length > 0;
             } catch (error) {
                 if (error.name !== 'AbortError' && active && version === generation) {
                     renderResults([]);
@@ -161,6 +162,11 @@ export function createPlanner({
         if (indicator) indicator.style.height = '0';
         if (bottomIndicator) bottomIndicator.style.height = '0';
     }
+    function setSearchButtonCollapsed(collapsed) {
+        searchRouteBtn.dataset.collapsed = String(collapsed);
+        searchRouteBtn.inert = collapsed;
+        searchRouteBtn.ariaHidden = String(collapsed);
+    }
     function initPlanner() {
         if (initialized) return;
         initialized = true;
@@ -170,6 +176,17 @@ export function createPlanner({
         document.getElementById('route-input-from').addEventListener('focus', () => loadRouteDefaultSuggestions(true));
         document.getElementById('route-input-to').addEventListener('focus', () => loadRouteDefaultSuggestions(false));
         searchRouteBtn = document.getElementById('route-search-btn');
+        setSearchButtonCollapsed(false);
+        function revealSearchButton() {
+            searchFormRevision++;
+            setSearchButtonCollapsed(false);
+        }
+        for (const field of ['from', 'to']) {
+            const input = document.getElementById(`route-input-${field}`);
+            input.addEventListener('focus', revealSearchButton);
+            input.addEventListener('input', revealSearchButton);
+            document.getElementById(`route-clear-${field}`)?.addEventListener('click', revealSearchButton);
+        }
         routeResultsBox = document.getElementById('route-results-list');
         listMotion = createListMotion(routeResultsBox);
         cardPosition = createPlannerCardPosition(routeResultsBox, listMotion);
@@ -185,6 +202,7 @@ export function createPlanner({
         bottomIndicator.className = 'trasa-refresh-indicator trasa-later-indicator';
         routeResultsBox.parentNode.insertBefore(bottomIndicator, routeResultsBox.nextSibling);
         searchRouteBtn.addEventListener('click', async () => {
+            setSearchButtonCollapsed(false);
             const { routeFromStop: from, routeToStop: to } = getRoutePoints();
             if (!from || !to) return showToast('Wybierz przystanek początkowy i końcowy z listy!');
             for (const point of [from, to]) if (point.isDynamicGps) {
@@ -201,7 +219,13 @@ export function createPlanner({
             listMotion.reset();
             saveRecentRoute(from,to);
             const recent = document.getElementById('recent-routes-list'); if (recent) recent.style.display = 'none';
-            await refreshResults();
+            const searchVersion = generation, formRevision = searchFormRevision;
+            const found = await refreshResults();
+            // Only this completed search may hide the button. Editing or background
+            // refreshes must never collapse the user's current search controls.
+            if (active && searchVersion === generation && formRevision === searchFormRevision && found) {
+                setSearchButtonCollapsed(true);
+            }
             startPlannerPolling();
         });
         let gesture = null;

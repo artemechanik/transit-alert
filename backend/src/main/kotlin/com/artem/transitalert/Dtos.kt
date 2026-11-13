@@ -158,6 +158,7 @@ data class TripLiveState(
     val isFresh: Boolean,
     val lat: Double? = null,
     val lon: Double? = null,
+    val bearing: Float? = null,
 )
 
 @Serializable

@@ -73,3 +73,20 @@ test('fresh LIVE during gray period restores the same entry node and resets remo
  state.update([],1181); assert.equal(state.entries.get(key).expired,false);
  state.update([],1301); assert.equal(state.entries.get(key).departedAt,1301);
 });
+
+
+test('walking warning uses the displayed 1.8 correction and rounding without affecting departure or selection', () => {
+ const j=journey();j.legs[0].scheduledDepartureEpoch=1180;
+ j.legs.unshift({route:'Пішки',departureMin:0,arrivalMin:2});
+ const before=JSON.stringify(j);
+ // Raw two minutes fit, displayed four minutes do not.
+ assert.equal(initialWalkRisk(j,1000),true);
+ assert.equal(initialWalkRisk(j,940),false); // Exactly four minutes fit.
+ assert.equal(boardingDeadline(j,1000),1180);
+ const state=createResultsState();state.update([j],1000);
+ assert.equal([...state.entries.values()][0].departedAt,null);
+ assert.equal(JSON.stringify(j),before);
+ j.legs[0].arrivalMin=1.4; // Rounded display: three minutes.
+ assert.equal(initialWalkRisk(j,1000),false);
+ j.legs.shift();assert.equal(initialWalkRisk(j,1000),false);
+});

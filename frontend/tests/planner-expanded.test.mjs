@@ -96,10 +96,10 @@ test('LIVE renders only the manually selected segment with state above independe
 test('boarding countdown uses fresh predictions and falls back to scheduled epochs across midnight', async () => {
     const m = await load();
     const predicted = { ...leg, isRealTime: true, liveObservedEpoch: 1000, departureEpoch: 1060, scheduledDepartureEpoch: 1180 };
-    assert.match(m.renderExpandedLive({legs:[predicted]},[],0,1000), /Za około<\/dt><dd>1 minutę/);
+    assert.match(m.renderExpandedLive({legs:[predicted]},[],0,1000), /Za około<\/dt><dd[^>]*>1 minutę/);
     for (const patch of [{liveObservedEpoch:699},{liveObservedEpoch:1001},{isRealTime:false}]) {
         const html=m.renderExpandedLive({legs:[{...predicted,...patch}]},[],0,1000);
-        assert.match(html,/Według rozkładu<\/dt><dd>3 minuty/);assert.doesNotMatch(html,/Za około/);
+        assert.match(html,/Według rozkładu<\/dt><dd[^>]*>3 minuty/);assert.doesNotMatch(html,/Za około/);
     }
     assert.doesNotMatch(m.renderExpandedLive({legs:[leg]},[],0,1000),/Za około|Według rozkładu/);
     assert.match(m.renderExpandedLive({legs:[{...predicted,departureEpoch:900}]},[],0,1000),/Termin odjazdu minął/);
@@ -151,7 +151,7 @@ test('prototype transfer shows departure, walking-adjusted waiting and risk with
     let html=m.renderExpandedLive(journey,[],0,1000);
     assert.doesNotMatch(html,/będziesz około|19:45/);
     assert.match(html,/<time>19:49<\/time>/);assert.match(html,/1 minuta oczekiwania po przejściu/);
-    assert.match(html,/Przejście: około 3 minuty/);assert.doesNotMatch(html,/Ryzykowna przesiadka/);
+    assert.match(html,/Przejście: około 3 minuty/);assert.match(html,/Ryzykowna przesiadka/);
     assert.match(html,/według rozkładu/);assert.equal(JSON.stringify(journey),before);
     next.departureMin=1187;
     html=m.renderExpandedLive(journey,[],0,1000);
@@ -160,6 +160,7 @@ test('prototype transfer shows departure, walking-adjusted waiting and risk with
     next.fromStopId='a';next.departureMin=1188;
     journey.legs=[first,next];
     html=m.renderExpandedLive(journey,[],0,1000);
+    assert.doesNotMatch(html,/Ryzykowna przesiadka/);
     assert.match(html,/3 minuty oczekiwania/);assert.match(html,/Zostań/);assert.doesNotMatch(html,/Przejście:/);
 });
 
@@ -196,4 +197,91 @@ test('direction comes from the full trip terminal without its platform, independ
     assert.doesNotMatch(m.renderExpandedLive({legs:[current]},[segment],0,1000),/Kierunek:/);
     stops.tripStops=[{name:'Other terminal 01',platformCode:'01'}];
     assert.doesNotMatch(m.renderExpandedLive({legs:[current]},[{...segment,leg:{...current,tripId:'other'}}],0,1000),/Kierunek:/);
+});
+
+
+test('same-platform transfers warn below three minutes and clear at exactly three', async () => {
+    const m=await load();
+    const current={...leg,toStopId:'same',arrivalMin:600};
+    for(const [gap,risky] of [[1,true],[2,true],[3,false],[4,false]]) {
+        const next={...leg,route:'7',fromStopId:'same',departureMin:600+gap};
+        const html=m.renderExpandedLive({legs:[current,next]},[],0,1000);
+        assert.equal(html.includes('⚠ Ryzykowna przesiadka'),risky);
+        assert.match(html,/Zostań na tym samym przystanku/);
+    }
+});
+
+
+test('initial approach warning matches displayed walking time and belongs only to the first boarding', async () => {
+    const m=await load();
+    const first={...leg,scheduledDepartureEpoch:1180};
+    const walk={route:'Пішки',departureMin:0,arrivalMin:2};
+    const journey={legs:[walk,first]};
+    let html=m.renderExpandedLive(journey,[],0,1000);
+    assert.match(html,/Możesz nie zdążyć na przystanek/);
+    assert.match(html,/Odjazd za 3 min · dojście około 4 min/);
+    assert.doesNotMatch(m.renderExpandedLive(journey,[],0,940),/lubus-walk-risk/);
+    assert.doesNotMatch(m.renderExpandedLive({legs:[first]},[],0,1000),/lubus-walk-risk/);
+    journey.legs.push({...leg,tripId:'next',route:'7'});
+    assert.doesNotMatch(m.renderExpandedLive(journey,[],1,1000),/lubus-walk-risk/);
+    // Fresh LIVE delays boarding enough to fit; stale LIVE uses the schedule again.
+    Object.assign(first,{isRealTime:true,departureEpoch:1300,liveObservedEpoch:1000});
+    assert.doesNotMatch(m.renderExpandedLive(journey,[],0,1000),/lubus-walk-risk/);
+    first.liveObservedEpoch=1;
+    assert.match(m.renderExpandedLive(journey,[],0,1000),/lubus-walk-risk/);
+});
+
+
+test('one message slot prioritizes boarding risk over transfers and transfers over ordinary advice', async () => {
+    const m=await load();
+    const first={...leg,toStopId:'same',arrivalMin:600,scheduledDepartureEpoch:1180};
+    const next={...leg,tripId:'next',route:'7',fromStopId:'same',departureMin:601};
+    const walk={route:'Пішки',departureMin:0,arrivalMin:2};
+    const journey={legs:[walk,first,next]};
+    let html=m.renderExpandedLive(journey,[],0,1000);
+    assert.match(html,/lubus-message-slot/);assert.match(html,/lubus-walk-risk/);
+    assert.doesNotMatch(html,/lubus-transfer-hint|lubus-journey-advice|Wyrusz/);
+    html=m.renderExpandedLive(journey,[],0,940);
+    assert.match(html,/lubus-transfer-hint/);assert.match(html,/Ryzykowna przesiadka/);
+    assert.doesNotMatch(html,/lubus-walk-risk|lubus-journey-advice|Wyrusz/);
+    next.departureMin=610;
+    html=m.renderExpandedLive(journey,[],0,940);
+    assert.match(html,/lubus-transfer-hint/);assert.doesNotMatch(html,/lubus-journey-advice|Wyrusz/);
+});
+
+test('ordinary advice describes only fresh known punctuality using Pojazd', async () => {
+    const m=await load();
+    const base={...leg,isRealTime:true,departureEpoch:1600,liveObservedEpoch:1000};
+    for(const [delay,expected] of [[0,'Pojazd jedzie zgodnie z rozkładem.'],[4,'Pojazd ma 4 min opóźnienia.'],[-2,'Pojazd jedzie 2 min przed rozkładem.']]) {
+        const html=m.renderExpandedLive({legs:[{...base,delayMinutes:delay}]},[],0,1000);
+        assert.ok(html.includes(expected));assert.doesNotMatch(html,/Wyrusz|autobus/i);
+    }
+    for(const patch of [{liveObservedEpoch:699},{liveObservedEpoch:1001},{isRealTime:false},{delayMinutes:null}]) {
+        const html=m.renderExpandedLive({legs:[{...base,delayMinutes:4,...patch}]},[],0,1000);
+        assert.match(html,/Brak aktualnych danych o punktualności/);
+        assert.doesNotMatch(html,/Pojazd ma|Pojazd jedzie/);
+    }
+});
+
+test('leave advice uses displayed approach, current departure and schedule labels without adding another message', async () => {
+    const m=await load();
+    const first={...leg,isRealTime:true,departureEpoch:1600,scheduledDepartureEpoch:1540,liveObservedEpoch:1000,delayMinutes:1};
+    const walk={route:'Пішки',departureMin:0,arrivalMin:2}; // Displayed four minutes.
+    const journey={legs:[walk,first]};
+    const before=JSON.stringify(journey);
+    let html=m.renderExpandedLive(journey,[],0,1000);
+    assert.match(html,/Wyrusz najpóźniej za 6 min — najlepiej wcześniej/);assert.doesNotMatch(html,/Według rozkładu|lubus-walk-risk|lubus-transfer-hint/);
+    assert.equal(JSON.stringify(journey),before);
+    first.isRealTime=false;
+    html=m.renderExpandedLive(journey,[],0,1000);
+    assert.match(html,/Wyrusz najpóźniej za 5 min — najlepiej wcześniej. Według rozkładu/);
+    first.scheduledDepartureEpoch=1240;
+    assert.match(m.renderExpandedLive(journey,[],0,1000),/Wyrusz teraz/);
+    first.scheduledDepartureEpoch=1260;
+    assert.match(m.renderExpandedLive(journey,[],0,1000),/Wyrusz najpóźniej za mniej niż minutę — najlepiej wcześniej/);
+    first.scheduledDepartureEpoch=1239;
+    html=m.renderExpandedLive(journey,[],0,1000);
+    assert.match(html,/lubus-walk-risk/);assert.doesNotMatch(html,/lubus-journey-advice|Wyrusz/);
+    delete first.scheduledDepartureEpoch;
+    assert.doesNotMatch(m.renderExpandedLive(journey,[],0,1000),/Wyrusz/);
 });

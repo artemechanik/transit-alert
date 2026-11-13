@@ -45,7 +45,7 @@ async function setup(initialHistory = []) {
   const get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   let responder = () => [], position = { lat: 51.24, lon: 22.57 };
   const context = {
-    console, Date: PlannerTestDate, AbortController,
+    console, Date: PlannerTestDate, AbortController, URLSearchParams,
     setTimeout: (fn, delay) => { if (delay < 5000 && !holdShortTimers) { fn(); return 0; } const id = ++nextTimer; timers.set(id, fn); return id; },
     clearTimeout: id => timers.delete(id), setInterval: fn => { const id=++nextTimer; intervals.set(id,fn); return id; }, clearInterval: id => intervals.delete(id),
     localStorage: { getItem: k => history.get(k), setItem: (k, v) => history.set(k, v) },
@@ -561,7 +561,7 @@ test('only initial walker gets new warning; transfer warning stays in its timeli
   await new Promise(r=>setImmediate(r));
   assert.equal(transferWarning.hidden,false);
   assert.equal(wrapper.querySelector('.trasa-initial-walk-warn').hidden,false);
-  const corrected={legs:j.legs.map(l=>l===first?{...l,departureEpoch:now+600,departureMin:610}:l)};
+  const corrected={legs:j.legs.map(l=>l===first?{...l,departureEpoch:now+900,departureMin:615}:l)};
   h.respond(()=>[corrected]);
   const results=h.get('route-results-list'); results.scrollTop=0; results.clientHeight=100; results.scrollHeight=500;
   await results.emit('touchstart',{touches:[{clientY:0,clientX:0}]});
@@ -779,6 +779,7 @@ test('Trasa second tick updates the existing card without writing scrollTop and 
   await chooseStop(h, 'from', 'Start', ['a1']);
   await chooseStop(h, 'to', 'End', ['b1']);
   const now = Math.floor(Date.now() / 1000);
+  h.setNow(now * 1000);
   h.respond(() => [{ legs: [{ ...leg, scheduledDepartureEpoch: now + 600,
     scheduledArrivalEpoch: now + 1200, departureEpoch: now + 600, arrivalEpoch: now + 1200 }] }]);
   await h.get('route-search-btn').click();
@@ -791,7 +792,10 @@ test('Trasa second tick updates the existing card without writing scrollTop and 
   for (let i = 0; i < 3; i++) {
     // Native smooth scrolling changes position between successive UI updates.
     scroll += 20;
+    h.setNow((now + (i + 1) * 60) * 1000);
     [...h.intervals.values()][0]();
+    assert.match(wrapper.querySelector('.trasa-timer-content').innerHTML, new RegExp(`>${9 - i}<`));
+    assert.match(wrapper.querySelector('.lubus-live').innerHTML, new RegExp(`>${9 - i} minut`));
   }
   assert.equal(writes, 0);
   assert.equal(results.children[0], wrapper);
@@ -976,3 +980,52 @@ for (const [edge, direction] of [['top',1],['bottom',-1]]) {
     live.scrollHeight=500;const nested=await swipe(100);assert.equal(nested.requested,false);assert.equal(nested.prevented,false);
   });
 }
+
+
+test('search button hides only after results and returns on either field or point action', async () => {
+  const h=await setup(), button=h.get('route-search-btn');
+  await chooseStop(h,'from','Start',['a1']); await chooseStop(h,'to','End',['b1']);
+  assert.equal(button.dataset.collapsed,'false');
+  for(const [id,event] of [['route-input-from','focus'],['route-input-to','focus'],
+      ['route-input-from','input'],['route-input-to','input'],['route-clear-from','click'],['route-clear-to','click']]) {
+    // Focus/action restoration must work without altering the existing search contracts.
+    h.respond(url=>url.includes('/route/complex')?[{legs:[leg]}]:[]);
+    await button.click();assert.equal(button.dataset.collapsed,'true');
+    assert.equal(button.inert,true);assert.equal(button.ariaHidden,'true');
+    if(event==='input') {
+      // Keep autocomplete idle; selecting the points again belongs to the normal form flow.
+      h.get(id).value='';
+    }
+    await h.get(id).emit(event);assert.equal(button.dataset.collapsed,'false',`${id}/${event}`);
+    assert.equal(button.inert,false);assert.equal(button.ariaHidden,'false');
+    await chooseStop(h,'from','Start',['a1']); await chooseStop(h,'to','End',['b1']);
+  }
+  h.planner.leavePlanner();
+});
+
+test('empty or failed searches keep the search button visible', async () => {
+  const h=await setup(), button=h.get('route-search-btn');
+  await chooseStop(h,'from','Start',['a1']); await chooseStop(h,'to','End',['b1']);
+  for(const result of [[],{httpStatus:500},new Error('offline')]) {
+    h.respond(()=>result);await button.click();assert.equal(button.dataset.collapsed,'false');
+  }
+  h.planner.leavePlanner();
+});
+
+test('editing during a search and subsequent LIVE refreshes never hide the search button', async () => {
+  const flush=()=>new Promise(resolve=>setImmediate(resolve));
+  const h=await setup(),button=h.get('route-search-btn');
+  await chooseStop(h,'from','Start',['a1']); await chooseStop(h,'to','End',['b1']);
+  let resolve;
+  h.respond(url=>url.includes('/route/complex')?new Promise(r=>{resolve=r;}):[]);
+  const search=button.click();await flush();
+  await h.get('route-input-to').emit('focus');
+  resolve([{legs:[leg]}]);await search;
+  assert.equal(button.dataset.collapsed,'false');
+  h.respond(url=>url.includes('/route/complex')?[{legs:[leg]}]:[]);
+  for(let i=0;i<15;i++) [...h.intervals.values()][0]?.();
+  await flush();await flush();assert.equal(button.dataset.collapsed,'false');
+  // A fresh explicit search is allowed to collapse it again.
+  await button.click();assert.equal(button.dataset.collapsed,'true');
+  h.planner.leavePlanner();
+});

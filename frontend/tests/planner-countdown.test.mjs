@@ -16,8 +16,9 @@ test('header, expanded countdown and walking warning agree on partial minutes an
         const header = timing.countdownMarkup(value);
         const details = expanded.renderExpandedLive(journey,[],0,now);
         assert.match(header,new RegExp(`>${minutes || '&lt;1'}<`));
-        assert.match(details,new RegExp(minutes ? `>${minutes} minut` : '>Teraz<'));
-        assert.match(details,new RegExp(minutes ? `Odjazd za ${minutes} min` : 'Odjazd teraz'));
+        assert.match(details,new RegExp(minutes ? `>${minutes} minut` : '>Termin odjazdu minął<'));
+        if (minutes) assert.match(details,new RegExp(`Odjazd za ${minutes} min`));
+        else assert.doesNotMatch(details,/Możesz nie zdążyć|Odjazd teraz/);
     }
 });
 

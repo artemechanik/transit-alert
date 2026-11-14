@@ -1,4 +1,4 @@
-import { LIVE_MAX_AGE } from './planner-results.js';
+import { LIVE_MAX_AGE, hasFreshLive } from './planner-results.js';
 
 export const PASSENGER_LIVE_STATES = {
     not_started: { label: 'Kurs jeszcze się nie rozpoczął', tone: 'neutral', hint: 'Poczekaj na rozpoczęcie kursu.' },
@@ -56,4 +56,24 @@ export function passengerLiveState(segment, now = Date.now() / 1000) {
         : live.currentStatus === 'INCOMING_AT' ? 'Pojazd zbliża się do wcześniejszego przystanku.' : 'Sprawdź miejsce wejścia.';
     const noun = remaining % 10 >= 2 && remaining % 10 <= 4 && (remaining % 100 < 12 || remaining % 100 > 14) ? 'przystanki' : 'przystanków';
     return result('approaching', { nextStop, stopsToBoarding: remaining, hint: `${motion} Do wejścia: ${remaining} ${noun}.` });
+}
+
+// Arrival belongs to the chosen transport leg, never the final destination of a transfer journey.
+export function alightingProgress(segment, now = Date.now() / 1000) {
+    if (passengerLiveState(segment, now).state !== 'in_progress') return null;
+    const { leg, stops } = segment;
+    const all = stops.tripStops || stops.timelineStops || stops;
+    const boarding = stops.boardingSequence ?? all.find(s => s.stopId === leg.fromStopId)?.stopSequence;
+    const destinations = leg.toStopId ? all.filter(s => s.stopId === leg.toStopId && s.stopSequence >= boarding) : [];
+    const destination = destinations.length === 1 ? all.indexOf(destinations[0]) : -1;
+    const current = all.findIndex(s => s.stopSequence === stops.live.currentStopSequence);
+    const passed = destination >= 0 && stops.live.currentStopSequence > all[destination].stopSequence;
+    const atDestination = destination >= 0 && current === destination && stops.live.currentStatus === 'STOPPED_AT';
+    const stopsRemaining = passed || destination < 0 || current < 0 ? null
+        : destination - current + (stops.live.currentStatus === 'STOPPED_AT' ? 0 : 1);
+    const live = hasFreshLive(leg, now) && Number.isFinite(leg.arrivalEpoch);
+    const arrival = live ? leg.arrivalEpoch : leg.scheduledArrivalEpoch;
+    const minutes = !passed && !atDestination && Number.isFinite(arrival) && arrival > now
+        ? Math.ceil((arrival - now) / 60) : null;
+    return { stopsRemaining, minutes, live, atDestination, passed };
 }

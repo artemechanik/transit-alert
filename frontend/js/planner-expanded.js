@@ -1,7 +1,7 @@
 import { legCountdown, journeyCountdown, departureClock } from './planner-countdown.js';
 import { assessTransfer, transferPlatformChange, transferWalkMinutes } from './planner-transfer.js';
 import { hasFreshLive, boardingDeadline, initialWalkRisk, initialWalkMinutes } from './planner-results.js';
-import { passengerLiveState } from './planner-live-state.js';
+import { passengerLiveState, alightingProgress } from './planner-live-state.js';
 import { captureListAnchor, restoreListAnchor } from './list-motion.js';
 import { pinButtonMarkup } from './planner-pin.js';
 
@@ -28,19 +28,30 @@ function tripDirection(segment, leg) {
     return name;
 }
 
-function boardingMetrics(journey, index, state, now) {
+function boardingMetrics(journey, index, state, now, segment) {
+    if (state.state === 'in_progress') {
+        const progress = alightingProgress(segment, now);
+        if (!progress) return '';
+        const parts = [Number.isInteger(progress.stopsRemaining)
+            ? quantity(progress.stopsRemaining, 'przystanek', 'przystanki', 'przystanków') : '',
+            progress.minutes !== null ? `około ${progress.minutes} min${progress.live ? '' : ' · według rozkładu'}` : ''].filter(Boolean);
+        const content = progress.passed ? 'Pojazd minął przystanek wysiadania.'
+            : progress.atDestination ? 'Pojazd na przystanku wysiadania.' : parts.join(' · ');
+        return content ? `<dl class="lubus-boarding-metrics"><div><dt>Do wysiadania</dt><dd>${content}</dd></div></dl>` : '';
+    }
     const { live: fresh, minutes: remaining, color } = journeyCountdown(journey, now, index);
     const count = state.state !== 'in_progress' && Number.isInteger(state.stopsToBoarding)
         ? `<div><dt>Do wejścia</dt><dd>${quantity(state.stopsToBoarding, 'przystanek', 'przystanki', 'przystanków')}</dd></div>` : '';
-    const eta = remaining === null ? '' : `<div><dt>${fresh ? 'Za około' : 'Według rozkładu'}</dt><dd style="color:${color}">${remaining < 0
-        ? 'Termin odjazdu minął' : remaining === 0 ? 'Teraz' : quantity(remaining, 'minutę', 'minuty', 'minut')}</dd></div>`;
+    const eta = remaining === null ? '' : `<div><dt>${fresh ? remaining <= 0 ? 'Odjazd' : 'Za około' : 'Według rozkładu'}</dt><dd style="color:${color}">${state.state === 'boarding' && remaining <= 0 ? 'Teraz' : remaining <= 0
+        ? 'Termin odjazdu minął' : quantity(remaining, 'minutę', 'minuty', 'minut')}</dd></div>`;
     return count || eta ? `<dl class="lubus-boarding-metrics">${count}${eta}</dl>` : '';
 }
 
-function initialWalkHint(journey, index, now) {
-    if (index !== 0 || !initialWalkRisk(journey, now)) return '';
-    const minutes = Math.max(0, legCountdown(transitLegs(journey)[0], now).minutes);
-    return `<div class="lubus-walk-risk" role="status"><strong>⚠ Możesz nie zdążyć na przystanek</strong><p>Odjazd ${minutes ? `za ${minutes} min` : 'teraz'} · dojście około ${initialWalkMinutes(journey)} min</p></div>`;
+function initialWalkHint(journey, index, state, now) {
+    if (index !== 0 || state.state === 'in_progress' || !initialWalkRisk(journey, now)) return '';
+    const minutes = legCountdown(transitLegs(journey)[0], now).minutes;
+    if (minutes === null || minutes <= 0) return '';
+    return `<div class="lubus-walk-risk" role="status"><strong>⚠ Możesz nie zdążyć na przystanek</strong><p>Odjazd za ${minutes} min · dojście około ${initialWalkMinutes(journey)} min</p></div>`;
 }
 
 function transferHint(journey, transit, index, now) {
@@ -109,8 +120,8 @@ export function renderExpandedLive(journey, segments = [], selectedIndex = 0, no
           </div>
           ${pinButtonMarkup(pinned)}
         </div>
-        ${boardingMetrics(journey, index, state, now)}
-        <div class="lubus-message-slot">${initialWalkHint(journey, index, now)
+        ${boardingMetrics(journey, index, state, now, segments[index])}
+        <div class="lubus-message-slot">${initialWalkHint(journey, index, state, now)
             || transferHint(journey, transit, index, now)
             || journeyAdvice(journey, leg, index, state, now)}</div>
     </section>`;

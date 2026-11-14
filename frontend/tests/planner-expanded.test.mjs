@@ -301,3 +301,54 @@ test('transfer boarding clock uses the next segment precise forecast and updates
  assert.match(selected,/1 minutę/);assert.match(selected,/Wsiądź do 8 · według rozkładu<\/dt><dd><time>12:00<\/time>/);
  assert.doesNotMatch(selected,/<time>10:03<\/time>|<time>10:04<\/time>/);
 });
+
+test('confirmed progress replaces missed-boarding warning with selected-segment alighting information',async()=>{
+    const m=await load();
+    const first={...leg,tripId:'first',fromStopId:'board',toStopId:'exit',scheduledDepartureEpoch:900,scheduledArrivalEpoch:1600,
+        departureEpoch:900,arrivalEpoch:1450,isRealTime:true,liveObservedEpoch:1000};
+    const next={...first,tripId:'next',route:'7',scheduledArrivalEpoch:2200,arrivalEpoch:2110};
+    function observation(l) {
+        const stops=[{stopId:'board',stopSequence:10},{stopId:'middle',stopSequence:30},{stopId:'exit',stopSequence:80}];
+        stops.boardingSequence=10;stops.live={tripId:l.tripId,isFresh:true,gpsTimestamp:1000,currentStopSequence:30,currentStatus:'IN_TRANSIT_TO'};
+        return {leg:l,stops};
+    }
+    const segments=[observation(first),observation(next)];
+    const journey={legs:[{route:'Пішки',departureMin:0,arrivalMin:2},first,next]};
+    for(const pinned of [false,true]) {
+        let html=m.renderExpandedLive(journey,segments,0,1000,pinned);
+        assert.match(html,/Kurs w toku/);assert.match(html,/Do wysiadania/);assert.match(html,/2 przystanki · około 8 min/);
+        assert.doesNotMatch(html,/Możesz nie zdążyć|Odjazd teraz|Termin odjazdu minął|Wyrusz/);
+        assert.match(html,/lubus-transfer-hint/,'transfer instructions remain available');
+        html=m.renderExpandedLive(journey,segments,1,1000,pinned);
+        assert.match(html,/2 przystanki · około 19 min/);assert.doesNotMatch(html,/około 8 min/);
+    }
+    first.departureEpoch=1180;
+    assert.doesNotMatch(m.renderExpandedLive(journey,segments,0,1000),/Możesz nie zdążyć|Wyrusz/,'GPS passage takes precedence over a later forecast');
+    first.departureEpoch=900;
+    segments[0].leg={...first,liveObservedEpoch:699};
+    assert.match(m.renderExpandedLive(journey,segments,0,1000),/2 przystanki · około 10 min · według rozkładu/);
+    segments[0].stops.live.gpsTimestamp=699;
+    let html=m.renderExpandedLive(journey,segments,0,1000);
+    assert.match(html,/Brak aktualnej lokalizacji/);assert.match(html,/Termin odjazdu minął/);
+    assert.doesNotMatch(html,/Do wysiadania|Możesz nie zdążyć|Odjazd teraz/);
+    segments[0].stops.live.gpsTimestamp=1000;
+    Object.assign(segments[0].stops.live,{currentStopSequence:10,currentStatus:'STOPPED_AT'});
+    html=m.renderExpandedLive(journey,segments,0,1000);
+    assert.match(html,/Na przystanku/);assert.match(html,/>Teraz</);assert.doesNotMatch(html,/Termin odjazdu minął|Możesz nie zdążyć/);
+    Object.assign(segments[0].stops.live,{currentStopSequence:80,currentStatus:'STOPPED_AT'});
+    html=m.renderExpandedLive(journey,segments,0,1000);
+    assert.match(html,/Pojazd na przystanku wysiadania/);assert.doesNotMatch(html,/około 10 min|0 przystanków/);
+    segments[0].stops.live.currentStopSequence=90;
+    assert.match(m.renderExpandedLive(journey,segments,0,1000),/Pojazd minął przystanek wysiadania/);
+});
+
+test('elapsed boarding time without GPS is neutral while pre-departure walking risk remains',async()=>{
+    const m=await load();
+    const first={...leg,scheduledDepartureEpoch:1180};
+    const journey={legs:[{route:'Пішки',departureMin:0,arrivalMin:2},first]};
+    assert.match(m.renderExpandedLive(journey,[],0,1000),/Możesz nie zdążyć/);
+    for(const now of [1180,1181,1300]) {
+        const html=m.renderExpandedLive(journey,[],0,now);
+        assert.match(html,/Termin odjazdu minął/);assert.doesNotMatch(html,/Możesz nie zdążyć|Odjazd teraz|Kurs w toku/);
+    }
+});

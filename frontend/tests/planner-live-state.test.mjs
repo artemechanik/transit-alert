@@ -65,3 +65,43 @@ test('known next stop beyond alighting is retained for LIVE without expanding th
     const r=f(s,1000);assert.equal(r.state,'in_progress');assert.equal(r.nextStop.name,'Later stop');
     assert.equal(s.stops.at(-1).stopSequence,31);assert.equal(s.stops.timelineStops.at(-1).stopSequence,31);
 });
+
+test('alighting progress counts ordered occurrences and distinguishes stopped from approaching',async()=>{
+    const {alightingProgress:f}=await load();
+    const s=segment(31);s.leg.toStopId='destination';
+    s.leg.scheduledArrivalEpoch=1600;
+    s.stops.tripStops=[...s.stops.timelineStops,{stopSequence:80,stopId:'destination',name:'Exit'}];
+    for(const [seq,status,count] of [[31,'IN_TRANSIT_TO',2],[31,'INCOMING_AT',2],[31,'STOPPED_AT',1],[80,'IN_TRANSIT_TO',1],[80,'STOPPED_AT',0]]) {
+        Object.assign(s.stops.live,{currentStopSequence:seq,currentStatus:status});
+        const r=f(s,1000);assert.equal(r.stopsRemaining,count);assert.equal(r.atDestination,seq===80&&status==='STOPPED_AT');
+        assert.equal(r.minutes,r.atDestination?null:10);assert.equal(r.live,false);
+    }
+    s.stops.live.currentStopSequence=90;
+    assert.equal(f(s,1000).passed,true);assert.equal(f(s,1000).minutes,null);
+});
+
+test('alighting progress requires fresh unambiguous GPS and a unique destination after boarding',async()=>{
+    const {alightingProgress:f}=await load();
+    const s=segment(31);s.leg.toStopId='s4';s.leg.scheduledArrivalEpoch=1600;
+    for(const patch of [{isFresh:false},{gpsTimestamp:699},{gpsTimestamp:1001},{tripId:'other'},{currentStopSequence:25}]) {
+        const live=s.stops.live;s.stops.live={...live,...patch};assert.equal(f(s,1000),null);s.stops.live=live;
+    }
+    // The same stop before boarding is harmless; two occurrences after boarding are ambiguous.
+    s.stops.timelineStops[0].stopId='s4';assert.equal(f(s,1000).stopsRemaining,1);
+    s.stops.tripStops=[...s.stops.timelineStops,{stopSequence:80,stopId:'s4'}];
+    assert.equal(f(s,1000).stopsRemaining,null);assert.equal(f(s,1000).minutes,10);
+    s.stops.live.currentStopSequence=20;assert.equal(f(s,1000),null);
+});
+
+test('arrival predictions use the selected leg freshness, update precisely and never show negative ETA',async()=>{
+    const {alightingProgress:f}=await load();const s=segment(31);s.leg.toStopId='s4';
+    Object.assign(s.leg,{isRealTime:true,liveObservedEpoch:1000,departureEpoch:900,arrivalEpoch:1450,scheduledArrivalEpoch:1600});
+    assert.equal(f(s,1000).minutes,8);assert.equal(f(s,1000).live,true);
+    s.leg.arrivalEpoch=1481;assert.equal(f(s,1000).minutes,9);
+    for(const observed of [undefined,699,1001]) {
+        s.leg.liveObservedEpoch=observed;assert.equal(f(s,1000).minutes,10);assert.equal(f(s,1000).live,false);
+    }
+    s.leg.liveObservedEpoch=1000;s.leg.arrivalEpoch=null;assert.equal(f(s,1000).minutes,10);
+    s.leg.arrivalEpoch=999;assert.equal(f(s,1000).minutes,null);
+    delete s.leg.arrivalEpoch;delete s.leg.scheduledArrivalEpoch;assert.equal(f(s,1000).minutes,null);
+});

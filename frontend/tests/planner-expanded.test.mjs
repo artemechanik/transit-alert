@@ -4,14 +4,14 @@ import { loadBrowserModule } from './helpers/load-browser-module.mjs';
 const load = () => loadBrowserModule(new URL('../js/planner-expanded.js', import.meta.url), {});
 const leg = { route: '153', tripId: 'real-trip', fromStopName: 'Start 01', toStopName: 'End 51', departureMin: 1450, arrivalMin: 1470, isRealTime: false };
 
-test('expanded summary uses route predictions without inventing GPS, direction or pinning', async () => {
+test('expanded summary uses route predictions without inventing GPS or direction', async () => {
     const m = await load();
     const html = m.expandedMarkup('<div>real stops</div>', { legs: [leg] });
     assert.match(html, /LIVE<\/button>/);
     assert.match(html, /Podróż/); assert.match(html, /Mapa/);
     assert.match(html, /real stops/);
     assert.match(html, /lubus-passenger-state/);
-    assert.doesNotMatch(html, /DEMO|STOPPED_AT|Przypnij|Następny przystanek|Kierunek:/);
+    assert.doesNotMatch(html, /DEMO|STOPPED_AT|Następny przystanek|Kierunek:/);
     const live = m.renderExpandedLive({ legs: [{ ...leg, isRealTime: true, delayMinutes: 3 }] });
     assert.doesNotMatch(live, /<header>|lubus-status|LIVE ·/);
     assert.doesNotMatch(live, /lubus-boarding"|Start 01|End 51/);

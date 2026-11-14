@@ -4,6 +4,7 @@ import { setupJourneyTimeline } from './planner-timeline.js';
 import { expandedMarkup, bindExpandedPanels, updateExpandedLive, preserveInlineAnchor } from './planner-expanded.js';
 import { initialWalkRisk, initialWalkMinutes, displayWalkMinutes } from './planner-results.js';
 import { apiFetch } from './backend-connection.js';
+import { PIN_ICON, syncJourneyPin } from './planner-pin.js';
 // Картки поїздок, розгортання зупинок і відкриття мінікарти.
 function formatTime(minutes) {
     // Додаємо % 24, щоб після 23:59 годинник скидався на 00:xx
@@ -181,6 +182,7 @@ export function createPlannerCards({
             </div>
             ${finalWalkMin > 0 ? `<span style="opacity:0.4">•</span> <div style="display:flex; align-items:center; gap:2px;"><div class="svg-icon icon-walk" style="width:13px;height:13px;"></div>${finalWalkMin}m</div>` : ''}
         </div>
+        <span class="trasa-pin-indicator" role="img" aria-label="Przypięta podróż">${PIN_ICON}</span>
     </div>`;
 
 
@@ -193,7 +195,6 @@ export function createPlannerCards({
         card.innerHTML = `
         <button class="close-trasa-btn" title="Zamknij">✕</button>
         ${compactHeaderHtml}
-        <button type="button" class="trasa-pin-button" aria-pressed="false" title="Zachowaj połączenie na liście po odjeździe">📌 Przypnij podróż</button>
         <div class="trasa-middle-scroll" style="display: none;"></div>
         <div class="trasa-details">
             ${timelineHtml}
@@ -219,13 +220,7 @@ export function createPlannerCards({
 
     function updateJourneyCard(wrapper, journey, pinned = false) {
         wrapper.journey = journey;
-        wrapper.classList.toggle('trasa-pinned', pinned);
-        const pin = wrapper.querySelector('.trasa-pin-button');
-        if (pin) {
-            pin.ariaPressed = String(pinned);
-            pin.textContent = pinned ? '📌 Odepnij podróż' : '📌 Przypnij podróż';
-            pin.title = pinned ? 'Przestań zachowywać połączenie na liście' : 'Zachowaj połączenie na liście po odjeździe';
-        }
+        syncJourneyPin(wrapper, pinned);
         const now = Date.now() / 1000;
         if (getPresentation() === 'new') updateBoardingTime(wrapper, journey, now, 'new');
         updateExpandedLive(wrapper, journey, addMinutesToTime, now);
@@ -460,7 +455,7 @@ export function createPlannerCards({
                         transitIdx++;
                     });
             const restoreLoadedAnchor = preserveInlineAnchor(card);
-            scrollPanel.innerHTML = expandedMarkup(html || '<p>Brak danych</p>', { legs });
+            scrollPanel.innerHTML = expandedMarkup(html || '<p>Brak danych</p>', { legs }, card.parentNode?.classList?.contains('trasa-pinned'));
             bindExpandedPanels(scrollPanel, mapActions);
             setupJourneyTimeline(scrollPanel, transitLegs, legStopsResults, mapActions, addMinutesToTime, inlineMapServices);
             onInlineLayout?.();
@@ -473,7 +468,7 @@ export function createPlannerCards({
 
             // Блокуємо згортання при кліках всередині списку (крім мапи)
             scrollPanel.onclick = (e) => {
-                if (!e.target.closest('.dep-expand-map-btn')) {
+                if (!e.target.closest('.dep-expand-map-btn, .trasa-pin-button')) {
                     e.stopPropagation();
                 }
             };

@@ -100,6 +100,26 @@ def run():
                 for fraction in [1/3,2/3,1]:
                     call('Input.dispatchTouchEvent', {'type':'touchMove','touchPoints':[dict(x=p['x'],y=p['y']+distance*fraction)]}); time.sleep(.04)
                 call('Input.dispatchTouchEvent', {'type':'touchEnd','touchPoints':[]}); time.sleep(.3)
+            def toggle_pin():
+                js('fixture.root.querySelector(".fullscreen-expanded [data-lubus-tab=live]").click()')
+                swipe('.fullscreen-expanded .trasa-pin-button',0)
+            def hold_touch(selector, dx=0, dy=0, cancel=False):
+                p = point(selector)
+                call('Input.dispatchTouchEvent', {'type':'touchStart','touchPoints':[p]}); time.sleep(.1)
+                if dx or dy:
+                    call('Input.dispatchTouchEvent', {'type':'touchMove','touchPoints':[dict(x=p['x']+dx,y=p['y']+dy)]})
+                if cancel:
+                    call('Input.dispatchTouchEvent', {'type':'touchCancel','touchPoints':[]})
+                    time.sleep(.65)
+                else:
+                    time.sleep(.65)
+                    call('Input.dispatchTouchEvent', {'type':'touchEnd','touchPoints':[]}); time.sleep(.3)
+            def screenshot(name):
+                directory = os.environ.get('LUBUS_SCREENSHOTS')
+                if directory:
+                    target = Path(directory); target.mkdir(parents=True, exist_ok=True)
+                    data = call('Page.captureScreenshot', {'format':'png'})['data']
+                    (target/name).write_bytes(base64.b64decode(data))
             def assert_card_contrast(dimmed=False):
                 for selector in ['.trasa-compact-header', '.trasa-middle-scroll', '.trasa-timer-content']:
                     style = js('(()=>{const s=getComputedStyle(fixture.pinned.querySelector('+json.dumps(selector)+'));return {opacity:s.opacity,filter:s.filter}})()')
@@ -116,6 +136,8 @@ def run():
                 if js('!!window.fixture?.ready'): break
                 time.sleep(.1)
             assert js('!!window.fixture?.ready'), 'Fixture did not initialize'
+            js('fixture.originalPinButton=fixture.root.querySelector(".trasa-pin-button")'); time.sleep(1.2)
+            assert js('fixture.root.querySelector(".trasa-pin-button")===fixture.originalPinButton'), 'Unchanged LIVE tick replaced the SVG button/touch target'
             js('fixture.root.scrollTop=70')
             before = js('fixture.metrics()')
             assert before['liveHeight'] == before['liveContent'], before
@@ -134,7 +156,7 @@ def run():
                     js('fixture.root.scrollTop='+('0' if index==0 else 'fixture.root.scrollHeight'))
                     before = js('fixture.routeRequests'); swipe('.fullscreen-expanded .lubus-live',distance*direction)
                     after = js('fixture.routeRequests')
-                    assert after-before == (1 if distance>60 else 0), (index,distance,before,after)
+                    assert after-before == (1 if distance>60 else 0), (index,distance,before,after,js('fixture.metrics()'))
             print('PASS pull/load-more: 59/60 px do nothing; 61 px triggers the existing action')
             js('await fixture.open(0);await fixture.open(1)')
             before = js('fixture.headerBacks'); swipe('.fullscreen-expanded .trasa-compact-header',0)
@@ -160,17 +182,56 @@ def run():
             before = js('fixture.root.scrollTop'); time.sleep(.8)
             assert abs(js('fixture.root.scrollTop')-before)<2, 'Auto-positioning resumed after manual interruption'
             print('PASS manual gesture cancels auto-positioning without resuming')
+            call('Emulation.setDeviceMetricsOverride',dict(width=320,height=900,deviceScaleFactor=1,mobile=True))
+            call('Emulation.setEmulatedMedia',{'features':[{'name':'prefers-reduced-motion','value':'reduce'}]})
+            js('history.back()'); time.sleep(.2); js('fixture.root.scrollTop=0;fixture.holdCard=fixture.root.children[0]')
+            length = js('history.length')
+            hold_touch('.trasa-card .trasa-compact-header')
+            assert js('fixture.holdCard.classList.contains("trasa-pinned")'), 'Collapsed hold did not pin'
+            assert not js('fixture.metrics().open'), 'Hold companion click opened the card'
+            assert js('history.length') == length
+            assert js('getComputedStyle(fixture.holdCard.querySelector(".trasa-pin-indicator")).display') != 'none'
+            assert js('fixture.holdCard.querySelectorAll(".trasa-pin-button").length') == 0
+            screenshot('pin-collapsed-320.png')
+            swipe('.trasa-card .trasa-compact-header',0)
+            assert js('fixture.metrics().open'), 'Ordinary tap after a hold was swallowed'
+            assert js('fixture.holdCard.querySelector(".lubus-live .trasa-pin-button").ariaPressed') == 'true'
+            assert js('fixture.holdCard.querySelectorAll(".trasa-pin-button").length') == 1
+            for width in [320,360]:
+                call('Emulation.setDeviceMetricsOverride',dict(width=width,height=900,deviceScaleFactor=1,mobile=True))
+                for theme in ['light','dark']:
+                    js(f'document.documentElement.dataset.theme="{theme}"')
+                    geometry = js('(()=>{const h=fixture.holdCard.querySelector(".trasa-compact-header"),i=h.querySelector(".trasa-pin-indicator").getBoundingClientRect(),b=fixture.holdCard.querySelector(".trasa-pin-button").getBoundingClientRect(),p=fixture.holdCard.querySelector(".lubus-position").getBoundingClientRect();const overlap=[...h.querySelectorAll(".dep-route-box,.trasa-header-status-wrap,.trasa-duration")].some(n=>{const r=n.getBoundingClientRect();return r.width&&r.height&&r.left<i.right&&r.right>i.left&&r.top<i.bottom&&r.bottom>i.top});return {overlap,w:b.width,h:b.height,right:b.right,edge:p.right,cardRight:fixture.holdCard.getBoundingClientRect().right,viewport:innerWidth}})()')
+                    assert not geometry['overlap'] and abs(geometry['w']-30)<.1 and abs(geometry['h']-30)<.1, geometry
+                    assert abs(geometry['right']-geometry['edge'])<1 and geometry['cardRight']<=geometry['viewport'], geometry
+                    screenshot(f'pin-live-{width}-{theme}.png')
+            toggle_pin()
+            assert not js('fixture.holdCard.classList.contains("trasa-pinned")')
+            assert js('getComputedStyle(fixture.holdCard.querySelector(".trasa-pin-indicator")).display') == 'none'
+            for dx,dy,cancel in [(30,0,False),(0,-30,False),(0,0,True)]:
+                js('fixture.root.scrollTop=0')
+                hold_touch('.fullscreen-expanded .trasa-compact-header',dx,dy,cancel)
+                assert not js('fixture.holdCard.classList.contains("trasa-pinned")'), 'Cancelled gesture pinned the card'
+                assert js('fixture.metrics().open'), 'Cancelled gesture closed the card'
+            js('fixture.root.scrollTop=0')
+            hold_touch('.fullscreen-expanded .trasa-compact-header')
+            assert js('fixture.holdCard.classList.contains("trasa-pinned")') and js('fixture.metrics().open'), 'Expanded hold toggled the accordion'
+            toggle_pin()
+            assert not js('fixture.holdCard.classList.contains("trasa-pinned")'), 'Button and long hold used different pin state'
+            call('Emulation.setDeviceMetricsOverride',dict(width=430,height=1000,deviceScaleFactor=1,mobile=True))
+            js('document.documentElement.dataset.theme="light"')
+            print('PASS native long hold, movement/cancel and companion click; one LIVE button and synced indicator at 320/360 px')
             call('Emulation.setEmulatedMedia',{'features':[{'name':'prefers-reduced-motion','value':'reduce'}]})
             js('await fixture.open(0);fixture.pinned=fixture.root.children[0];fixture.selected=fixture.pinned.querySelector(".trasa-middle-scroll").lubusTimeline.selectedIndex()')
             assert_card_contrast()
             assert js('getComputedStyle(fixture.pinned.querySelector(".trasa-pin-button")).display') != 'none'
             before = js('fixture.headerBacks')
-            swipe('.fullscreen-expanded .trasa-pin-button',0)
+            toggle_pin()
             assert js('fixture.pinned.querySelector(".trasa-pin-button").ariaPressed') == 'true'
             assert js('fixture.headerBacks') == before and js('fixture.metrics().open')
             assert_card_contrast()
             js('fixture.cardHeightBeforeDeparture=fixture.pinned.querySelector(".trasa-card").getBoundingClientRect().height')
-            assert 'ODJAZD' not in js('fixture.pinned.querySelector(".trasa-timer-content").textContent')
+            assert 'odjazd o:' not in js('fixture.pinned.querySelector(".trasa-timer-content").textContent')
             for tab in ['journey','map','live']:
                 js(f'fixture.pinned.querySelector("[data-lubus-tab={tab}]").click()')
                 assert js('fixture.pinned.querySelector(".trasa-pin-button").ariaPressed') == 'true'
@@ -202,8 +263,9 @@ def run():
             print('PASS repeated Trasa → Mapa → Trasa retains pin/scroll; header and system Back close before leaving')
             js('history.back()'); time.sleep(.3)
             assert not js('fixture.metrics().open'), 'Back did not close the pinned accordion'
-            assert js('fixture.pinned.querySelector(".trasa-pin-button").ariaPressed') == 'true'
-            assert js('getComputedStyle(fixture.pinned.querySelector(".trasa-pin-button")).display') == 'none'
+            assert js('fixture.pinned.classList.contains("trasa-pinned")')
+            assert js('fixture.pinned.querySelector(".trasa-pin-button")') is None
+            assert js('getComputedStyle(fixture.pinned.querySelector(".trasa-pin-indicator")).display') != 'none'
             js('await fixture.open(0);fixture.advanceClock(4000)'); time.sleep(1.2)
             js('fixture.advanceClock(61)'); time.sleep(1.2)
             assert js('fixture.pinned.isConnected'), 'Pinned card expired after departure'
@@ -211,14 +273,14 @@ def run():
             assert js('fixture.pinned.querySelector(".trasa-middle-scroll").lubusTimeline.selectedIndex()') == js('fixture.selected')
             departure_text = js('fixture.pinned.querySelector(".trasa-timer-content").textContent')
             departure_clock = js('new Date(fixture.pinned.journey.legs[0].scheduledDepartureEpoch*1000).toLocaleTimeString("pl-PL",{hour:"2-digit",minute:"2-digit",timeZone:"Europe/Warsaw"})')
-            assert 'ODJAZD' in departure_text and departure_clock in departure_text and '<1' not in departure_text
+            assert 'odjazd o:' in departure_text and departure_clock in departure_text and '<1' not in departure_text
             assert js('fixture.pinned.querySelector(".trasa-boarding-time").textContent') == departure_clock
             assert js('fixture.pinned.querySelector(".lubus-timeline-stop.key-stop time").textContent') == departure_clock
             assert abs(js('fixture.pinned.querySelector(".trasa-card").getBoundingClientRect().height')-js('fixture.cardHeightBeforeDeparture')) < 1
             js('document.querySelector("#trasa-presentation-classic").click()')
             assert '<1' in js('fixture.pinned.querySelector(".trasa-timer-content").textContent')
             js('document.querySelector("#trasa-presentation-new").click()')
-            assert 'ODJAZD' in js('fixture.pinned.querySelector(".trasa-timer-content").textContent')
+            assert 'odjazd o:' in js('fixture.pinned.querySelector(".trasa-timer-content").textContent')
             print('PASS Nowa shows boarding departure time after departure; card height and classic countdown are preserved')
             for theme in ['light','dark']:
                 js(f'document.documentElement.dataset.theme="{theme}"')
@@ -228,7 +290,7 @@ def run():
             # A passed stop keeps its local dimming inside the fully readable card.
             js('(()=>{const t=fixture.pinned.querySelector(".trasa-middle-scroll").lubusTimeline;const s=t.observations()[0].stops;Object.assign(s.live,{gpsTimestamp:Date.now()/1000,currentStopSequence:2,currentStatus:"STOPPED_AT",isFresh:true});t.update(0,s)})()')
             assert js('getComputedStyle(fixture.pinned.querySelector(".lubus-timeline-stop.passed")).opacity') == '0.5'
-            swipe('.fullscreen-expanded .trasa-pin-button',0)
+            toggle_pin()
             time.sleep(.4)
             assert not js('fixture.pinned.isConnected'), 'Unpin did not restore the original expiration rule'
             print('PASS pin survives tabs, reopen and departure; unpin expires without changing segment or Back')
@@ -237,14 +299,14 @@ def run():
             js('await fixture.open(0);fixture.pinned=fixture.root.children[0]')
             assert js('fixture.pinned.classList.contains("trasa-departed")'), 'Late pin scenario must start after departure'
             assert_card_contrast(dimmed=True)
-            swipe('.fullscreen-expanded .trasa-pin-button',0)
+            toggle_pin()
             assert_card_contrast()
-            swipe('.fullscreen-expanded .trasa-pin-button',0)
+            toggle_pin()
             assert_card_contrast(dimmed=True)
-            swipe('.fullscreen-expanded .trasa-pin-button',0)
+            toggle_pin()
             js('fixture.advanceClock(61)'); time.sleep(1.2)
             assert js('fixture.pinned.isConnected'), 'Pinning after departure did not retain the card'
-            swipe('.fullscreen-expanded .trasa-pin-button',0); time.sleep(.4)
+            toggle_pin(); time.sleep(.4)
             assert not js('fixture.pinned.isConnected')
             print('PASS pinning after departure also protects the card until manual unpin')
         finally:

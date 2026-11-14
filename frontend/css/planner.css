@@ -512,20 +512,31 @@
 
 /* One itinerary DOM serves both modes. Classic retains its original scroll/layout. */
 .trasa-pin-button { display: none; }
-#route-results-list[data-presentation="new"] .fullscreen-expanded > .trasa-pin-button {
-  display: block;
-  margin: 6px 0 4px auto;
-  padding: 6px 10px;
+#route-results-list[data-presentation="new"] .fullscreen-expanded .lubus-live .trasa-pin-button {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  padding: 0;
   font: inherit;
-  font-size: 12px;
   color: var(--text-muted);
-  background: var(--card);
+  background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 7px;
   cursor: pointer;
 }
-#route-results-list[data-presentation="new"] .fullscreen-expanded > .trasa-pin-button[aria-pressed="true"] { color: var(--text); border-color: var(--blue); }
+#route-results-list[data-presentation="new"] .fullscreen-expanded .lubus-live .trasa-pin-button[aria-pressed="true"] { color: var(--blue); border-color: var(--blue); background: var(--card); }
+.trasa-pin-button svg, .trasa-pin-indicator svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.trasa-pin-button[aria-pressed="true"] svg { fill: currentColor; }
 .trasa-pin-button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.trasa-pin-indicator { display: none; }
+#route-results-list[data-presentation="new"] .trasa-compact-header { position: relative; }
+#route-results-list[data-presentation="new"] .trasa-pinned .trasa-compact-header { padding-right: 18px; }
+#route-results-list[data-presentation="new"] .trasa-pinned .trasa-pin-indicator { display: block; position: absolute; top: 0; right: 0; width: 12px; height: 12px; color: var(--text-muted); pointer-events: none; }
+.trasa-pin-indicator svg { display: block; width: 12px; height: 12px; fill: currentColor; }
+.lubus-position .lubus-passenger-state { flex: 1; }
 .lubus-tabs, .lubus-live, .lubus-map { display: none; }
 .lubus-journey { display: contents; }
 #route-results-list[data-presentation="new"] .fullscreen-expanded .trasa-middle-scroll {

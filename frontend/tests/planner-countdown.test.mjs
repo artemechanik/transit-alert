@@ -94,7 +94,7 @@ test('Nowa changes exactly at departure from the existing countdown to the board
     }
     for(const now of [predicted,predicted+1,predicted+60]) {
         const html=timing.countdownMarkup(timing.journeyCountdown(journey,now),'new');
-        assert.match(html,/>ODJAZD</);assert.match(html,/>10:02</);
+        assert.match(html,/>odjazd o:</);assert.match(html,/>10:02</);
         assert.doesNotMatch(html,/&lt;1|minuta|TERAZ|ODJECHAŁ/);
     }
 });
@@ -105,7 +105,7 @@ test('Nowa uses scheduled boarding time without a trustworthy LIVE forecast', ()
         const value=timing.journeyCountdown({legs:[{...leg,scheduledDepartureEpoch:scheduled,departureEpoch:scheduled+120,liveObservedEpoch:now,...patch}]},now);
         assert.equal(value.live,false);
         const html=timing.countdownMarkup(value,'new');
-        assert.match(html,/>ODJAZD</);assert.match(html,/>10:00</);
+        assert.match(html,/>odjazd o:</);assert.match(html,/>10:00</);
         assert.match(html,/color:var\(--text-muted\)/);assert.doesNotMatch(html,/&lt;1|minuta/);
     }
 });
@@ -117,7 +117,7 @@ test('Nowa keeps the first boarding time on transfers; explicit segment timing a
     const journey={legs:[{route:'Пішки'},first,{route:'Пішки'},next]};
     const now=firstEpoch+180;
     const html=timing.countdownMarkup(timing.journeyCountdown(journey,now),'new');
-    assert.match(html,/>ODJAZD</);assert.match(html,/>23:58</);
+    assert.match(html,/>odjazd o:</);assert.match(html,/>23:58</);
     assert.equal(timing.journeyCountdown(journey,now,1).minutes,7);
     const nextHtml=timing.countdownMarkup(timing.journeyCountdown(journey,firstEpoch+601,1),'new');
     assert.match(nextHtml,/>00:08</);
@@ -137,4 +137,43 @@ test('Nowa boarding clock matches precise departure with an early fractional-min
   updateBoardingTime(wrapper,{legs:[{...first,...patch}]},now,'new');assert.equal(node.innerHTML,'10:05');
  }
  updateBoardingTime(wrapper,{legs:[{route:'7'}]},now,'new');assert.equal(node.innerHTML,'—');
+});
+
+test('all Nowa cards use the clock outside the positive inclusive 60-minute window', () => {
+    const departure = Date.parse('2026-11-14T09:04:30Z') / 1000;
+    for (const remaining of [3600.001, 3600, 3599.999, 60, 1, 0.001, 0, -0.001, -61]) {
+        const now = departure - remaining;
+        const value = timing.journeyCountdown({ legs: [{ ...leg, departureEpoch: departure,
+            scheduledDepartureEpoch: departure + 30, liveObservedEpoch: now }] }, now);
+        const html = timing.countdownMarkup(value, 'new');
+        if (remaining <= 0 || remaining > 3600) {
+            assert.match(html, />odjazd o:</);
+            assert.match(html, />10:04</);
+            assert.doesNotMatch(html, /&lt;1|minuta|minuty|minut|odjazd za:|1h/);
+        } else {
+            assert.match(html, new RegExp(`>${Math.ceil(remaining / 60)}<`));
+            assert.match(html, />minut[ay]?</);
+            assert.doesNotMatch(html, /odjazd o:|1h/);
+        }
+    }
+});
+
+test('far-future Nowa clock follows trusted LIVE updates and falls back to the schedule', () => {
+    const now = Date.parse('2026-11-14T08:00:00Z') / 1000;
+    const first = { ...leg, scheduledDepartureEpoch: now + 5400, departureEpoch: now + 5670, liveObservedEpoch: now };
+    const second = { ...first, route: '57', departureEpoch: now + 7200, scheduledDepartureEpoch: now + 7500 };
+    const journey = { legs: [first, { route: 'Пішки' }, second] };
+    const clock = index => timing.countdownMarkup(timing.journeyCountdown(journey, now, index), 'new');
+    assert.match(clock(0), />10:34</);
+    assert.match(clock(1), />11:00</);
+    first.departureEpoch = now + 5790;
+    assert.match(clock(0), />10:36</);
+    assert.match(clock(1), />11:00</);
+    for (const observed of [undefined, now - 301, now + 1]) {
+        first.liveObservedEpoch = observed;
+        assert.match(clock(0), />10:30</);
+        assert.match(clock(0), /color:var\(--text-muted\)/);
+    }
+    assert.match(timing.countdownMarkup({ minutes: 60, departure: first.departureEpoch, color: 'inherit' }), /1h 00m/);
+    assert.match(timing.countdownMarkup({ minutes: 61, departure: first.departureEpoch, color: 'inherit' }), /1h 01m/);
 });

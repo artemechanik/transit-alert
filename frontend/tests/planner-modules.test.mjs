@@ -1059,7 +1059,7 @@ test('Nowa pin keeps the same card slot through LIVE sorting and unpin uses the 
  h.setNow((now+60)*1000);[...h.intervals.values()][0]();
  assert.equal(wrapper.classList.contains('trasa-departed'),true,'departure detected at +60');
  assert.equal(wrapper.classList.contains('trasa-pinned'),true,'departure retains the contrast exemption');
- assert.match(wrapper.querySelector('.trasa-timer-content').innerHTML,/>ODJAZD</);
+ assert.match(wrapper.querySelector('.trasa-timer-content').innerHTML,/>odjazd o:</);
  h.setNow((now+121)*1000);[...h.intervals.values()][0]();
  assert.equal(root.children[1],wrapper);assert.equal(wrapper.classList.contains('trasa-result-exit'),false);
  await card.emit('click',{target});assert.equal(pin.ariaPressed,'false');
@@ -1113,7 +1113,7 @@ test('Nowa boarding HH:MM and countdown update together from precise per-leg tim
  const timeline={selectedIndex:()=>1,observations:()=>[],predictions(){},visibilityChanged(){}};
  wrapper.querySelector('.trasa-middle-scroll').lubusTimeline=timeline;
  const calls=h.calls.length;h.setNow((scheduled-29)*1000);[...h.intervals.values()][0]();
- assert.match(timer.innerHTML,/>ODJAZD</);assert.match(timer.innerHTML,/>10:04</);assert.equal(boarding.innerHTML,'10:04');assert.equal(h.calls.length,calls);
+ assert.match(timer.innerHTML,/>odjazd o:</);assert.match(timer.innerHTML,/>10:04</);assert.equal(boarding.innerHTML,'10:04');assert.equal(h.calls.length,calls);
  assert.match(wrapper.querySelector('.lubus-live').innerHTML,/55 minut/,'selected LIVE segment uses the second bus');
  // A newer LIVE response moves only the first forecast into a different minute.
  journey={legs:[{...first,departureEpoch:scheduled-90,liveObservedEpoch:scheduled-29},next]};

@@ -149,10 +149,10 @@ test('periodic LIVE timer refresh preserves Nowa departure time and classic fall
     Date:Clock,AbortController,console,document:{querySelectorAll:()=>[timeline]},setInterval:()=>1,clearInterval(){}
   });
   const live=createPlannerLive({refreshResults:async()=>{},refreshOpenTrasaPassedStops:async()=>{}});
-  live.enterPlannerLive();await flush();assert.doesNotMatch(content.innerHTML,/ODJAZD/);
+  live.enterPlannerLive();await flush();assert.doesNotMatch(content.innerHTML,/odjazd o:/);
   for(const offset of [0,1,60]) {
     seconds=epoch+offset;await live.updateTrasaCountdowns();
-    assert.match(content.innerHTML,/>ODJAZD</);assert.match(content.innerHTML,/>10:02</);
+    assert.match(content.innerHTML,/>odjazd o:</);assert.match(content.innerHTML,/>10:02</);
     assert.equal(boarding.innerHTML,'10:02','periodic refresh must not overwrite the precise boarding time');
     assert.doesNotMatch(content.innerHTML,/&lt;1/);
   }

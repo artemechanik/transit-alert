@@ -96,8 +96,8 @@ test('switching presentation immediately updates the same departed timer without
   node.journey={legs:[{route:'7',scheduledDepartureEpoch:1000}]};
   const query=node.querySelector;
   node.querySelector=selector=>selector==='.trasa-timer-content'?timer:query(selector);
-  h.view.select('new');assert.match(timer.innerHTML,/>ODJAZD</);assert.doesNotMatch(timer.innerHTML,/&lt;1/);
-  h.view.select('classic');assert.match(timer.innerHTML,/&lt;1/);assert.doesNotMatch(timer.innerHTML,/ODJAZD/);
-  h.view.select('new');assert.match(timer.innerHTML,/>ODJAZD</);
+  h.view.select('new');assert.match(timer.innerHTML,/>odjazd o:</);assert.doesNotMatch(timer.innerHTML,/&lt;1/);
+  h.view.select('classic');assert.match(timer.innerHTML,/&lt;1/);assert.doesNotMatch(timer.innerHTML,/odjazd o:/);
+  h.view.select('new');assert.match(timer.innerHTML,/>odjazd o:</);
   assert.equal(node.querySelector('.trasa-timer-content'),timer);assert.equal(node.card.expanded,true);
 });

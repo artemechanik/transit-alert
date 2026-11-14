@@ -6,6 +6,7 @@ import { apiFetch } from './backend-connection.js';
 import { createPlannerInputs } from './planner-inputs.js';
 import { createPlannerCards } from './planner-cards.js';
 import { createPlannerLive } from './planner-live.js';
+import { bindJourneyPinHold } from './planner-pin.js';
 
 // Координація екрана Trasa: пошук, результати та завантаження пізніших поїздок.
 export function createPlanner({
@@ -16,7 +17,7 @@ export function createPlanner({
     let routeResultsBox, searchRouteBtn, indicator, bottomIndicator, loading = null, controller = null;
     let generation = 0, manualRefresh = false, searchFormRevision = 0;
     let loadingLater = false, queuedLater = null;
-    let listMotion, cardPosition;
+    let listMotion, cardPosition, pinHold;
     let queuedReconcile = false;
     const { setupRouteAutocomplete, loadRouteDefaultSuggestions, updateRouteButtonState,
         getRoutePoints, saveRecentRoute, renderRecentRoutes } = createPlannerInputs({
@@ -28,15 +29,17 @@ export function createPlanner({
         onInlineOpen: node => cardPosition?.open(node),
         onInlineClose: node => cardPosition?.close(node),
         onInlineLayout: () => cardPosition?.sync(),
-        onPinToggle: node => {
-            const key = node.dataset.journeyKey;
-            const entry = state.entries.get(key);
-            if (entry && state.setPinned(key, !entry.pinned)) {
-                updateJourneyCard(node, entry.journey, !!entry.pinned);
-                renderResults([]);
-            }
-        }
+        onPinToggle: toggleJourneyPin
     });
+
+    function toggleJourneyPin(node) {
+        const key = node.dataset.journeyKey;
+        const entry = state.entries.get(key);
+        if (entry && state.setPinned(key, !entry.pinned)) {
+            updateJourneyCard(node, entry.journey, !!entry.pinned);
+            renderResults([]);
+        }
+    }
     const { enterPlannerLive, leavePlanner, updateTrasaCountdowns, startPlannerPolling } = createPlannerLive({
         apiBaseUrl, refreshOpenTrasaPassedStops, refreshResults, tickResults: () => { if (active && query) renderResults([]); }
     });
@@ -168,6 +171,7 @@ export function createPlanner({
     }
     function leave() {
         active = false; generation++; controller?.abort(); loading = null; manualRefresh = false;
+        pinHold?.cancel();
         cardPosition?.cancel();
         leavePlanner();
         suspendPlannerMaps();
@@ -227,6 +231,7 @@ export function createPlanner({
             generation++; controller?.abort(); loading = null; manualRefresh = false; indicator.style.height = '0';
             bottomIndicator.style.height = '0';
             query = `${params(from,'from')}&${params(to,'to')}`;
+            pinHold.cancel();
             [...routeResultsBox.children].forEach(disposeJourneyCard);
             state = createResultsState(); routeResultsBox.innerHTML = '';
             listMotion.reset();
@@ -306,6 +311,10 @@ export function createPlanner({
             else clearGesture();
         });
         routeResultsBox.addEventListener('touchcancel', clearGesture);
+        pinHold = bindJourneyPinHold(routeResultsBox, {
+            isEnabled: () => active && !!query && routeResultsBox.dataset.presentation === 'new',
+            onToggle: toggleJourneyPin
+        });
     }
     function isPlannerAccordionOpen() {
         const card = routeResultsBox?.querySelector('.trasa-card.fullscreen-expanded');

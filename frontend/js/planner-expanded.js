@@ -3,6 +3,7 @@ import { assessTransfer, transferPlatformChange, transferWalkMinutes } from './p
 import { hasFreshLive, boardingDeadline, initialWalkRisk, initialWalkMinutes } from './planner-results.js';
 import { passengerLiveState } from './planner-live-state.js';
 import { captureListAnchor, restoreListAnchor } from './list-motion.js';
+import { pinButtonMarkup } from './planner-pin.js';
 
 // Presentation only: forecasts and LIVE eligibility come from planner-results.
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char =>
@@ -87,7 +88,7 @@ function journeyAdvice(journey, leg, index, state, now) {
     return `<section class="lubus-journey-advice" data-tone="${tone}" aria-label="Wskazówka podróży"><p class="lubus-punctuality">${punctuality}</p>${leave ? `<p class="lubus-leave-hint">${leave}</p>` : ''}</section>`;
 }
 
-export function renderExpandedLive(journey, segments = [], selectedIndex = 0, now = Date.now() / 1000) {
+export function renderExpandedLive(journey, segments = [], selectedIndex = 0, now = Date.now() / 1000, pinned = false) {
     const transit = transitLegs(journey);
     const index = Number.isInteger(selectedIndex) && transit[selectedIndex] ? selectedIndex : 0;
     const leg = transit[index];
@@ -106,6 +107,7 @@ export function renderExpandedLive(journey, segments = [], selectedIndex = 0, no
             <p class="lubus-state-label">${escapeHtml(state.label)}</p>
             ${state.nextStop ? `<p class="lubus-live-next">Następny przystanek:<strong>${escapeHtml(state.nextStop.name)} ${escapeHtml(state.nextStop.platformCode)}</strong></p>` : ''}
           </div>
+          ${pinButtonMarkup(pinned)}
         </div>
         ${boardingMetrics(journey, index, state, now)}
         <div class="lubus-message-slot">${initialWalkHint(journey, index, now)
@@ -114,14 +116,14 @@ export function renderExpandedLive(journey, segments = [], selectedIndex = 0, no
     </section>`;
 }
 
-export function expandedMarkup(itineraryHtml, journey) {
+export function expandedMarkup(itineraryHtml, journey, pinned = false) {
     const maps = transitLegs(journey).map((leg, index) => `<button type="button" data-map-segment="${index}" aria-pressed="${index === 0}">Linia ${escapeHtml(leg.route)}</button>`).join('');
     return `<nav class="lubus-tabs" aria-label="Szczegóły połączenia">
         <button type="button" data-lubus-tab="live" aria-pressed="true">LIVE</button>
         <button type="button" data-lubus-tab="journey" aria-pressed="false">Podróż</button>
         <button type="button" data-lubus-tab="map" aria-pressed="false">Mapa</button>
       </nav>
-      <section class="lubus-panel lubus-live" aria-label="Czasy przejazdu" tabindex="0">${renderExpandedLive(journey)}</section>
+      <section class="lubus-panel lubus-live" aria-label="Czasy przejazdu" tabindex="0">${renderExpandedLive(journey, [], 0, Date.now() / 1000, pinned)}</section>
       <section class="lubus-panel lubus-journey" aria-label="Przebieg podróży" tabindex="0"><div class="lubus-classic-itinerary">${itineraryHtml}</div><div class="lubus-timeline"></div></section>
       <section class="lubus-panel lubus-map" aria-label="Mapa połączenia" tabindex="0">
         <div class="lubus-map-toolbar" aria-label="Wybierz kurs na mapie">${maps}<button type="button" class="lubus-map-action" data-leg-index="0">Pełny ekran</button></div>
@@ -171,7 +173,7 @@ export function updateExpandedLive(wrapper, journey, addMinutesToTime, now = Dat
     });
     const panel = wrapper.querySelector('.lubus-live');
     if (!panel) return;
-    const html = renderExpandedLive(journey, timeline?.observations(), timeline?.selectedIndex(), now);
+    const html = renderExpandedLive(journey, timeline?.observations(), timeline?.selectedIndex(), now, wrapper.classList?.contains('trasa-pinned'));
     if (panel.innerHTML !== html) {
         const restoreAnchor = preserveInlineAnchor(wrapper);
         panel.innerHTML = html;
@@ -188,10 +190,11 @@ export function preserveInlineAnchor(element) {
 }
 
 function refreshSelectedLive(panel) {
-    const journey = panel.closest?.('.trasa-wrapper')?.journey;
+    const wrapper = panel.closest?.('.trasa-wrapper');
+    const journey = wrapper?.journey;
     const live = panel.querySelector?.('.lubus-live');
     if (!journey || !live) return;
     const timeline = panel.lubusTimeline;
-    const html = renderExpandedLive(journey, timeline?.observations(), timeline?.selectedIndex());
+    const html = renderExpandedLive(journey, timeline?.observations(), timeline?.selectedIndex(), Date.now() / 1000, wrapper.classList?.contains('trasa-pinned'));
     if (live.innerHTML !== html) live.innerHTML = html;
 }
